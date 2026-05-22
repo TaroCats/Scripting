@@ -1,0 +1,44 @@
+{
+  "icon" : "cloud.sun.rain.fill",
+  "runInApp" : false,
+  "author" : {
+    "homepage" : null,
+    "name" : "TARO",
+    "email" : "i@taro.cat"
+  },
+  "iconImage" : null,
+  "name" : "天气与行程",
+  "localizedDescriptions" : {
+    "ru" : "",
+    "fr" : "",
+    "ja" : "",
+    "en" : "",
+    "it" : "",
+    "de" : "",
+    "es" : "",
+    "zh" : "",
+    "pt" : ""
+  },
+  "remoteResource" : null,
+  "intentInputTypes" : [
+
+  ],
+  "localizedNames" : {
+    "ru" : "",
+    "fr" : "",
+    "ja" : "",
+    "en" : "",
+    "it" : "",
+    "de" : "",
+    "es" : "",
+    "zh" : "",
+    "pt" : ""
+  },
+  "color" : "rgba(102, 196, 235,1)",
+  "contributors" : [
+
+  ],
+  "description" : null,
+  "entry" : "index.tsx",
+  "version" : "1.0.0"
+}

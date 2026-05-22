@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": [
+      "esnext"
+    ],
+    "jsx": "preserve",
+    "module": "commonjs",
+    "declaration": false,
+    "outDir": "./dist",
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "*": ["*", "src/*", "scripts/*"]
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./dts" 
+    ]
+  },
+  "include": ["dts/**/*", "src/**/*", "scripts/**/*"],
+  "exclude": ["node_modules"]
+}
