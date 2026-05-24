@@ -6,7 +6,7 @@
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay } from "./shared"
 import { CompleteReminderIntent } from "./app_intents"
-import { HStack, VStack, Text, Image, Button } from "scripting"
+import { HStack, Spacer, VStack, Text, Image, Button } from "scripting"
 
 type DayGroup = {
   key: string
@@ -151,6 +151,7 @@ export function HourlyForecastView({
           <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
           <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} />
           <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}</Text>
+          <Spacer />
         </VStack>
       ))}
     </HStack>

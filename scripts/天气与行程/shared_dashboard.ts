@@ -55,7 +55,7 @@ async function loadWeatherPart(now: Date, warnings: string[], noCache: boolean):
   weather: WeatherSummary | null
 }> {
   const weatherCache = await readWeatherCache()
-  const isWeatherCacheFresh = Boolean(weatherCache && now.getTime() - weatherCache.fetchedAt < WEATHER_CACHE_TTL_MS) && noCache
+  const isWeatherCacheFresh = Boolean(weatherCache && now.getTime() - weatherCache.fetchedAt < WEATHER_CACHE_TTL_MS) && !noCache
 
   let locationName = "未获取定位"
   let weather: WeatherSummary | null = null
@@ -109,8 +109,8 @@ async function loadWeatherPart(now: Date, warnings: string[], noCache: boolean):
         symbolName: `${currentWeather.symbolName}.fill`,
         temperature: currentWeather.temperature.value.toFixed(0),
         temperatureUnit: currentWeather.temperature.symbol,
-        highTemperature: today ? `${today.highTemperature.value.toFixed(0)} ${today.highTemperature.symbol}` : "--",
-        lowTemperature: today ? `${today.lowTemperature.value.toFixed(0)} ${today.lowTemperature.value.toFixed(0)}` : "--",
+        highTemperature: today ? `${today.highTemperature.value.toFixed(0)}` : "--",
+        lowTemperature: today ? `${today.lowTemperature.value.toFixed(0)}` : "--",
         hourlyForecast,
         apparentTemperature: currentWeather.apparentTemperature.formatted,
         humidity: `${Math.round(currentWeather.humidity * 100)}%`,
@@ -292,6 +292,6 @@ export async function scheduleTodayNotifications(
 }
 
 export function buildWidgetReloadDate() {
-  return new Date(Date.now() + 5 * 60 * 1000)
+  return new Date(Date.now() + 5 * 1000)
 }
 
