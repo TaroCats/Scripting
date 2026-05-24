@@ -15,13 +15,22 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "*": ["*", "src/*", "scripts/*"]
+      "*": [
+        "*",
+        "src/*",
+        "scripts/*"
+      ]
     },
     "typeRoots": [
       "./node_modules/@types",
-      "./dts" 
+      "./dts"
     ]
   },
-  "include": ["dts/**/*", "src/**/*", "scripts/**/*"],
-  "exclude": ["node_modules"]
+  "include": [
+    "./dts/global.d.ts",
+    "scripts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

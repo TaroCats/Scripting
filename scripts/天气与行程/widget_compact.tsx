@@ -10,7 +10,6 @@ import { EventLines } from "./widget_components"
 
 export function CompactWidget({ dashboard }: { dashboard: DashboardData }) {
   const w = dashboard.weather
-  console.log(dashboard)
   return (
     <VStack alignment="leading" padding={12} spacing={8}>
       {w ? (

@@ -1,4 +1,4 @@
-import { ZStack, Widget } from "scripting"
+import { ZStack, Widget, AccessoryWidgetBackground } from "scripting"
 import { type DashboardData, loadDashboardData, buildWidgetReloadDate } from "./shared"
 import { CompactWidget } from "./widget_compact"
 import { MediumWidget } from "./widget_medium"
@@ -8,7 +8,8 @@ import { RectangularWidget, CircularWidget } from "./widget_accessory"
 
 function Root({ dashboard }: { dashboard: DashboardData }) {
   return (
-    <ZStack background="systemBackground">
+    <ZStack>
+      <AccessoryWidgetBackground />
       {Widget.family === "systemSmall" ? <CompactWidget dashboard={dashboard} /> : null}
       {Widget.family === "systemMedium" ? <MediumWidget dashboard={dashboard} /> : null}
       {Widget.family === "systemLarge" ? <LargeWidget dashboard={dashboard} /> : null}
@@ -20,7 +21,6 @@ function Root({ dashboard }: { dashboard: DashboardData }) {
 
 async function runWidget() {
   const dashboard = await loadDashboardData()
-  console.log(dashboard)
   Widget.present(<Root dashboard={dashboard} />, {
     policy: "after",
     date: buildWidgetReloadDate(),

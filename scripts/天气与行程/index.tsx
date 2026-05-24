@@ -192,10 +192,10 @@ function App() {
             <EventBlock events={dashboard.upcomingEvents} />
             <WarningBlock warnings={dashboard.warnings} />
 
-            <VStack navigationTitle="操作">
+            <HStack navigationTitle="操作">
               <Button title="刷新数据" action={refreshDashboard} />
               <Button title="为今日日程安排提醒" action={scheduleReminders} />
-            </VStack>
+            </HStack>
           </>
         ) : null}
       </List>
