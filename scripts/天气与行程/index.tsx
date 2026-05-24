@@ -173,10 +173,7 @@ function App() {
       <List navigationTitle={"天气日程助手"}>
         {message ? (
           <VStack>
-            <Text font="footnote" foregroundStyle={{
-              light: "black",
-              dark: "white"
-            }}>{`${message}`}</Text>
+            <Text font="footnote" foregroundStyle={foregroundStyle}>{`${message}`}</Text>
           </VStack>
         ) : null}
 
