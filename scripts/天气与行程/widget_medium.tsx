@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-22 17:20:37
+ * @LastEditTime: 2026-05-25 08:35:00
  * @Description: 中型天气日程助手小部件
  * */
 import { Font, HStack, VStack, Text, Image, Spacer, ShapeStyle, DynamicShapeStyle } from "scripting"
@@ -34,7 +34,7 @@ function AgendaColumn({
   now: Date
 }) {
   return (
-    <VStack alignment="leading" spacing={8}>
+    <VStack alignment="leading" spacing={8} padding={8}>
       <HStack alignment="center" spacing={4}>
         <Text font="largeTitle" bold>{formatMonthDay(now)}</Text>
         <Text font={12} foregroundStyle="systemGray">|</Text>
