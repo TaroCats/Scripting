@@ -292,6 +292,6 @@ export async function scheduleTodayNotifications(
 }
 
 export function buildWidgetReloadDate() {
-  return new Date(Date.now() + 5 * 1000)
+  return new Date(Date.now() + 5 * 60 * 1000)
 }
 

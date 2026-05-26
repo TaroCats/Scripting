@@ -1,12 +1,13 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-25 08:35:00
+ * @LastEditTime: 2026-05-26 17:37:00
  * @Description: 中型天气日程助手小部件
  * */
-import { Font, HStack, VStack, Text, Image, Spacer, ShapeStyle, DynamicShapeStyle } from "scripting"
-import { foregroundStyle, formatMonthDay, formatWeekday, type DashboardData } from "./shared"
+import { Font, HStack, VStack, Text, Image, Spacer, ShapeStyle, DynamicShapeStyle, Button } from "scripting"
+import { foregroundStyle, formatMonthDay, formatShortTime, formatWeekday, type DashboardData } from "./shared"
 import { EventLines, HourlyForecastView } from "./widget_components"
+import { RefreshWidgetIntent } from "./app_intents"
 
 function VerticalLabel({ text, font = 10, color = 'systemGray' }: { text: string; font?: number | Font; color?: ShapeStyle | DynamicShapeStyle }) {
 
@@ -43,6 +44,14 @@ function AgendaColumn({
       </HStack>
       <EventLines events={dashboard.upcomingEvents} maxLines={3} />
       <Spacer />
+      <Button intent={RefreshWidgetIntent({})} buttonStyle="plain" >
+        <HStack alignment="bottom" spacing={2}>
+          <Image systemName="arrow.clockwise" font={8} foregroundStyle="systemGray" />
+          <Text font={8} foregroundStyle="systemGray">
+            刷新
+          </Text>
+        </HStack>
+      </Button>
     </VStack>
   )
 }

@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-22 16:21:52
+ * @LastEditTime: 2026-05-26 17:35:54
  * @Description: 
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay } from "./shared"
@@ -116,18 +116,20 @@ export function EventLines({
             {group.title}
           </Text>
           {group.events.map((event) => (
-            <HStack key={`${group.key}-${event.identifier}`} alignment="center" spacing={8}>
-              {event.type === "reminder" && (
-                <Button intent={CompleteReminderIntent({ id: event.identifier })} background={undefined}>
+            event.type === "reminder" ? (
+              <Button intent={CompleteReminderIntent({ id: event.identifier })} buttonStyle="plain" key={`${group.key}-${event.identifier}`}>
+                <HStack alignment="center" spacing={4}>
                   <Image systemName="circle" font="footnote" foregroundStyle="systemBlue" />
-                </Button>
-              )}
-              <VStack alignment="leading" spacing={2}>
-                <Text font="footnote" lineLimit={1} bold>
-                  {event.title}
-                </Text>
-              </VStack>
-            </HStack>
+                  <Text font="footnote" lineLimit={1} bold>
+                    {event.title}
+                  </Text>
+                </HStack>
+              </Button>
+            ) : (
+              <Text font="footnote" lineLimit={1} bold>
+                {event.title}
+              </Text>
+            )
           ))}
         </VStack>
       ))}

@@ -1,3 +1,9 @@
+/*
+ * @Author: taro etsy@live.com
+ * @LastEditors: taro etsy@live.com
+ * @LastEditTime: 2026-05-26 15:48:20
+ * @Description: 
+ */
 export type AgendaItem = {
   identifier: string
   title: string
@@ -31,6 +37,7 @@ export type WeatherSummary = {
 }
 
 export type DashboardData = {
+  reloadDate?: Date
   generatedAt: Date
   locationName: string
   weather: WeatherSummary | null

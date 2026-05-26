@@ -1,3 +1,9 @@
+/*
+ * @Author: taro etsy@live.com
+ * @LastEditors: taro etsy@live.com
+ * @LastEditTime: 2026-05-26 15:48:41
+ * @Description: 天气与行程小部件
+ * */
 import { ZStack, Widget, AccessoryWidgetBackground } from "scripting"
 import { type DashboardData, loadDashboardData, buildWidgetReloadDate } from "./shared"
 import { CompactWidget } from "./widget_compact"
@@ -20,10 +26,15 @@ function Root({ dashboard }: { dashboard: DashboardData }) {
 }
 
 async function runWidget() {
-  const dashboard = await loadDashboardData()
+  const reloadDate = buildWidgetReloadDate()
+  let dashboard = await loadDashboardData()
+  dashboard = {
+    ...dashboard,
+    reloadDate,
+  }
   Widget.present(<Root dashboard={dashboard} />, {
     policy: "after",
-    date: buildWidgetReloadDate(),
+    date: reloadDate,
   })
 }
 

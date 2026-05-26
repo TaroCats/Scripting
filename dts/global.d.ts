@@ -1923,6 +1923,56 @@ declare global {
   }
 
   /**
+   * SwiftUI MapKit `MapCameraBounds`. Constrains how the user can pan and
+   * zoom an interactive map — either by clamping the center to a region
+   * (`centerCoordinateBounds`) or by limiting the camera-to-center distance
+   * (`minimumDistance` / `maximumDistance`, in meters). Pass to
+   * `<Map cameraBounds={...}>` to apply.
+   *
+   * Treat instances as opaque — construct via the static factories.
+   *
+   * Example:
+   * ```ts
+   * // Lock the center inside Shanghai's downtown bounds, and limit zoom
+   * // (the camera cannot pull farther than 8 km or push closer than 200 m).
+   * const bounds = MapCameraBounds.centerCoordinateBounds(
+   *   {
+   *     center: { latitude: 31.2304, longitude: 121.4737 },
+   *     span:   { latitudeDelta: 0.1, longitudeDelta: 0.1 },
+   *   },
+   *   { minimumDistance: 200, maximumDistance: 8000 }
+   * )
+   *
+   * return <Map cameraPosition={cam} cameraBounds={bounds}>...</Map>
+   * ```
+   */
+  class MapCameraBounds {
+    private constructor()
+
+    /**
+     * Constrain the camera so its center stays inside the given region.
+     * Optionally also restrict the zoom range with `minimumDistance` /
+     * `maximumDistance` (meters from camera to center).
+     */
+    static centerCoordinateBounds(
+      region: MapRegion,
+      options?: {
+        minimumDistance?: number
+        maximumDistance?: number
+      }
+    ): MapCameraBounds
+
+    /**
+     * Restrict only the zoom range (camera-to-center distance, in meters);
+     * the camera center is free to move anywhere on the map.
+     */
+    static distance(options: {
+      minimumDistance?: number
+      maximumDistance?: number
+    }): MapCameraBounds
+  }
+
+  /**
    * Search the on-device map database for points of interest and addresses. Pure query
    * APIs — no system permissions required. Coordinates come back as `MapCoordinate`,
    * suitable for direct use with `<Marker>` / `<Map>` from the views layer.
@@ -8378,24 +8428,45 @@ If the event’s calendar does not support availability settings, this property�
 
     /**
      * Executes a command on the SSH server.
+     *
+     * Output decoding is controlled by `options.encoding`:
+     * - `"utf8"` (default): lossy UTF-8 decode. Invalid bytes are replaced with U+FFFD.
+     * - `"ascii"`: lossy ASCII decode.
+     * - `"binary"`: returns raw bytes as `Data`, no decoding. Use this for commands whose
+     *   output may contain binary or terminal control characters (e.g. `softwareupdate -l`,
+     *   commands that emit `\r` progress bars or ANSI escapes). You can then post-process
+     *   the bytes yourself (strip control chars, decode with a different encoding, etc.).
+     *
      * @param command The command to execute on the SSH server.
      * @param options An optional object containing additional options for the command execution.
      * @param options.maxResponseSize The maximum size of the response to return. Defaults to no limit.
      * @param options.includeStderr A boolean value that indicates whether to include the standard error output in the response. Defaults to false.
      * @param options.inShell A boolean value that indicates whether to execute the command in a shell. Defaults to false.
-     * @returns A promise that resolves to the command output as a string if the command execution is successful, or rejects with an error if the command execution fails.
+     * @param options.encoding How to decode the command output. Defaults to `"utf8"`.
+     * @returns A promise that resolves to the command output. Returns `string` when `encoding` is `"utf8"` or `"ascii"`, `Data` when `encoding` is `"binary"`.
      * @throws Error if the command execution fails or if the SSH connection is not established.
      */
+    executeCommand(command: string, options: {
+      maxResponseSize?: number
+      includeStderr?: boolean
+      inShell?: boolean
+      encoding: "binary"
+    }): Promise<Data>
     executeCommand(command: string, options?: {
       maxResponseSize?: number
       includeStderr?: boolean
       inShell?: boolean
+      encoding?: "utf8" | "ascii"
     }): Promise<string>
 
     /**
      * Executes a command on the SSH server and streams the output.
+     *
+     * Note: `onOutput` runs on the JavaScript main thread. Keep it fast — heavy work
+     * inside the callback will block UI updates and slow down stream consumption.
+     *
      * @param command The command to execute on the SSH server.
-     * @param onOutput A callback function that is called for each line of output from the command. The function receives the output data and a boolean indicating whether it is standard error output. The function should return `true` to continue receiving output or `false` to stop receiving output.
+     * @param onOutput A callback function that is called for each chunk of output from the command. The function receives the output data and a boolean indicating whether it is standard error output. Return `true` to continue receiving output, or `false` to stop the stream.
      * @param options An optional object containing additional options for the command execution.
      * @returns A promise that resolves when the command execution is complete, or rejects with an error if the command execution fails.
      */
@@ -8405,6 +8476,10 @@ If the event’s calendar does not support availability settings, this property�
 
     /**
      * Opens a pseudo-terminal (PTY) session on the SSH server.
+     *
+     * Note: `onOutput` runs on the JavaScript main thread. Keep it fast — heavy work
+     * inside the callback will block UI updates and slow down stream consumption.
+     *
      * @param options An object containing options for the PTY session.
      * @param options.wantReply A boolean value that indicates whether to wait for a reply from the server. Defaults to true.
      * @param options.term The terminal type to use for the PTY session. Defaults to "xterm".
@@ -8412,8 +8487,8 @@ If the event’s calendar does not support availability settings, this property�
      * @param options.terminalRowHeight The row height of the terminal. Defaults to 24.
      * @param options.terminalPixelWidth The pixel width of the terminal. Defaults to 0.
      * @param options.terminalPixelHeight The pixel height of the terminal. Defaults to 0.
-     * @param options.onOutput A callback function that is called for each line of output from the PTY session. The function receives the output data and a boolean indicating whether it is standard error output. The function should return `true` to continue receiving output or `false` to stop receiving output.
-     * @param options.onError An optional callback function that is called when an error occurs in the PTY session. The function receives the error message as a string.
+     * @param options.onOutput A callback function that is called for each chunk of output from the PTY session. The function receives the output data and a boolean indicating whether it is standard error output. Return `true` to continue receiving output, or `false` to stop the stream.
+     * @param options.onError An optional callback function that is called when an error occurs after the PTY session has started streaming. The function receives the error message as a string. Errors thrown before the session is established cause the returned promise to reject instead.
      * @returns A promise that resolves to a TTYStdinWriter instance if the PTY session is successfully opened, or rejects with an error if the PTY session fails to open.
      */
     withPTY(optoins: {
@@ -8429,9 +8504,13 @@ If the event’s calendar does not support availability settings, this property�
 
     /**
      * Creates a TTY session and executes the provided closure with input/output streams.
+     *
+     * Note: `onOutput` runs on the JavaScript main thread. Keep it fast — heavy work
+     * inside the callback will block UI updates and slow down stream consumption.
+     *
      * @param options An object containing options for the TTY session.
-     * @param options.onOutput A callback function that is called for each line of output from the TTY session. The function receives the output data and a boolean indicating whether it is standard error output. The function should return `true` to continue receiving output or `false` to stop receiving output.
-     * @param options.onError An optional callback function that is called when an error occurs in the TTY session. The function receives the error message as a string.
+     * @param options.onOutput A callback function that is called for each chunk of output from the TTY session. The function receives the output data and a boolean indicating whether it is standard error output. Return `true` to continue receiving output, or `false` to stop the stream.
+     * @param options.onError An optional callback function that is called when an error occurs after the TTY session has started streaming. The function receives the error message as a string. Errors thrown before the session is established cause the returned promise to reject instead.
      * @returns A promise that resolves to a TTYStdinWriter instance if the TTY session is successfully created, or rejects with an error if the TTY session fails to open.
      */
     withTTY(options: {
@@ -13615,12 +13694,14 @@ If the event’s calendar does not support availability settings, this property�
     /**
      * Dismisses the current keyboard script and runs another keyboard script by name.
      * @param scriptName The target script's stable name.
+     * @param queryParameters Parameters passed to the target script, available as `Script.queryParameters`.
      */
-    function switchToScript(scriptName: string): Promise<void>
+    function switchToScript(scriptName: string, queryParameters?: Record<string, string>): Promise<void>
     /**
      * Dismisses the current keyboard script and runs the next available keyboard script.
+     * @param queryParameters Parameters passed to the target script, available as `Script.queryParameters`.
      */
-    function nextScript(): Promise<void>
+    function nextScript(queryParameters?: Record<string, string>): Promise<void>
     /**
      * Moves the cursor by the specified offset.
      * @param offset The number of characters to move the cursor. A positive value moves the cursor to the right, while a negative value moves it to the left.
@@ -14989,11 +15070,37 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     listenAddressIPv6: string | null
 
     /**
-     * Registers a handler for the specified path.
+     * Registers a synchronous handler for the specified path. The handler
+     * runs on the JavaScript main thread and must return an `HttpResponse`
+     * immediately.
+     *
+     * @deprecated Prefer `registerAsyncHandler`, which lets the handler
+     * await async work (network calls, async file IO, SQLite queries,
+     * etc.) before sending the response. The sync entry point is kept
+     * only for legacy scripts and may be removed in a future major
+     * release.
+     *
      * @param path The path to register the handler for.
-     * @param handler The handler function. The handler function takes a request as an argument and returns a response.
+     * @param handler The handler function. Takes a request and returns a response.
      */
     registerHandler(path: string, handler: (request: HttpRequest) => HttpResponse): void
+
+    /**
+     * Registers an async handler for the specified path. The handler may
+     * return a `Promise<HttpResponse>` and the server will wait for it to
+     * resolve before sending the reply. If the promise rejects, the server
+     * returns a 500 with the error message as the body.
+     * @param path The path to register the handler for.
+     * @param handler The async handler function. Takes a request and returns a promise of a response.
+     * @example
+     * ```ts
+     * server.registerAsyncHandler("/slow", async req => {
+     *   await new Promise(r => setTimeout(r, 200))
+     *   return HttpResponse.ok(HttpResponseBody.text("slow ok"))
+     * })
+     * ```
+     */
+    registerAsyncHandler(path: string, handler: (request: HttpRequest) => Promise<HttpResponse>): void
 
     /**
      * Register a static file for the specified path.
@@ -15022,6 +15129,21 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     registerFilesFromDirectory(path: string, directory: string, options?: {
       defaults?: string[]
     }): void
+
+    /**
+     * Register an auto-generated directory browser for the specified path.
+     * Subpaths that resolve to a file are streamed back as-is; subpaths
+     * that resolve to a directory are rendered as a simple HTML index
+     * with links to each entry.
+     * @param path The path to register the browser for. Must include a
+     * single path variable, e.g. "/browse/:path".
+     * @param directory The directory to browse.
+     * @example
+     * ```ts
+     * server.registerDirectoryBrowser("/browse/:path", Path.join(Script.directory, "data"))
+     * ```
+     */
+    registerDirectoryBrowser(path: string, directory: string): void
 
     /**
      * Registers a websocket handler for the specified path.
@@ -15063,15 +15185,100 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     }): void
 
     /**
+     * Registers an async middleware layer that runs before route handlers.
+     * The middleware receives the incoming request and may either:
+     *   - resolve with `null` / `undefined` to let the request pass through
+     *     to the next middleware or the route handler, or
+     *   - resolve with an `HttpResponse` to short-circuit the request — no
+     *     subsequent middleware or route handler will run.
+     *
+     * Layers run in registration order. Throwing or rejecting becomes a
+     * 500 response.
+     *
+     * Common uses: per-request logging, auth checks, CORS headers, rate
+     * limiting. For CORS specifically, prefer setting headers on the
+     * downstream response inside the middleware that returns `null`.
+     *
+     * @param handler The middleware function. Always async.
+     * @example
+     * ```ts
+     * // Reject anything without an X-Auth header
+     * server.registerMiddleware(async (req) => {
+     *   if (!req.headers["x-auth"]) {
+     *     return HttpResponse.unauthorized(HttpResponseBody.text("missing token"))
+     *   }
+     *   return null
+     * })
+     * ```
+     */
+    registerMiddleware(handler: (request: HttpRequest) => Promise<HttpResponse | null | undefined>): void
+
+    /**
+     * Sets the async handler that runs when no route matches the request.
+     * The handler is required to resolve with an `HttpResponse`. Throwing
+     * or rejecting becomes a 500 response.
+     *
+     * Calling this multiple times replaces the previous handler.
+     *
+     * @param handler The async handler. Resolves with an `HttpResponse`.
+     * @example
+     * ```ts
+     * server.setNotFoundHandler(async (req) => {
+     *   return HttpResponse.notFound(HttpResponseBody.text(`No route: ${req.path}`))
+     * })
+     * ```
+     */
+    setNotFoundHandler(handler: (request: HttpRequest) => Promise<HttpResponse>): void
+
+    /**
      * Starts the HTTP server.
      * @param options The options for the HTTP server.
      * @param options.port The port to listen on. Defaults to 8080, if specified 0, the server will listen on a random port.
      * @param options.forceIPv4 Whether to force the server to listen on IPv4. Defaults to false.
+     * @param options.tls Optional TLS configuration. When provided, the server starts as HTTPS using the supplied PKCS#12 identity.
+     * @param options.tls.p12 Either an absolute path to a PKCS#12 file (string)
+     *   or the raw P12 bytes (`Data`). The `Data` form is useful when the P12
+     *   is loaded from Keychain or another in-memory source instead of disk.
+     * @param options.tls.password Password for the P12 identity.
+     * @param options.tls.minVersion Minimum TLS protocol version. Accepts
+     *   `"1.2"` or `"1.3"`. Defaults to `"1.2"`.
+     * @param options.tls.maxVersion Maximum TLS protocol version. Accepts
+     *   `"1.2"` or `"1.3"`. Defaults to unset (no upper bound).
      * @returns An error message if the server fails to start, or null if the server starts successfully.
+     * @example
+     * ```ts
+     * // HTTPS from a P12 file
+     * const err = server.start({
+     *   port: 8443,
+     *   tls: {
+     *     p12: Path.join(Script.directory, "server.p12"),
+     *     password: "your-p12-password",
+     *   },
+     * })
+     *
+     * // HTTPS with P12 bytes from Keychain, pinned to TLS 1.3
+     * const p12Bytes = Keychain.getData("server.p12") // sync, returns Data | null
+     * if (!p12Bytes) throw new Error("P12 not found in Keychain")
+     * server.start({
+     *   port: 8443,
+     *   tls: {
+     *     p12: p12Bytes,
+     *     password: "your-p12-password",
+     *     minVersion: "1.3",
+     *     maxVersion: "1.3",
+     *   },
+     * })
+     * ```
      */
     start(options?: {
       port?: number
       forceIPv4?: boolean
+      tls?: {
+        p12: string | Data
+        password: string
+        minVersion?: "1.2" | "1.3"
+        maxVersion?: "1.2" | "1.3"
+      }
     }): string | null
 
     /**
@@ -17147,6 +17354,176 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     readonly uuid: string
     readonly name: string
   }
+}
+
+type SpotlightParameters = Record<string, any>
+
+/**
+ * A Spotlight item. Every field except `id` and `title` maps 1:1 to a
+ * `CSSearchableItemAttributeSet` property in Apple's Core Spotlight framework,
+ * grouped below the same way Apple documents them.
+ *
+ * @see https://developer.apple.com/documentation/corespotlight/cssearchableitemattributeset
+ */
+type SpotlightItem = {
+  /**
+   * Script-local identifier. Required and unique within the current script.
+   * Returned as `Spotlight.current.id` when the item is tapped.
+   */
+  id: string
+  /** Arbitrary data delivered to `spotlight.tsx` as `Spotlight.current.parameters`. */
+  parameters?: SpotlightParameters
+
+  // General
+
+  /** Primary title shown in Spotlight results. Required. */
+  title: string
+  /** Localized display name. */
+  displayName?: string
+  /** Alternate names the item can also be found by. */
+  alternateNames?: string[]
+  /** Uniform Type Identifier used to choose the system icon, e.g. `"public.image"`. */
+  contentType?: UTType
+  /** URL of the underlying content (use a file URL for local content). */
+  contentURL?: string
+  /** Thumbnail image bytes. Takes priority over `thumbnailURL`. */
+  thumbnailData?: Data
+  /** Local file URL string pointing to a thumbnail image. */
+  thumbnailURL?: string
+  /** Extra keywords to match against. */
+  keywords?: string[]
+  /** Higher values rank the item higher in results. */
+  rankingHint?: number
+  /** Whether the item can be navigated to (uses `latitude`/`longitude`). */
+  supportsNavigation?: boolean
+  /** Whether the item can be called (uses `phoneNumbers`). */
+  supportsPhoneCall?: boolean
+
+  // Documents
+
+  /** Long description shown under the title. */
+  contentDescription?: string
+  /** Subject of the content. */
+  subject?: string
+  /** Human-readable kind, e.g. "Note", "Invoice". */
+  kind?: string
+  /** Entity that created the content. */
+  creator?: string
+  /** Number of pages in the document. */
+  pageCount?: number
+  /** Size of the content in bytes. */
+  fileSize?: number
+
+  // Messaging
+
+  /** Full searchable text body. Improves recall for free-text queries. */
+  textContent?: string
+  /** Author display names. */
+  authorNames?: string[]
+  /** Associated email addresses. */
+  emailAddresses?: string[]
+  /** Associated phone numbers. */
+  phoneNumbers?: string[]
+
+  // Media
+
+  /** Free-form comment. */
+  comment?: string
+  /** Content creation date. Defaults to first index time when omitted. */
+  contentCreationDate?: Date | string | number
+  /** Content modification date. Defaults to last index time when omitted. */
+  contentModificationDate?: Date | string | number
+  /** Last used date. */
+  lastUsedDate?: Date | string | number
+
+  // Events
+
+  /** Start date, for event-like items. */
+  startDate?: Date | string | number
+  /** End date, for event-like items. */
+  endDate?: Date | string | number
+  /** Due date, for task-like items. */
+  dueDate?: Date | string | number
+  /** Completion date, for task-like items. */
+  completionDate?: Date | string | number
+  /** Whether the event lasts all day. */
+  allDay?: boolean
+
+  // Places
+
+  /** Latitude in degrees. */
+  latitude?: number
+  /** Longitude in degrees. */
+  longitude?: number
+  /** Altitude in meters. */
+  altitude?: number
+  /** Human-readable place name. */
+  namedLocation?: string
+  /** City of the place. */
+  city?: string
+  /** State or province of the place. */
+  stateOrProvince?: string
+  /** Country of the place. */
+  country?: string
+  /** Postal code of the place. */
+  postalCode?: string
+  /** Fully formatted address of the place. */
+  fullyFormattedAddress?: string
+
+  // Item-level
+
+  /** When the item should be removed from the index. */
+  expirationDate?: Date | string | number
+}
+
+type SpotlightCurrent = {
+  id: string
+  parameters: SpotlightParameters
+}
+
+type SpotlightIndexedItem = Omit<SpotlightItem, "thumbnailData" | "contentCreationDate" | "contentModificationDate"> & {
+  scriptName: string
+  uniqueIdentifier: string
+  contentCreationDate: number
+  contentModificationDate: number
+}
+
+declare namespace Spotlight {
+  /**
+   * Spotlight launch context. This is non-null when the current script is
+   * running from `spotlight.tsx` after a user taps a Spotlight result.
+   */
+  const current: SpotlightCurrent | null
+
+  /**
+   * Index or update one item for the current script. Requires Scripting PRO.
+   */
+  function index(item: SpotlightItem): Promise<void>
+
+  /**
+   * Index or update multiple items for the current script. Requires Scripting PRO.
+   */
+  function indexItems(items: SpotlightItem[]): Promise<void>
+
+  /**
+   * Delete one indexed item by its script-local id. Requires Scripting PRO.
+   */
+  function delete(id: string): Promise<void>
+
+  /**
+   * Delete indexed items by their script-local ids. Requires Scripting PRO.
+   */
+  function deleteItems(ids: string[]): Promise<void>
+
+  /**
+   * Delete all Spotlight items registered by the current script. Requires Scripting PRO.
+   */
+  function deleteAll(): Promise<void>
+
+  /**
+   * List Spotlight items registered by the current script. Requires Scripting PRO.
+   */
+  function getItems(): Promise<SpotlightIndexedItem[]>
 }
 
 export { }
