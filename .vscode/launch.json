@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Scripting: Start (bonjour)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npx scripting-cli start --bonjour",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
