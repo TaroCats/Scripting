@@ -221,7 +221,7 @@ export async function loadDashboardData(noCache = false): Promise<DashboardData>
   const now = new Date()
   const todayEnd = endOfDay(now)
   const todayStart = startOfDay(now)
-  const lookAheadEnd = endOfDay(addDays(now, 2))
+  const lookAheadEnd = endOfDay(addDays(now, 15))
 
   const { locationName, weather } = await loadWeatherPart(now, warnings, noCache)
   const { todayEvents, upcomingEvents } = await loadAgendaPart(now, todayStart, todayEnd, lookAheadEnd, warnings)

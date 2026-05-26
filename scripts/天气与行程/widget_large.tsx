@@ -12,7 +12,7 @@ import { AgendaColumn, WeatherColumn } from "./widget_components"
 export function LargeWidget({ dashboard }: { dashboard: DashboardData }) {
   return (
     <VStack alignment="leading" padding={16}>
-      <AgendaColumn dashboard={dashboard} />
+      <AgendaColumn dashboard={dashboard} maxLines={6} />
       <Spacer />
       <WeatherColumn dashboard={dashboard} maxHour={6} />
     </VStack>

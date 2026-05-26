@@ -13,7 +13,7 @@ import { AgendaColumn, WeatherColumn } from "./widget_components"
 export function MediumWidget({ dashboard }: { dashboard: DashboardData }) {
 
   return (
-    <HStack padding={12} alignment="top">
+    <HStack padding={16} alignment="top">
       <AgendaColumn dashboard={dashboard} />
       <Spacer />
       <WeatherColumn dashboard={dashboard} maxHour={2} hasSpacer={true} />

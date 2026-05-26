@@ -107,14 +107,10 @@ export function EventLines({
   const groups = groupEventsByDay(events, todayStart)
   const displayGroups = takeGroupsByTotalLines(groups, maxLines)
   return (
-    <VStack alignment="leading" spacing={8} padding={4}>
+    <VStack alignment="leading" spacing={6}>
       {displayGroups.map((group) => (
-        <VStack key={group.key} alignment="leading">
-          <Text
-            foregroundStyle="systemGray"
-            font={10}
-            bold
-          >
+        <VStack key={group.key} alignment="leading" spacing={2}>
+          <Text foregroundStyle="systemGray" font={10} bold >
             {group.title}
           </Text>
           {group.events.map((event) => (
@@ -122,13 +118,13 @@ export function EventLines({
               <Button intent={CompleteReminderIntent({ id: event.identifier })} buttonStyle="plain" key={`${group.key}-${event.identifier}`}>
                 <HStack alignment="center" spacing={4}>
                   <Image systemName="circle" font="footnote" foregroundStyle="systemBlue" />
-                  <Text font="footnote" lineLimit={1} bold>
+                  <Text font={12} lineLimit={1} bold>
                     {event.title}
                   </Text>
                 </HStack>
               </Button>
             ) : (
-              <Text font="footnote" lineLimit={1} bold>
+              <Text font={12} lineLimit={1} bold>
                 {event.title}
               </Text>
             )
@@ -232,7 +228,7 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
   )
 }
 
-export function AgendaColumn({ dashboard }: { dashboard: DashboardData }) {
+export function AgendaColumn({ dashboard, maxLines = 3 }: { dashboard: DashboardData; maxLines?: number }) {
   const now = new Date()
   return (
     <VStack alignment="leading" spacing={8}>
@@ -253,8 +249,7 @@ export function AgendaColumn({ dashboard }: { dashboard: DashboardData }) {
         <WeekdayVertical />
         <Spacer />
       </HStack>
-      <EventLines events={dashboard.upcomingEvents} maxLines={3} />
-      <Spacer />
+      <EventLines events={dashboard.upcomingEvents} maxLines={maxLines} />
     </VStack>
   )
 }
