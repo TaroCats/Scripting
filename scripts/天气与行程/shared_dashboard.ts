@@ -1,7 +1,7 @@
 import { Notification } from "scripting"
 import { addDays, endOfDay, startOfDay } from "./shared_date"
 import { formatEventDateTime, formatShortTime } from "./shared_format"
-import { sortEvents, formatPlacemark } from "./shared_misc"
+import { sortEvents } from "./shared_misc"
 import { summarizeWeather, translateWeatherCondition } from "./shared_weather"
 import { type AgendaItem, type DashboardData, type ReminderResult, type WeatherSummary } from "./shared_types"
 
@@ -96,12 +96,12 @@ async function loadWeatherPart(now: Date, warnings: string[], noCache: boolean):
 
       const hourlyForecastRes = await Weather.requestHourlyForecast(location, {
         startDate: now,
-        endDate: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+        endDate: new Date(now.getTime() + 8 * 60 * 60 * 1000),
       })
-      const hourlyForecast = hourlyForecastRes.forecast.slice(0, 3).map((h: any) => ({
+      const hourlyForecast = hourlyForecastRes.forecast.slice(0, 6).map((h: any) => ({
         time: formatShortTime(h.date),
         symbolName: `${h.symbolName}.fill`,
-        temperature: `${h.temperature.value.toFixed(0)} ${h.temperature.symbol}`,
+        temperature: `${h.temperature.value.toFixed(0)}`,
       }))
       
       weather = {

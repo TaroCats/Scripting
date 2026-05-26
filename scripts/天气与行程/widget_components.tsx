@@ -4,9 +4,9 @@
  * @LastEditTime: 2026-05-26 17:35:54
  * @Description: 
  */
-import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay } from "./shared"
-import { CompleteReminderIntent } from "./app_intents"
-import { HStack, Spacer, VStack, Text, Image, Button } from "scripting"
+import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
+import { CompleteReminderIntent, RefreshWidgetIntent } from "./app_intents"
+import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle } from "scripting"
 
 type DayGroup = {
   key: string
@@ -97,7 +97,9 @@ export function EventLines({
   if (events.length === 0) {
     return (
       <VStack alignment="leading" spacing={4}>
-        <Text foregroundStyle={foregroundStyle} font="footnote">今天没有更多待办</Text>
+        <Text foregroundStyle={foregroundStyle} font="footnote">
+          最近无事发生
+        </Text>
       </VStack>
     )
   }
@@ -152,10 +154,107 @@ export function HourlyForecastView({
         <VStack key={i} alignment="center" spacing={4}>
           <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
           <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} />
-          <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}</Text>
-          <Spacer />
+          <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}°</Text>
         </VStack>
       ))}
     </HStack>
+  )
+}
+
+export function VerticalLabel({ text, font = 10, color = 'systemGray' }: { text: string; font?: number | Font; color?: ShapeStyle | DynamicShapeStyle }) {
+  return (
+    <VStack alignment="leading" spacing={0}>
+      {text.split("").map((ch, index) => (
+        <Text key={`${ch}-${index}`} font={font} foregroundStyle={color}>
+          {ch}
+        </Text>
+      ))}
+    </VStack>
+  )
+}
+
+export function WeekdayVertical() {
+  const date = new Date()
+  return <VerticalLabel text={formatWeekday(date)} color="systemRed" />
+}
+
+export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { dashboard: DashboardData; maxHour?: number; hasSpacer?: boolean }) {
+  const w = dashboard.weather
+  if (!w) {
+    return (
+      <>
+        <Text font="footnote">{dashboard.warnings?.join(", ")} </Text>
+        <Spacer />
+      </>
+    )
+  }
+
+
+  return (
+    <VStack alignment="leading" spacing={10}>
+      <HStack alignment="top" spacing={10}>
+        <Image systemName={w.symbolName} font="largeTitle" padding={{ top: 5 }} />
+        <Text font="largeTitle" bold>{w.temperature}°</Text>
+      </HStack>
+      <HStack alignment="center" spacing={4}>
+        <Text font="footnote" foregroundStyle={foregroundStyle} lineLimit={1}>
+          {dashboard.locationName}
+        </Text>
+        <Text font="footnote" foregroundStyle={foregroundStyle} lineLimit={1}>
+          {w.condition}
+        </Text>
+        <Button intent={RefreshWidgetIntent({})} buttonStyle="plain" >
+          <HStack alignment="bottom" spacing={2}>
+            <Image systemName="arrow.clockwise" font={8} foregroundStyle="systemGray" />
+            <Text font={8} foregroundStyle="systemGray">
+              刷新
+            </Text>
+          </HStack>
+        </Button>
+      </HStack>
+
+      {hasSpacer && <Spacer />}
+
+      <HStack alignment="center" spacing={10}>
+        <VStack alignment="center" spacing={10}>
+          <HStack alignment="center" spacing={4}>
+            <VerticalLabel text="最高" font={8} />
+            <Text font={16} >{w.highTemperature}°</Text>
+          </HStack>
+          <HStack alignment="center" spacing={4}>
+            <VerticalLabel text="最低" font={8} />
+            <Text font={16} >{w.lowTemperature}°</Text>
+          </HStack>
+        </VStack>
+        <HourlyForecastView forecast={w.hourlyForecast.slice(0, maxHour)} />
+      </HStack>
+    </VStack>
+  )
+}
+
+export function AgendaColumn({ dashboard }: { dashboard: DashboardData }) {
+  const now = new Date()
+  return (
+    <VStack alignment="leading" spacing={8}>
+      <HStack alignment="center" spacing={6}>
+        <Text font="largeTitle" bold>{formatMonthDay(now)}</Text>
+        <Rectangle
+          fill="systemGray"
+          stroke={{
+            shapeStyle: "systemGray",
+            strokeStyle: {
+              lineWidth: 1,
+              lineJoin: "round"
+            }
+          }}
+          opacity={0.3}
+          frame={{ width: .2, height: 20 }}
+        />
+        <WeekdayVertical />
+        <Spacer />
+      </HStack>
+      <EventLines events={dashboard.upcomingEvents} maxLines={3} />
+      <Spacer />
+    </VStack>
   )
 }
