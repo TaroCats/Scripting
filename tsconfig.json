@@ -15,6 +15,9 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
+      "scripting": [
+        "dts/scripting.d.ts"
+      ],
       "*": [
         "*",
         "src/*",

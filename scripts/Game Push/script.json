@@ -1,0 +1,44 @@
+{
+  "color" : "rgba(255, 128, 0, 1.00)",
+  "contributors" : [
+
+  ],
+  "localizedDescriptions" : {
+    "zh" : "",
+    "de" : "",
+    "fr" : "",
+    "it" : "",
+    "es" : "",
+    "ru" : "",
+    "en" : "",
+    "pt" : "",
+    "ja" : ""
+  },
+  "iconImage" : null,
+  "remoteResource" : null,
+  "intentInputTypes" : [
+
+  ],
+  "version" : "1.0.0",
+  "name" : "Game Push",
+  "runInApp" : true,
+  "author" : {
+    "homepage" : null,
+    "name" : "TARO",
+    "email" : "i@taro.cat"
+  },
+  "description" : null,
+  "entry" : "index.tsx",
+  "icon" : "puzzlepiece.fill",
+  "localizedNames" : {
+    "zh" : "",
+    "de" : "",
+    "fr" : "",
+    "it" : "",
+    "es" : "",
+    "ru" : "",
+    "en" : "",
+    "pt" : "",
+    "ja" : ""
+  }
+}
