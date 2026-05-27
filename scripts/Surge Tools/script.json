@@ -1,0 +1,44 @@
+{
+  "name" : "Surge Tools",
+  "contributors" : [
+
+  ],
+  "description" : null,
+  "entry" : "index.tsx",
+  "remoteResource" : null,
+  "runInApp" : false,
+  "localizedDescriptions" : {
+    "zh" : "",
+    "de" : "",
+    "fr" : "",
+    "it" : "",
+    "es" : "",
+    "ru" : "",
+    "en" : "",
+    "pt" : "",
+    "ja" : ""
+  },
+  "icon" : "network",
+  "iconImage" : null,
+  "intentInputTypes" : [
+
+  ],
+  "author" : {
+    "name" : "TARO",
+    "email" : "i@taro.cat",
+    "homepage" : null
+  },
+  "color" : "rgba(243, 159, 68,1)",
+  "version" : "1.0.0",
+  "localizedNames" : {
+    "zh" : "",
+    "de" : "",
+    "fr" : "",
+    "it" : "",
+    "es" : "",
+    "ru" : "",
+    "en" : "",
+    "pt" : "",
+    "ja" : ""
+  }
+}
