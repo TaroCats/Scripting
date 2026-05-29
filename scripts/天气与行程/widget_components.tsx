@@ -1,12 +1,12 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-26 17:35:54
+ * @LastEditTime: 2026-05-29 11:12:58
  * @Description: 
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
 import { CompleteReminderIntent, RefreshWidgetIntent } from "./app_intents"
-import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle } from "scripting"
+import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle, FlowLayout } from "scripting"
 
 type DayGroup = {
   key: string
@@ -107,7 +107,7 @@ export function EventLines({
   const groups = groupEventsByDay(events, todayStart)
   const displayGroups = takeGroupsByTotalLines(groups, maxLines)
   return (
-    <VStack alignment="leading" spacing={6}>
+    <FlowLayout spacing={12}>
       {displayGroups.map((group) => (
         <VStack key={group.key} alignment="leading" spacing={2}>
           <Text foregroundStyle="systemGray" font={10} bold >
@@ -131,21 +131,17 @@ export function EventLines({
           ))}
         </VStack>
       ))}
-    </VStack>
+    </FlowLayout>
   )
 }
 
-export function HourlyForecastView({
-  forecast,
-}: {
-  forecast: HourlyWeather[]
-}) {
+export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) {
   if (forecast.length === 0) {
     return null
   }
 
   return (
-    <HStack spacing={12} alignment="center">
+    <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 32 }}>
       {forecast.map((h, i) => (
         <VStack key={i} alignment="center" spacing={4}>
           <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
@@ -153,7 +149,7 @@ export function HourlyForecastView({
           <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}°</Text>
         </VStack>
       ))}
-    </HStack>
+    </FlowLayout>
   )
 }
 
@@ -211,15 +207,15 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
 
       {hasSpacer && <Spacer />}
 
-      <HStack alignment="center" spacing={10}>
+      <HStack spacing={10}>
         <VStack alignment="center" spacing={10}>
           <HStack alignment="center" spacing={4}>
             <VerticalLabel text="最高" font={8} />
-            <Text font={16} >{w.highTemperature}°</Text>
+            <Text font={18} bold>{w.highTemperature}°</Text>
           </HStack>
           <HStack alignment="center" spacing={4}>
             <VerticalLabel text="最低" font={8} />
-            <Text font={16} >{w.lowTemperature}°</Text>
+            <Text font={18} bold>{w.lowTemperature}°</Text>
           </HStack>
         </VStack>
         <HourlyForecastView forecast={w.hourlyForecast.slice(0, maxHour)} />

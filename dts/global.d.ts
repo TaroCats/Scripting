@@ -13696,12 +13696,12 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
      * @param scriptName The target script's stable name.
      * @param queryParameters Parameters passed to the target script, available as `Script.queryParameters`.
      */
-    function switchToScript(scriptName: string, queryParameters?: Record<string, string>): Promise<void>
+    function switchToScript(scriptName: string, queryParameters?: Record<string, any>): Promise<void>
     /**
      * Dismisses the current keyboard script and runs the next available keyboard script.
      * @param queryParameters Parameters passed to the target script, available as `Script.queryParameters`.
      */
-    function nextScript(queryParameters?: Record<string, string>): Promise<void>
+    function nextScript(queryParameters?: Record<string, any>): Promise<void>
     /**
      * Moves the cursor by the specified offset.
      * @param offset The number of characters to move the cursor. A positive value moves the cursor to the right, while a negative value moves it to the left.
@@ -17007,11 +17007,12 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
      */
     env?: Record<string, string>;
     /**
-     * String key/value pairs serialized as JSON and exposed to the
-     * subprocess via the `SCRIPTING_QUERY_PARAMETERS` environment variable.
-     * Mirrors `Script.queryParameters` for ad-hoc commands.
+     * Key/value pairs serialized as JSON and exposed to the subprocess via
+     * the `SCRIPTING_QUERY_PARAMETERS` environment variable. Values keep their
+     * JSON types (boolean/number/null/array/object). Mirrors
+     * `Script.queryParameters` for ad-hoc commands.
      */
-    queryParameters?: Record<string, string>;
+    queryParameters?: Record<string, any>;
   };
 
   /**
@@ -17354,176 +17355,176 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     readonly uuid: string
     readonly name: string
   }
-}
 
-type SpotlightParameters = Record<string, any>
-
-/**
- * A Spotlight item. Every field except `id` and `title` maps 1:1 to a
- * `CSSearchableItemAttributeSet` property in Apple's Core Spotlight framework,
- * grouped below the same way Apple documents them.
- *
- * @see https://developer.apple.com/documentation/corespotlight/cssearchableitemattributeset
- */
-type SpotlightItem = {
-  /**
-   * Script-local identifier. Required and unique within the current script.
-   * Returned as `Spotlight.current.id` when the item is tapped.
-   */
-  id: string
-  /** Arbitrary data delivered to `spotlight.tsx` as `Spotlight.current.parameters`. */
-  parameters?: SpotlightParameters
-
-  // General
-
-  /** Primary title shown in Spotlight results. Required. */
-  title: string
-  /** Localized display name. */
-  displayName?: string
-  /** Alternate names the item can also be found by. */
-  alternateNames?: string[]
-  /** Uniform Type Identifier used to choose the system icon, e.g. `"public.image"`. */
-  contentType?: UTType
-  /** URL of the underlying content (use a file URL for local content). */
-  contentURL?: string
-  /** Thumbnail image bytes. Takes priority over `thumbnailURL`. */
-  thumbnailData?: Data
-  /** Local file URL string pointing to a thumbnail image. */
-  thumbnailURL?: string
-  /** Extra keywords to match against. */
-  keywords?: string[]
-  /** Higher values rank the item higher in results. */
-  rankingHint?: number
-  /** Whether the item can be navigated to (uses `latitude`/`longitude`). */
-  supportsNavigation?: boolean
-  /** Whether the item can be called (uses `phoneNumbers`). */
-  supportsPhoneCall?: boolean
-
-  // Documents
-
-  /** Long description shown under the title. */
-  contentDescription?: string
-  /** Subject of the content. */
-  subject?: string
-  /** Human-readable kind, e.g. "Note", "Invoice". */
-  kind?: string
-  /** Entity that created the content. */
-  creator?: string
-  /** Number of pages in the document. */
-  pageCount?: number
-  /** Size of the content in bytes. */
-  fileSize?: number
-
-  // Messaging
-
-  /** Full searchable text body. Improves recall for free-text queries. */
-  textContent?: string
-  /** Author display names. */
-  authorNames?: string[]
-  /** Associated email addresses. */
-  emailAddresses?: string[]
-  /** Associated phone numbers. */
-  phoneNumbers?: string[]
-
-  // Media
-
-  /** Free-form comment. */
-  comment?: string
-  /** Content creation date. Defaults to first index time when omitted. */
-  contentCreationDate?: Date | string | number
-  /** Content modification date. Defaults to last index time when omitted. */
-  contentModificationDate?: Date | string | number
-  /** Last used date. */
-  lastUsedDate?: Date | string | number
-
-  // Events
-
-  /** Start date, for event-like items. */
-  startDate?: Date | string | number
-  /** End date, for event-like items. */
-  endDate?: Date | string | number
-  /** Due date, for task-like items. */
-  dueDate?: Date | string | number
-  /** Completion date, for task-like items. */
-  completionDate?: Date | string | number
-  /** Whether the event lasts all day. */
-  allDay?: boolean
-
-  // Places
-
-  /** Latitude in degrees. */
-  latitude?: number
-  /** Longitude in degrees. */
-  longitude?: number
-  /** Altitude in meters. */
-  altitude?: number
-  /** Human-readable place name. */
-  namedLocation?: string
-  /** City of the place. */
-  city?: string
-  /** State or province of the place. */
-  stateOrProvince?: string
-  /** Country of the place. */
-  country?: string
-  /** Postal code of the place. */
-  postalCode?: string
-  /** Fully formatted address of the place. */
-  fullyFormattedAddress?: string
-
-  // Item-level
-
-  /** When the item should be removed from the index. */
-  expirationDate?: Date | string | number
-}
-
-type SpotlightCurrent = {
-  id: string
-  parameters: SpotlightParameters
-}
-
-type SpotlightIndexedItem = Omit<SpotlightItem, "thumbnailData" | "contentCreationDate" | "contentModificationDate"> & {
-  scriptName: string
-  uniqueIdentifier: string
-  contentCreationDate: number
-  contentModificationDate: number
-}
-
-declare namespace Spotlight {
-  /**
-   * Spotlight launch context. This is non-null when the current script is
-   * running from `spotlight.tsx` after a user taps a Spotlight result.
-   */
-  const current: SpotlightCurrent | null
+  type SpotlightParameters = Record<string, any>
 
   /**
-   * Index or update one item for the current script. Requires Scripting PRO.
+   * A Spotlight item. Every field except `id` and `title` maps 1:1 to a
+   * `CSSearchableItemAttributeSet` property in Apple's Core Spotlight framework,
+   * grouped below the same way Apple documents them.
+   *
+   * @see https://developer.apple.com/documentation/corespotlight/cssearchableitemattributeset
    */
-  function index(item: SpotlightItem): Promise<void>
+  type SpotlightItem = {
+    /**
+     * Script-local identifier. Required and unique within the current script.
+     * Returned as `Spotlight.current.id` when the item is tapped.
+     */
+    id: string
+    /** Arbitrary data delivered to `spotlight.tsx` as `Spotlight.current.parameters`. */
+    parameters?: SpotlightParameters
 
-  /**
-   * Index or update multiple items for the current script. Requires Scripting PRO.
-   */
-  function indexItems(items: SpotlightItem[]): Promise<void>
+    // General
 
-  /**
-   * Delete one indexed item by its script-local id. Requires Scripting PRO.
-   */
-  function delete(id: string): Promise<void>
+    /** Primary title shown in Spotlight results. Required. */
+    title: string
+    /** Localized display name. */
+    displayName?: string
+    /** Alternate names the item can also be found by. */
+    alternateNames?: string[]
+    /** Uniform Type Identifier used to choose the system icon, e.g. `"public.image"`. */
+    contentType?: UTType
+    /** URL of the underlying content (use a file URL for local content). */
+    contentURL?: string
+    /** Thumbnail image bytes. Takes priority over `thumbnailURL`. */
+    thumbnailData?: Data
+    /** Local file URL string pointing to a thumbnail image. */
+    thumbnailURL?: string
+    /** Extra keywords to match against. */
+    keywords?: string[]
+    /** Higher values rank the item higher in results. */
+    rankingHint?: number
+    /** Whether the item can be navigated to (uses `latitude`/`longitude`). */
+    supportsNavigation?: boolean
+    /** Whether the item can be called (uses `phoneNumbers`). */
+    supportsPhoneCall?: boolean
 
-  /**
-   * Delete indexed items by their script-local ids. Requires Scripting PRO.
-   */
-  function deleteItems(ids: string[]): Promise<void>
+    // Documents
 
-  /**
-   * Delete all Spotlight items registered by the current script. Requires Scripting PRO.
-   */
-  function deleteAll(): Promise<void>
+    /** Long description shown under the title. */
+    contentDescription?: string
+    /** Subject of the content. */
+    subject?: string
+    /** Human-readable kind, e.g. "Note", "Invoice". */
+    kind?: string
+    /** Entity that created the content. */
+    creator?: string
+    /** Number of pages in the document. */
+    pageCount?: number
+    /** Size of the content in bytes. */
+    fileSize?: number
 
-  /**
-   * List Spotlight items registered by the current script. Requires Scripting PRO.
-   */
-  function getItems(): Promise<SpotlightIndexedItem[]>
+    // Messaging
+
+    /** Full searchable text body. Improves recall for free-text queries. */
+    textContent?: string
+    /** Author display names. */
+    authorNames?: string[]
+    /** Associated email addresses. */
+    emailAddresses?: string[]
+    /** Associated phone numbers. */
+    phoneNumbers?: string[]
+
+    // Media
+
+    /** Free-form comment. */
+    comment?: string
+    /** Content creation date. Defaults to first index time when omitted. */
+    contentCreationDate?: Date | string | number
+    /** Content modification date. Defaults to last index time when omitted. */
+    contentModificationDate?: Date | string | number
+    /** Last used date. */
+    lastUsedDate?: Date | string | number
+
+    // Events
+
+    /** Start date, for event-like items. */
+    startDate?: Date | string | number
+    /** End date, for event-like items. */
+    endDate?: Date | string | number
+    /** Due date, for task-like items. */
+    dueDate?: Date | string | number
+    /** Completion date, for task-like items. */
+    completionDate?: Date | string | number
+    /** Whether the event lasts all day. */
+    allDay?: boolean
+
+    // Places
+
+    /** Latitude in degrees. */
+    latitude?: number
+    /** Longitude in degrees. */
+    longitude?: number
+    /** Altitude in meters. */
+    altitude?: number
+    /** Human-readable place name. */
+    namedLocation?: string
+    /** City of the place. */
+    city?: string
+    /** State or province of the place. */
+    stateOrProvince?: string
+    /** Country of the place. */
+    country?: string
+    /** Postal code of the place. */
+    postalCode?: string
+    /** Fully formatted address of the place. */
+    fullyFormattedAddress?: string
+
+    // Item-level
+
+    /** When the item should be removed from the index. */
+    expirationDate?: Date | string | number
+  }
+
+  type SpotlightCurrent = {
+    id: string
+    parameters: SpotlightParameters
+  }
+
+  type SpotlightIndexedItem = Omit<SpotlightItem, "thumbnailData" | "contentCreationDate" | "contentModificationDate"> & {
+    scriptName: string
+    uniqueIdentifier: string
+    contentCreationDate: number
+    contentModificationDate: number
+  }
+
+  declare const Spotlight: {
+    /**
+     * Spotlight launch context. This is non-null when the current script is
+     * running from `spotlight.tsx` after a user taps a Spotlight result.
+     */
+    readonly current: SpotlightCurrent | null
+
+    /**
+     * Index or update one item for the current script. Requires Scripting PRO.
+     */
+    index(item: SpotlightItem): Promise<void>
+
+    /**
+     * Index or update multiple items for the current script. Requires Scripting PRO.
+     */
+    indexItems(items: SpotlightItem[]): Promise<void>
+
+    /**
+     * Delete one indexed item by its script-local id. Requires Scripting PRO.
+     */
+    delete(id: string): Promise<void>
+
+    /**
+     * Delete indexed items by their script-local ids. Requires Scripting PRO.
+     */
+    deleteItems(ids: string[]): Promise<void>
+
+    /**
+     * Delete all Spotlight items registered by the current script. Requires Scripting PRO.
+     */
+    deleteAll(): Promise<void>
+
+    /**
+     * List Spotlight items registered by the current script. Requires Scripting PRO.
+     */
+    getItems(): Promise<SpotlightIndexedItem[]>
+  }
 }
 
 export { }

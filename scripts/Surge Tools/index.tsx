@@ -1,60 +1,67 @@
-import { Settings } from "./src/Settings";
-import { fetchTraffic, getSurgeConfig } from "./src/api";
+import { Settings } from "./src/Settings"
+import { fetchTraffic, getSurgeConfig } from "./src/api"
 
-import { NavigationStack, NavigationLink, List, Section, Chart, LineChart, Script, useEffect, useState, Text, Navigation } from "scripting";
+import { NavigationStack, NavigationLink, List, Section, Chart, LineChart, Script, useEffect, useState, Text, Navigation, LineCategoryChart } from "scripting"
 
 function Main() {
-  const [inSpeed, setInSpeed] = useState<number[]>([0]);
-  const [outSpeed, setOutSpeed] = useState<number[]>([0]);
-  const [error, setError] = useState<string>("");
-
-  useEffect(() => {
-    let lastIn = -1;
-    let lastOut = -1;
-    
-    const interval = setInterval(async () => {
-      try {
-        const config = getSurgeConfig();
-        if (!config.address || !config.port) {
-          setError("请在设置中配置 Surge 地址和端口");
-          return;
-        }
-
-        const data = await fetchTraffic(config);
-        
-        // Surge /v1/traffic 的 connector 对象包含了总流量
-        const currentIn = data?.connector?.in ?? 0;
-        const currentOut = data?.connector?.out ?? 0;
-        
-        if (lastIn !== -1) {
-          const inDiff = currentIn - lastIn;
-          const outDiff = currentOut - lastOut;
-          
-          setInSpeed((prev: number[]) => [...prev.slice(-29), inDiff]);
-          setOutSpeed((prev: number[]) => [...prev.slice(-29), outDiff]);
-          setError("");
-        }
-        
-        lastIn = currentIn;
-        lastOut = currentOut;
-        
-      } catch (err: any) {
-        setError(err.message || "获取数据失败，请检查配置或 Surge 状态");
-      }
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  const [inSpeed, setInSpeed] = useState<number[]>([0])
+  const [outSpeed, setOutSpeed] = useState<number[]>([0])
+  const [error, setError] = useState<string>("")
+  const [lastStatus, setLastStatus] = useState<Record<string, any>>({
+    in: -1,
+    out: -1,
+  })
 
   const inMarks = inSpeed.map((val, index) => ({
     label: index.toString(),
-    value: val / 1024 // 转换为 KB/s
-  }));
+    value: val / 1024, // 转换为 KB/s
+    category: "上传",
+    cornerRadius: 5,
+  }))
 
   const outMarks = outSpeed.map((val, index) => ({
     label: index.toString(),
-    value: val / 1024 // 转换为 KB/s
-  }));
+    value: val / 1024, // 转换为 KB/s
+    category: "下载",
+    cornerRadius: 5,
+  }))
+
+
+  const Interval = async () => {
+    const config = getSurgeConfig()
+    if (!config.address || !config.port) {
+      setError("请在设置中配置 Surge 地址和端口")
+      return
+    }
+
+    const data = await fetchTraffic(config)
+    const interfaceData = data?.interface ?? {}
+
+    let currentIn = 0
+    let currentOut = 0
+
+    for (const key in interfaceData) {
+      currentIn += interfaceData[key].inCurrentSpeed
+      currentOut += interfaceData[key].outCurrentSpeed
+    }
+
+    const inDiff = currentIn - lastStatus.in
+    const outDiff = currentOut - lastStatus.out
+
+    setInSpeed((prev: number[]) => [...prev.slice(-29), inDiff])
+    setOutSpeed((prev: number[]) => [...prev.slice(-29), outDiff])
+
+    setLastStatus({
+      in: currentIn,
+      out: currentOut,
+    })
+
+    setTimeout(Interval, 500)
+  }
+
+  useEffect(() => {
+    Interval()
+  }, [])
 
   return (
     <List navigationTitle="Surge 控制面板" navigationBarTitleDisplayMode="inline">
@@ -64,29 +71,20 @@ function Main() {
 
       {error ? (
         <Section title="错误">
-           <Text>{error}</Text>
+          <Text>{error}</Text>
         </Section>
       ) : null}
 
-      <Section title="下载速度 (KB/s)">
-        <Chart>
-          <LineChart
-            labelOnYAxis={true}
-            marks={inMarks}
-          />
-        </Chart>
-      </Section>
-      
-      <Section title="上传速度 (KB/s)">
-        <Chart>
-          <LineChart
-            labelOnYAxis={true}
-            marks={outMarks}
+      <Section title="实时速度 (KB/s)">
+        <Chart chartXAxis="hidden">
+          <LineCategoryChart
+            labelOnYAxis={false}
+            marks={[...inMarks, ...outMarks]}
           />
         </Chart>
       </Section>
     </List>
-  );
+  )
 }
 
 async function run() {
@@ -96,9 +94,9 @@ async function run() {
         <Main />
       </NavigationStack>
     )
-  });
+  })
 
-  Script.exit();
+  Script.exit()
 }
 
-run();
+run()

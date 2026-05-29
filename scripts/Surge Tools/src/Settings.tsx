@@ -1,17 +1,32 @@
-import { SurgeConfig, getSurgeConfig, setSurgeConfig } from "./api";
+/*
+ * @Author: taro etsy@live.com
+ * @LastEditors: taro etsy@live.com
+ * @LastEditTime: 2026-05-29 10:04:44
+ * @Description: 
+ */
+import { SurgeConfig, fetchTraffic, getSurgeConfig, setSurgeConfig } from "./api"
 
-import { List, Form, Section, TextField, Button, useState } from "scripting";
+import { List, Form, Section, TextField, Button, useState } from "scripting"
 
 export function Settings() {
-  const [config, setConfig] = useState<SurgeConfig>(getSurgeConfig());
+  const [config, setConfig] = useState<SurgeConfig>(getSurgeConfig())
 
   const handleSave = () => {
-    setSurgeConfig(config);
-  };
+    setSurgeConfig(config)
+  }
+
+  const handleTest = async () => {
+    const config = getSurgeConfig()
+    if (!config.address || !config.port) {
+      return
+    }
+    const data = await fetchTraffic(config)
+    console.log(data);
+  }
 
   return (
-    <List navigationTitle="Surge Settings" navigationBarTitleDisplayMode="inline">
-      <Form>
+    <Form>
+      <List navigationTitle="Surge Settings">
         <Section title="API Configuration">
           <TextField
             title="Address"
@@ -33,9 +48,10 @@ export function Settings() {
           />
         </Section>
         <Section>
-          <Button title="Save" action={handleSave} />
+          <Button title="保存" action={handleSave} />
+          <Button title="测试" action={handleTest} />
         </Section>
-      </Form>
-    </List>
-  );
+      </List>
+    </Form>
+  )
 }

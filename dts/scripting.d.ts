@@ -10549,10 +10549,15 @@ declare namespace Script {
      */
     const widgetParameter: string;
     /**
-     * If the current script is opened and run by the `run URL scheme`(
-     * like `"scripting://run/{script_name}?a=1&b=2"`).
+     * Parameters passed to the script. When launched with a JSON object (e.g.
+     * `scripting-ts run ... --queryparameters '{"enabled":true,"count":1}'`,
+     * `Script.run({ queryParameters })`, or keyboard `switchToScript`), the
+     * original JSON value types (boolean/number/null/array/object) are preserved.
+     * When launched by a `run URL scheme` (like
+     * `"scripting://run/{script_name}?a=1&b=2"`), values are always strings,
+     * because URL query strings cannot carry typed values.
      */
-    const queryParameters: Record<string, string>;
+    const queryParameters: Record<string, any>;
     /**
      * Creates a URL scheme for opening the Scripting's documentation page.
      * @param title The title of the documentation page, if not specified, it will open the documentation homepage.
@@ -10704,7 +10709,7 @@ declare namespace Script {
      */
     function run<T>(options: {
         name: string;
-        queryParameters?: Record<string, string>;
+        queryParameters?: Record<string, any>;
         singleMode?: boolean;
     }): Promise<T | null>;
     /**
@@ -10757,7 +10762,7 @@ declare namespace Script {
         /**
          * The query parameters passed to the script when it was resumed.
          */
-        queryParameters: Record<string, string> | null;
+        queryParameters: Record<string, any> | null;
         /**
          * The notification info passed to the script when it was resumed by tapping on a notification.
          */
