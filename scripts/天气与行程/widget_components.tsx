@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-29 11:12:58
+ * @LastEditTime: 2026-05-29 11:26:20
  * @Description: 
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
@@ -145,7 +145,7 @@ export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) 
       {forecast.map((h, i) => (
         <VStack key={i} alignment="center" spacing={4}>
           <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
-          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} />
+          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' />
           <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}°</Text>
         </VStack>
       ))}
@@ -185,7 +185,7 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
   return (
     <VStack alignment="leading" spacing={10}>
       <HStack alignment="top" spacing={10}>
-        <Image systemName={w.symbolName} font="largeTitle" padding={{ top: 5 }} />
+        <Image systemName={w.symbolName} font="largeTitle" symbolRenderingMode='multicolor' padding={{ top: 5 }} />
         <Text font="largeTitle" bold>{w.temperature}°</Text>
       </HStack>
       <HStack alignment="center" spacing={4}>
