@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-26 15:48:41
+ * @LastEditTime: 2026-06-03 13:06:12
  * @Description: 天气与行程小部件
  * */
 import { ZStack, Widget, AccessoryWidgetBackground } from "scripting"

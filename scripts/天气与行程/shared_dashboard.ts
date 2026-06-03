@@ -9,7 +9,42 @@ const REMINDER_THREAD_ID = "weather-calendar-assistant"
 
 const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000
 const WEATHER_CACHE_PATH = `${FileManager.appGroupDocumentsDirectory}/weather_cache.json`
+function isTitleSimilar(title1: string, title2: string, threshold = 0.9): boolean {
+  // 标准化：转小写，移除常见标点
+  const normalize = (str: string) =>
+    str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
 
+  const norm1 = normalize(title1)
+  const norm2 = normalize(title2)
+
+  // 如果完全相同，直接返回
+  if (norm1 === norm2) return true
+
+  // 简单实现：检查一个是否包含另一个（可根据需要替换为更精确的算法）
+  return norm1.includes(norm2) || norm2.includes(norm1) ||
+    norm1 === norm2
+}
+/**
+ * 过滤事件数组，保留每个相似标题组的第一个事件
+ * @param events 事件数组
+ * @param similarityThreshold 相似度阈值
+ * @returns 过滤后只包含唯一标题组的事件数组
+ */
+function filterSimilarTitleEvents(events: any[], similarityThreshold = 0.9): any[] {
+  const result: any[] = []
+
+  for (const event of events) {
+    const isSimilarToExisting = result.some(existing =>
+      isTitleSimilar(existing.title, event.title, similarityThreshold)
+    )
+
+    if (!isSimilarToExisting) {
+      result.push(event)
+    }
+  }
+
+  return result
+}
 async function readWeatherCache(): Promise<{
   fetchedAt: number
   locationName: string
@@ -47,7 +82,7 @@ async function writeWeatherCache(input: {
 }) {
   try {
     await FileManager.writeAsString(WEATHER_CACHE_PATH, JSON.stringify(input))
-  } catch (_error) {}
+  } catch (_error) { }
 }
 
 async function loadWeatherPart(now: Date, warnings: string[], noCache: boolean): Promise<{
@@ -103,7 +138,7 @@ async function loadWeatherPart(now: Date, warnings: string[], noCache: boolean):
         symbolName: `${h.symbolName}.fill`,
         temperature: `${h.temperature.value.toFixed(0)}`,
       }))
-      
+
       weather = {
         condition: translateWeatherCondition(currentWeather.condition),
         symbolName: `${currentWeather.symbolName}.fill`,
@@ -149,16 +184,20 @@ async function loadAgendaPart(now: Date, todayStart: Date, todayEnd: Date, lookA
 
   try {
     const events = await CalendarEvent.getAll(todayStart, lookAheadEnd)
-    const mappedEvents: AgendaItem[] = events.map((event) => ({
-      identifier: event.identifier,
-      title: event.title || "未命名日程",
-      startDate: new Date(event.startDate),
-      endDate: new Date(event.endDate),
-      location: event.location ?? null,
-      notes: event.notes ?? null,
-      isAllDay: Boolean(event.isAllDay),
-      type: "event",
-    }))
+
+    const mappedEvents: any[] = events
+      .filter((event) => event.calendar?.title != "中国大陆节假日")
+      .map((event) => ({
+        identifier: event.identifier,
+        type: "event",
+        title: event.title || "未命名日程",
+        startDate: new Date(event.startDate),
+        endDate: new Date(event.endDate),
+        location: event.location ?? null,
+        notes: event.notes ?? null,
+        isAllDay: Boolean(event.isAllDay),
+        calendar: event.calendar,
+      }))
 
     const reminders = await Reminder.getIncompletes({
       endDate: lookAheadEnd,
@@ -207,8 +246,13 @@ async function loadAgendaPart(now: Date, todayStart: Date, todayEnd: Date, lookA
 
       return event.startDate.getTime() >= todayStart.getTime() && event.startDate.getTime() <= todayEnd.getTime()
     })
+    const showReminder = Storage.get("showReminder") ?? true
+    upcomingEvents = filterSimilarTitleEvents(sortedEvents, 0.85)
+      .filter((event) => showReminder ? event.type === "event" : event.type)
+      .filter((event) => event.endDate.getTime() >= now.getTime())
 
-    upcomingEvents = sortedEvents.filter((event) => event.endDate.getTime() >= now.getTime()).slice(0, 10)
+      .slice(0, 10)
+
   } catch (_error) {
     warnings.push("日历读取失败，请确认已授予日历权限。")
   }

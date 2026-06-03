@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-26 15:48:20
+ * @LastEditTime: 2026-06-03 13:37:23
  * @Description: 
  */
 export type AgendaItem = {
@@ -14,6 +14,7 @@ export type AgendaItem = {
   isAllDay: boolean
   type: "event" | "reminder"
   isCompleted?: boolean
+  calendar?: any
 }
 
 export type HourlyWeather = {

@@ -1,11 +1,11 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-06-03 11:11:30
+ * @LastEditTime: 2026-06-03 13:51:29
  * @Description: 
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
-import { CompleteReminderIntent, RefreshWidgetIntent } from "./app_intents"
+import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "./app_intents"
 import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle, FlowLayout } from "scripting"
 
 type DayGroup = {
@@ -107,7 +107,7 @@ export function EventLines({
   const groups = groupEventsByDay(events, todayStart)
   const displayGroups = takeGroupsByTotalLines(groups, maxLines)
   return (
-    <FlowLayout spacing={12}>
+    <FlowLayout spacing={6} frame={{ maxWidth: 'infinity'}}>
       {displayGroups.map((group) => (
         <VStack key={group.key} alignment="leading" spacing={2}>
           <Text foregroundStyle="systemGray" font={10} bold >
@@ -141,7 +141,7 @@ export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) 
   }
 
   return (
-    <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 32 }}>
+    <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 35 }}>
       {forecast.map((h, i) => (
         <VStack key={i} alignment="center" spacing={4}>
           <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
@@ -228,23 +228,25 @@ export function AgendaColumn({ dashboard, maxLines = 10 }: { dashboard: Dashboar
   const now = new Date()
   return (
     <VStack alignment="leading" spacing={8}>
-      <HStack alignment="center" spacing={6}>
-        <Text font="largeTitle" bold>{formatMonthDay(now)}</Text>
-        <Rectangle
-          fill="systemGray"
-          stroke={{
-            shapeStyle: "systemGray",
-            strokeStyle: {
-              lineWidth: 1,
-              lineJoin: "round"
-            }
-          }}
-          opacity={0.3}
-          frame={{ width: .2, height: 20 }}
-        />
-        <WeekdayVertical />
-        <Spacer />
-      </HStack>
+      <Button intent={ToggleReminderIntent({})} buttonStyle="plain" >
+        <HStack alignment="center" spacing={6}>
+          <Text font="largeTitle" bold>{formatMonthDay(now)}</Text>
+          <Rectangle
+            fill="systemGray"
+            stroke={{
+              shapeStyle: "systemGray",
+              strokeStyle: {
+                lineWidth: 1,
+                lineJoin: "round"
+              }
+            }}
+            opacity={0.3}
+            frame={{ width: .2, height: 20 }}
+          />
+          <WeekdayVertical />
+          <Spacer />
+        </HStack>
+      </Button>
       <EventLines events={dashboard.upcomingEvents} maxLines={maxLines} />
     </VStack>
   )
