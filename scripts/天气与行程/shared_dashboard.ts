@@ -208,7 +208,7 @@ async function loadAgendaPart(now: Date, todayStart: Date, todayEnd: Date, lookA
       return event.startDate.getTime() >= todayStart.getTime() && event.startDate.getTime() <= todayEnd.getTime()
     })
 
-    upcomingEvents = sortedEvents.filter((event) => event.endDate.getTime() >= now.getTime()).slice(0, 5)
+    upcomingEvents = sortedEvents.filter((event) => event.endDate.getTime() >= now.getTime()).slice(0, 10)
   } catch (_error) {
     warnings.push("日历读取失败，请确认已授予日历权限。")
   }
@@ -221,7 +221,7 @@ export async function loadDashboardData(noCache = false): Promise<DashboardData>
   const now = new Date()
   const todayEnd = endOfDay(now)
   const todayStart = startOfDay(now)
-  const lookAheadEnd = endOfDay(addDays(now, 15))
+  const lookAheadEnd = endOfDay(addDays(now, 45))
 
   const { locationName, weather } = await loadWeatherPart(now, warnings, noCache)
   const { todayEvents, upcomingEvents } = await loadAgendaPart(now, todayStart, todayEnd, lookAheadEnd, warnings)

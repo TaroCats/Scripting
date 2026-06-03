@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-29 11:26:20
+ * @LastEditTime: 2026-06-03 11:11:30
  * @Description: 
  */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
@@ -207,13 +207,13 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
 
       {hasSpacer && <Spacer />}
 
-      <HStack spacing={10}>
-        <VStack alignment="center" spacing={10}>
-          <HStack alignment="center" spacing={4}>
+      <HStack spacing={10} frame={{ height: 50 }}>
+        <VStack alignment="center" spacing={10} >
+          <HStack alignment="center" spacing={4} frame={{ height: 20 }}>
             <VerticalLabel text="最高" font={8} />
             <Text font={18} bold>{w.highTemperature}°</Text>
           </HStack>
-          <HStack alignment="center" spacing={4}>
+          <HStack alignment="center" spacing={4} frame={{ height: 20 }}>
             <VerticalLabel text="最低" font={8} />
             <Text font={18} bold>{w.lowTemperature}°</Text>
           </HStack>
@@ -224,7 +224,7 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
   )
 }
 
-export function AgendaColumn({ dashboard, maxLines = 3 }: { dashboard: DashboardData; maxLines?: number }) {
+export function AgendaColumn({ dashboard, maxLines = 10 }: { dashboard: DashboardData; maxLines?: number }) {
   const now = new Date()
   return (
     <VStack alignment="leading" spacing={8}>

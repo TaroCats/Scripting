@@ -1,7 +1,7 @@
 /*
  * @Author: taro etsy@live.com
  * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-05-22 17:17:05
+ * @LastEditTime: 2026-06-03 11:21:17
  * @Description: 小型天气日程助手小部件
  */
 import { HStack, VStack, Text, Image, Spacer } from "scripting"
@@ -15,10 +15,10 @@ export function CompactWidget({ dashboard }: { dashboard: DashboardData }) {
       {w ? (
         <VStack alignment="leading" spacing={2}>
           <HStack alignment="center" spacing={4}>
-            <Image systemName={w.symbolName} font="title3" foregroundStyle="systemBlue" />
-            <Text font="headline" bold>{w.temperature}</Text>
+            <Image systemName={w.symbolName} font="title2" />
+            <Text font="title2" bold>{w.temperature}°</Text>
           </HStack>
-          <Text font={10} foregroundStyle={foregroundStyle} lineLimit={1}>
+          <Text font={10} bold foregroundStyle={foregroundStyle} lineLimit={1}>
             {w.condition}
           </Text>
         </VStack>

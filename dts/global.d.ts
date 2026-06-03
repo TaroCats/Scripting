@@ -830,6 +830,80 @@ declare global {
   }
 
   /**
+   * The encoded container format for `ImageIO.writeImage(...)`.
+   */
+  type ImageFormat = 'jpeg' | 'png' | 'heic' | 'tiff' | 'gif'
+
+  /**
+   * Container-level image metadata, as read from / written to an encoded image file.
+   *
+   * The well-known dictionaries (`exif` / `gps` / `tiff` / `iptc`) use Apple's CGImageProperties
+   * key names (e.g. `gps.Latitude`, `exif.DateTimeOriginal`). Top-level scalars describe the
+   * image itself. All fields are optional; only what the source provides is returned.
+   */
+  type ImageMetadata = {
+    pixelWidth?: number
+    pixelHeight?: number
+    dpiWidth?: number
+    dpiHeight?: number
+    depth?: number
+    colorModel?: string
+    /** EXIF/TIFF orientation value (1â€“8). */
+    orientation?: number
+    hasAlpha?: boolean
+    profileName?: string
+    exif?: Record<string, any>
+    gps?: Record<string, any>
+    tiff?: Record<string, any>
+    iptc?: Record<string, any>
+  }
+
+  /**
+   * Options for `ImageIO.writeImage(...)`. Provide exactly one of `image` or `source`.
+   */
+  type ImageWriteOptions = {
+    /**
+     * Re-encode from a decoded `UIImage`. NOTE: a `UIImage` is a decoded bitmap, so the
+     * original file's metadata is NOT preserved â€” only `metadata` you pass here is written.
+     */
+    image?: UIImage
+    /**
+     * Copy from an original encoded image (file path or `Data`), preserving its existing
+     * metadata, then overlay the `metadata` you pass. Use this to e.g. tag a photo with GPS
+     * while keeping its original EXIF.
+     */
+    source?: string | Data
+    /** Destination file path. An existing file is overwritten. */
+    to: string
+    /** Output format. Required when writing from `image`; defaults to the source's format when using `source`. */
+    format?: ImageFormat
+    /** Lossy compression quality 0..1 (jpeg / heic only). */
+    quality?: number
+    /** Metadata to write. Merged on top of the source's metadata when using `source`. */
+    metadata?: ImageMetadata
+  }
+
+  /**
+   * Low-level image container I/O backed by iOS ImageIO (CGImageSource / CGImageDestination).
+   *
+   * Use this when you need to read EXIF/GPS/TIFF/IPTC metadata, or write formats / metadata
+   * that `UIImage.toPNGData` / `toJPEGData` cannot (HEIC, TIFF, GIF, embedded metadata).
+   */
+  namespace ImageIO {
+    /**
+     * Reads container-level metadata from an image file path or `Data`.
+     * Rejects if the source cannot be decoded as an image.
+     */
+    function readMetadata(source: string | Data): Promise<ImageMetadata>
+
+    /**
+     * Encodes and writes an image to a file, optionally with metadata.
+     * See `ImageWriteOptions` for the `image` vs `source` distinction.
+     */
+    function writeImage(options: ImageWriteOptions): Promise<void>
+  }
+
+  /**
    * Read and set the clipboard
    *
    * If you want to quickly paste text from other apps, you can go to
@@ -3252,6 +3326,50 @@ declare global {
     allowsMultipleSelection?: boolean
   }
 
+  type PickFileBookmarkOptions = {
+    /**
+     * The preferred bookmark name. If omitted, the selected file name is used.
+     * When the name already exists, the user will be asked to choose another name.
+     */
+    preferredName?: string
+    /**
+     * The initial directory that the document picker displays.
+     */
+    initialDirectory?: string
+    /**
+     * An array of uniform type identifiers for the document picker to display.
+     * For more information, see [Uniform Type Identifiers.](https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct)
+     */
+    types?: UTType[]
+    /**
+     * Defaults to true.
+     */
+    shouldShowFileExtensions?: boolean
+  }
+
+  type PickDirectoryBookmarkOptions = {
+    /**
+     * The preferred bookmark name. If omitted, the selected directory name is used.
+     * When the name already exists, the user will be asked to choose another name.
+     */
+    preferredName?: string
+    /**
+     * The initial directory that the document picker displays.
+     */
+    initialDirectory?: string
+  }
+
+  type DocumentPickerBookmarkResult = {
+    /**
+     * The selected file or directory path.
+     */
+    path: string
+    /**
+     * The bookmark name that was saved. This may differ from the preferred name.
+     */
+    bookmarkName: string
+  }
+
   type ExportFilesOptions = {
     /**
      * The initial directory that the document picker displays.
@@ -3496,6 +3614,22 @@ declare global {
      * ```
      */
     function pickDirectory(initialDirectory?: string): Promise<string | null>
+    /**
+     * Pick a file and save it as a persistent security-scoped bookmark.
+     *
+     * Unlike `pickFiles`, this method stores a bookmark that can be used by
+     * later script runs with `FileManager.bookmarkedPath(bookmarkName)`.
+     * If the preferred name already exists, the user will be asked to rename it.
+     */
+    function pickFileBookmark(options?: PickFileBookmarkOptions): Promise<DocumentPickerBookmarkResult | null>
+    /**
+     * Pick a directory and save it as a persistent security-scoped bookmark.
+     *
+     * Unlike `pickDirectory`, this method stores a bookmark that can be used by
+     * later script runs with `FileManager.bookmarkedPath(bookmarkName)`.
+     * If the preferred name already exists, the user will be asked to rename it.
+     */
+    function pickDirectoryBookmark(options?: PickDirectoryBookmarkOptions): Promise<DocumentPickerBookmarkResult | null>
     /**
      * Exports files.
      * @example
@@ -6254,6 +6388,68 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
   }
 
   /**
+   * Result for a single requested time in `AVAssetImageGenerator.generate(...)`.
+   * Each requested time is reported independently with its own status.
+   */
+  type AVAssetImageGenerationResult =
+    | { requestedTime: MediaTime; actualTime: MediaTime; image: UIImage; status: 'succeeded' }
+    | { requestedTime: MediaTime; status: 'failed'; error: string }
+    | { requestedTime: MediaTime; status: 'cancelled' }
+
+  /**
+   * Extracts still images from an `AVAsset`'s video track.
+   *
+   * Compared to the one-shot `AVAsset.generateImage(...)`, this is a reusable generator that
+   * keeps its configuration across calls, can stream results frame-by-frame as they decode,
+   * and can be cancelled mid-flight. Prefer it for cover/thumbnail extraction at scale or
+   * per-frame ML / OCR pipelines.
+   *
+   * Local files only, like the other low-level AVAsset companions â€” download remote assets first.
+   */
+  class AVAssetImageGenerator {
+    /**
+     * @param asset A non-disposed `AVAsset`. Throws if the asset is invalid or disposed.
+     */
+    constructor(asset: AVAsset)
+
+    /**
+     * Maximum size in pixels for generated images; aspect ratio is preserved.
+     * If omitted, images are generated at the asset's natural size.
+     */
+    maximumSize?: Size
+    /** Tolerance before the requested time the generator may use to find a frame. */
+    requestedTimeToleranceBefore?: MediaTime
+    /** Tolerance after the requested time the generator may use to find a frame. */
+    requestedTimeToleranceAfter?: MediaTime
+    /** Whether to respect the asset's preferred track transform (rotation/mirroring). Defaults to `true`. */
+    appliesPreferredTrackTransform: boolean
+    /** The aperture mode used when generating images. */
+    apertureMode?: 'cleanAperture' | 'productionAperture' | 'encodedPixels'
+
+    /**
+     * Generates a single image at the given time.
+     * @returns The generated image plus the actual time of the chosen frame, or rejects on error.
+     */
+    copyImage(time: MediaTime): Promise<{ image: UIImage; actualTime: MediaTime }>
+
+    /**
+     * Generates images for an array of times, invoking `onFrame` as each one resolves
+     * (succeeded / failed / cancelled). The returned promise resolves once every requested
+     * time has been reported.
+     */
+    generate(
+      times: MediaTime[],
+      onFrame: (frame: AVAssetImageGenerationResult) => void
+    ): Promise<void>
+
+    /** Cancels any in-flight generation. Pending entries report `status: 'cancelled'`. */
+    cancel(): void
+
+    /** Cancels and releases the underlying generator. Auto-called when the script finishes. */
+    dispose(): void
+  }
+
+  /**
    * The export preset for `AVAssetExportSession`. Most presets correspond directly to the
    * AVAssetExportPreset* constants from AVFoundation.
    */
@@ -7458,12 +7654,45 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
     readonly device: AVCaptureDevice
   }
 
+  /** A point in normalized (0..1) coordinates. */
+  type AVCapturePoint = { x: number; y: number }
+
+  /**
+   * A live connection between a capture input and this output. Obtained via
+   * `output.connections`; you do not construct it. Most fields are read-only;
+   * `isEnabled` can be toggled.
+   */
+  class AVCaptureConnection {
+    protected constructor()
+    /** Whether the connection is currently carrying data. */
+    readonly isActive: boolean
+    /** Enable / disable data flow through this connection. */
+    isEnabled: boolean
+    /** `true` if the connection is mirroring video (read-only). */
+    readonly isVideoMirrored: boolean
+    /** Clockwise rotation angle in degrees applied to video (iOS 17+, else 0). */
+    readonly videoRotationAngle: number
+  }
+
   /**
    * Base type for capture outputs. You will not construct this directly;
    * use one of the subclasses (PhotoOutput / MovieFileOutput / MetadataOutput).
    */
   class AVCaptureOutput {
     protected constructor()
+    /** Live connections feeding this output. */
+    readonly connections: AVCaptureConnection[]
+    /**
+     * Convert a rectangle from this output's coordinate space into the
+     * metadata output's normalized (0..1) coordinate space. Pass and receive
+     * `{ x, y, width, height }`.
+     */
+    metadataOutputRectConverted(fromOutputRect: AVCaptureRect): AVCaptureRect
+    /**
+     * Inverse of `metadataOutputRectConverted` â€” convert a rectangle from the
+     * metadata output's normalized space back into this output's space.
+     */
+    outputRectConverted(fromMetadataOutputRect: AVCaptureRect): AVCaptureRect
   }
 
   /**
@@ -7507,6 +7736,35 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
      */
     readonly isAutoDeferredPhotoDeliverySupported: boolean
     isAutoDeferredPhotoDeliveryEnabled: boolean
+
+    /**
+     * Codec types the output can currently produce, as native raw values
+     * (e.g. `"hvc1"` for HEVC, `"jpeg"`, `"avc1"` for H.264). Note these are
+     * the AVFoundation raw values, not the friendly names accepted by
+     * `capturePhoto({ codec })`.
+     */
+    readonly availablePhotoCodecTypes: string[]
+    /** Live Photo video codecs available, as native raw values. */
+    readonly availableLivePhotoVideoCodecTypes: string[]
+    /** Flash modes supported by the active device. */
+    readonly supportedFlashModes: ("off" | "on" | "auto")[]
+    /**
+     * Maximum photo dimensions (pixels). Setting a value not present in the
+     * device's supported set is a silent no-op â€” query before relying on it.
+     */
+    maxPhotoDimensions: { width: number; height: number }
+
+    /**
+     * Depth / portrait-effects-matte / Apple ProRAW delivery. Unsupported
+     * configurations report `*Supported` as `false` and the setters are
+     * silent no-ops, so feature-detect via `*Supported` before flipping.
+     */
+    readonly isDepthDataDeliverySupported: boolean
+    isDepthDataDeliveryEnabled: boolean
+    readonly isPortraitEffectsMatteDeliverySupported: boolean
+    isPortraitEffectsMatteDeliveryEnabled: boolean
+    readonly isAppleProRAWSupported: boolean
+    isAppleProRAWEnabled: boolean
 
     capturePhoto(options?: {
       codec?: "hevc" | "jpeg"
@@ -7592,10 +7850,18 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
   class AVCaptureMovieFileOutput extends AVCaptureOutput {
     constructor()
     readonly isRecording: boolean
+    /** `true` while recording is paused via `pauseRecording()`. Always `false` below iOS 18. */
+    readonly isRecordingPaused: boolean
     /** Maximum recorded duration in seconds. `0` = unlimited. */
     maxRecordedDuration: number
     /** Maximum recorded file size in bytes. `0` = unlimited. */
     maxRecordedFileSize: number
+    /** Seconds elapsed in the current recording (`0` when not recording). */
+    readonly recordedDuration: number
+    /** Bytes written so far in the current recording. */
+    readonly recordedFileSize: number
+    /** Video codecs available for recording, as native raw values (e.g. `"hvc1"`, `"avc1"`). */
+    readonly availableVideoCodecTypes: string[]
     /**
      * Active video stabilization mode currently applied by the system.
      * The system may pick a mode different from the one you requested via
@@ -7614,6 +7880,10 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
     /** Resolves with the final output path when recording stops successfully. */
     startRecording(toPath: string): Promise<string>
     stopRecording(): Promise<void>
+    /** Pause the current recording. Safe no-op when not recording / already paused / below iOS 18. */
+    pauseRecording(): void
+    /** Resume a paused recording. Safe no-op when not recording / not paused / below iOS 18. */
+    resumeRecording(): void
   }
 
   /** Object types that an `AVCaptureMetadataOutput` can detect. */
@@ -7628,9 +7898,25 @@ If the eventâ€™s calendar does not support availability settings, this propertyâ
     type: AVMetadataObjectType
     /** Time of detection in seconds, in the session's clock. */
     time: number
+    /** Raw bounding box in normalized (0..1) output coordinates. */
     bounds: AVCaptureRect
     /** Only present for machine-readable code objects (`qr`, barcodes). */
     stringValue?: string
+    /**
+     * Corner points (normalized 0..1) of a machine-readable code, in the same
+     * raw output space as `bounds`. Only present for code objects.
+     */
+    corners?: AVCapturePoint[]
+    /**
+     * Coordinates corrected for the video connection's orientation and
+     * mirroring (via `transformedMetadataObject`). Use these when overlaying
+     * on the displayed preview. Absent if the transform is unavailable.
+     */
+    transformed?: {
+      bounds: AVCaptureRect
+      /** Corrected corner points; only for machine-readable code objects. */
+      corners?: AVCapturePoint[]
+    }
   }
 
   /**
@@ -15235,6 +15521,14 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
      * @param options The options for the HTTP server.
      * @param options.port The port to listen on. Defaults to 8080, if specified 0, the server will listen on a random port.
      * @param options.forceIPv4 Whether to force the server to listen on IPv4. Defaults to false.
+     * @param options.maxRequestBodySize Maximum accepted request body size in
+     *   bytes. A request whose `Content-Length` exceeds this is rejected with
+     *   413 before the body is read (guards against memory exhaustion).
+     *   Defaults to 50 MB. Values <= 0 are ignored.
+     * @param options.maxWebSocketPayloadSize Maximum WebSocket frame payload /
+     *   accumulated fragmented-message size in bytes. Frames or messages that
+     *   exceed it close the connection with a protocol error. Defaults to
+     *   16 MB. Values <= 0 are ignored.
      * @param options.tls Optional TLS configuration. When provided, the server starts as HTTPS using the supplied PKCS#12 identity.
      * @param options.tls.p12 Either an absolute path to a PKCS#12 file (string)
      *   or the raw P12 bytes (`Data`). The `Data` form is useful when the P12
@@ -15273,6 +15567,8 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     start(options?: {
       port?: number
       forceIPv4?: boolean
+      maxRequestBodySize?: number
+      maxWebSocketPayloadSize?: number
       tls?: {
         p12: string | Data
         password: string
