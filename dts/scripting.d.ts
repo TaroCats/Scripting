@@ -612,6 +612,18 @@ type Axis = 'vertical' | 'horizontal';
  * An efficient set of axes.
  */
 type AxisSet = 'vertical' | 'horizontal' | 'all';
+/**
+ * The available blend modes for compositing a view with the content behind it.
+ */
+type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'colorDodge' | 'colorBurn' | 'softLight' | 'hardLight' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity' | 'sourceAtop' | 'destinationOver' | 'destinationOut' | 'plusDarker' | 'plusLighter';
+/**
+ * A Dynamic Type size, which specifies how large scalable content should be.
+ */
+type DynamicTypeSize = 'xSmall' | 'small' | 'medium' | 'large' | 'xLarge' | 'xxLarge' | 'xxxLarge' | 'accessibility1' | 'accessibility2' | 'accessibility3' | 'accessibility4' | 'accessibility5';
+/**
+ * The ways that a scrollable view can bounce when it reaches the end of its content.
+ */
+type ScrollBounceBehavior = 'automatic' | 'always' | 'basedOnSize';
 type ColorScheme = 'light' | 'dark';
 type ColorSchemeContrast = "standard" | "increased";
 type UserInterfaceSizeClass = "compact" | "regular";
@@ -731,6 +743,13 @@ type ControlSize = 'mini' | 'small' | 'regular' | 'large' | 'extraLarge';
  */
 type WidgetRenderingMode = "accented" | "fullColor" | "vibrant";
 type ColorRenderingMode = 'extendedLinear' | 'nonLinear' | 'linear';
+/**
+ * A pointer hover effect (iPadOS with a pointer/trackpad):
+ *  - `automatic`: The system chooses an appropriate effect.
+ *  - `highlight`: The pointer morphs into the view's shape and highlights it.
+ *  - `lift`: The view scales up and lifts with a shadow as the pointer moves over it.
+ */
+type HoverEffect = "automatic" | "highlight" | "lift";
 
 type AnimatedImageProps = ({
     /**
@@ -1115,8 +1134,9 @@ type GesturesProps = {
          *  - `global`: The global coordinate space at the root of the view hierarchy.
          *  - `scrollView`: The named coordinate space that is added by the system for the innermost containing scroll view.
          *  - `immersiveSpace`: The named coordinate space that represents the currently opened ImmersiveSpace scene. If no immersive space is currently opened, this CoordinateSpace provides the same behavior as the "global" coordinate space.
+         *  - any other string: a custom named coordinate space assigned to an ancestor view via the `coordinateSpace` modifier.
          */
-        coordinateSpace?: "local" | "global" | "scrollView" | "immersiveSpace";
+        coordinateSpace?: "local" | "global" | "scrollView" | "immersiveSpace" | (string & {});
         /**
          * The action to perform.
          */
@@ -1154,7 +1174,7 @@ type GesturesProps = {
      */
     onDragGesture?: {
         minDistance?: number;
-        coordinateSpace?: 'local' | 'global';
+        coordinateSpace?: 'local' | 'global' | (string & {});
         onChanged?: (action: DragGestureDetails) => void;
         onEnded?: (action: DragGestureDetails) => void;
     };
@@ -1162,6 +1182,20 @@ type GesturesProps = {
      * Configures whether this view participates in hit test operations.
      */
     allowsHitTesting?: boolean;
+    /**
+     * Applies a hover effect to this view when a pointer (iPadOS trackpad/mouse) moves over it.
+     */
+    hoverEffect?: HoverEffect;
+    /**
+     * Adds an action to perform when a pointer (iPadOS trackpad/mouse) enters or exits this view's
+     * bounds. The callback receives `true` when the pointer is over the view, and `false` when it leaves.
+     */
+    onHover?: (isHovering: boolean) => void;
+    /**
+     * Sets a help text (tooltip on hover with a pointer; an accessibility hint for assistive technologies)
+     * for this view.
+     */
+    help?: string;
 };
 
 type FrameSizeProps = {
@@ -1249,6 +1283,26 @@ type FrameSizeProps = {
          * A Boolean value that indicates whether to fix the height of the view.
          */
         vertical: boolean;
+    };
+    /**
+     * Sets an explicit alignment guide for one of this view's alignments.
+     *
+     * `alignment` picks which guide to set (a `HorizontalAlignment` or a `VerticalAlignment`).
+     * `value` is either a fixed number (a constant guide), or a keyword resolved against the
+     * view's own dimensions:
+     * - `"width"` / `"height"` — the view's measured size
+     * - `"leading"` / `"trailing"` / `"top"` / `"bottom"` / `"center"` — the view's edge/center guides
+     * - `"firstTextBaseline"` / `"lastTextBaseline"` — the view's text baselines
+     *
+     * `offset` is added on top of the resolved value.
+     *
+     * Note: only these declarative forms are supported — arbitrary compute closures are not
+     * available in scripts.
+     */
+    alignmentGuide?: {
+        alignment: HorizontalAlignment | VerticalAlignment;
+        value: number | 'leading' | 'trailing' | 'top' | 'bottom' | 'center' | 'firstTextBaseline' | 'lastTextBaseline' | 'width' | 'height';
+        offset?: number;
     };
 };
 
@@ -1407,9 +1461,12 @@ type MeshGradient = {
      */
     height: number;
     /**
-     * The array of points, containing width x height elements.
+     * The array of points, containing width x height elements. Each point may be
+     * given as an object `{ x, y }` or as a tuple `[x, y]`. Coordinates are not
+     * required to form a regular grid — control points can be freely positioned
+     * (typically within the [0, 1] range) to create warped, fluid mesh shapes.
      */
-    points: Point[];
+    points: (Point | [number, number])[];
     /**
      * The array of colors, containing width x height elements.
      */
@@ -1852,6 +1909,14 @@ type ViewStyleProps = {
      */
     menuIndicator?: Visibility;
     /**
+     * Sets the preferred order of menu items within this view, for `Menu` and
+     * menu-style `Picker` controls.
+     * - `"automatic"`: the system default order.
+     * - `"priority"`: keeps the first items closest to the control's edge.
+     * - `"fixed"`: presents the items in the order they are written, regardless of position.
+     */
+    menuOrder?: "automatic" | "priority" | "fixed";
+    /**
      * Set the width reserved for icons in labels.
      * Requires iOS 26+.
      */
@@ -2031,6 +2096,14 @@ type TextViewProps = {
      * Sets the truncation mode for lines of text that are too long to fit in the available space.
      */
     truncationMode?: TruncationMode;
+    /**
+     * Overrides the Dynamic Type size for content in this view. Pass a single size to fix it, or a
+     * `{ from?, to? }` range to clamp it between two sizes.
+     */
+    dynamicTypeSize?: DynamicTypeSize | {
+        from?: DynamicTypeSize;
+        to?: DynamicTypeSize;
+    };
     /**
      * Sets whether text in this view can compress the space between characters when necessary to fit text in a line.
      */
@@ -2942,6 +3015,20 @@ type ScrollProps = {
      */
     scrollDisabled?: boolean;
     /**
+     * Configures the bounce behavior of scrollable views along the specified axis. Pass a
+     * `ScrollBounceBehavior` to configure the vertical axis, or an object to also choose the axes.
+     */
+    scrollBounceBehavior?: ScrollBounceBehavior | {
+        /**
+         * The bounce behavior to apply.
+         */
+        behavior: ScrollBounceBehavior;
+        /**
+         * The set of axes the behavior applies to. Defaults to the vertical axis.
+         */
+        axes?: AxisSet;
+    };
+    /**
      * Sets whether a scroll view clips its content to its bounds.
      */
     scrollClipDisabled?: boolean;
@@ -3053,6 +3140,12 @@ type SafeAreaProps = {
         top?: number | true;
         bottom?: number | true;
     };
+    /**
+     * Adds padding to the specified edges of this view using the amount of space the system considers
+     * appropriate for the current scene. Pass `true` to apply it to all edges, or an `EdgeSet` to
+     * choose which edges.
+     */
+    scenePadding?: true | EdgeSet;
     /**
      * Shows the specified content beside the modified view.
      */
@@ -3349,6 +3442,14 @@ type PresentationBackgroundInteraction = "automatic" | "disabled" | "enabled" | 
  *  - `scrolls`: A behavior that prioritizes scrolling the content of a presentation when swiping, rather than resizing the presentation.
  */
 type PresentationContentInteraction = "automatic" | "resizes" | "scrolls";
+/**
+ * The sizing behavior of a sheet presentation (iOS 18+):
+ *  - `automatic`: The system chooses a size based on the presentation context.
+ *  - `fitted`: The sheet sizes itself to fit its content in both dimensions.
+ *  - `page`: A sheet the width and height of its container, with standard page insets.
+ *  - `form`: A sheet sized to be appropriate for forms.
+ */
+type PresentationSizing = "automatic" | "fitted" | "page" | "form";
 type ModalPresentation = {
     /**
      * The modal content.
@@ -3431,6 +3532,11 @@ type ModalPresentationViewProps = {
      */
     presentationBackgroundInteraction?: PresentationBackgroundInteraction;
     /**
+     * Sets the presentation background of the enclosing sheet or popover to a shape style, such as a
+     * color or a material.
+     */
+    presentationBackground?: ShapeStyle | DynamicShapeStyle;
+    /**
      * By default, when a person swipes up on a scroll view in a resizable presentation, the presentation grows to the next detent. A scroll view embedded in the presentation only scrolls after the presentation reaches its largest size. Use this modifier to control which action takes precedence.
      */
     presentationContentInteraction?: PresentationContentInteraction;
@@ -3438,6 +3544,11 @@ type ModalPresentationViewProps = {
      * Requests that the presentation have a specific corner radius.
      */
     presentationCornerRadius?: number;
+    /**
+     * Requests a sizing behavior for the enclosing sheet presentation. Requires iOS 18 or later; ignored
+     * on earlier versions.
+     */
+    presentationSizing?: PresentationSizing;
 };
 
 type TransformAndEffectProps = {
@@ -3453,6 +3564,34 @@ type TransformAndEffectProps = {
      * Inverts the colors in this view.
      */
     colorConvert?: boolean;
+    /**
+     * Brightens this view by the specified amount. Typically between -1 and 1; 0 leaves the view unchanged.
+     */
+    brightness?: number;
+    /**
+     * Sets the contrast and separation between colors in this view. 1 leaves the view unchanged; 0 renders it fully gray; negative values invert the colors.
+     */
+    contrast?: number;
+    /**
+     * Adjusts the color saturation of this view. 1 leaves the view unchanged; 0 renders it grayscale; values above 1 increase saturation.
+     */
+    saturation?: number;
+    /**
+     * Applies a grayscale effect to this view. 0 leaves the view unchanged; 1 renders it fully grayscale.
+     */
+    grayscale?: number;
+    /**
+     * Adds a luminance-to-alpha effect: the view becomes a mask whose opacity is derived from the luminance of its content. Set to `true` to enable.
+     */
+    luminanceToAlpha?: boolean;
+    /**
+     * Multiplies the colors in this view by the given color.
+     */
+    colorMultiply?: Color;
+    /**
+     * Sets the blend mode used to composite this view with the content behind it.
+     */
+    blendMode?: BlendMode;
     /**
      * Controls the display order of overlapping views.
      * A relative front-to-back ordering for this view; the default is 0.
@@ -3516,6 +3655,54 @@ type TransformAndEffectProps = {
         y: number;
         anchor?: KeywordPoint | Point;
     };
+    /**
+     * Rotates a view’s rendered output in three dimensions around the given axis of rotation.
+     */
+    rotation3DEffect?: {
+        /**
+         * The angle, in degrees, by which to rotate the view.
+         */
+        degrees: number;
+        /**
+         * The axis of rotation, as a vector with `x`, `y`, and `z` components. For example,
+         * `{ x: 0, y: 1, z: 0 }` rotates around the vertical axis.
+         */
+        axis: {
+            x?: number;
+            y?: number;
+            z?: number;
+        };
+        /**
+         * The location with a default of `center` that defines a point in 3D space about which the rotation is anchored.
+         */
+        anchor?: KeywordPoint | Point;
+        /**
+         * The location with a default of `0` that defines a point in 3D space about which the rotation is anchored.
+         */
+        anchorZ?: number;
+        /**
+         * The relative vanishing point with a default of `1` for the rotation.
+         */
+        perspective?: number;
+    };
+    /**
+     * Applies an affine transformation to this view’s rendered output, expressed as the components of a
+     * `CGAffineTransform` matrix `[a, b, c, d, tx, ty]`. Omitted components default to the identity matrix.
+     * Useful for effects the dedicated modifiers can’t express, such as shear.
+     */
+    transformEffect?: {
+        a?: number;
+        b?: number;
+        c?: number;
+        d?: number;
+        tx?: number;
+        ty?: number;
+    };
+    /**
+     * Assigns a name to the coordinate space of this view, so that other code can operate on dimensions
+     * (for example, gesture locations or `GeometryReader` frames) relative to that named space.
+     */
+    coordinateSpace?: string;
     /**
      * Adds a shadow to this view.
      */
@@ -4542,7 +4729,72 @@ type KeyboardShortcutProps = {
     };
 };
 
-type CommonViewProps = DialogProps & GesturesProps & FrameSizeProps & ForeAndBackgroundProps & PaddingAndBorderProps & ViewVisibilityProps & ImageViewProps & ViewStyleProps & TextFieldViewProps & TextViewProps & ShapeViewProps & ChartViewProps & ScrollProps & ToolbarsProps & SafeAreaProps & WidgetProps & ExtensionProps & ViewAppearProps & GridViewProps & ModalPresentationViewProps & TransformAndEffectProps & NavigationProps & ListViewProps & EditActionsProps & SymbolProps & TransitionProps & SearchableProps & ViewAnimationProps & LiveActivityProps & EnvironmentsProps & GlassProps & ScreenshotProps & PiPProps & DragDropProps & KeyboardShortcutProps & {
+/**
+ * A trait that describes how an accessibility element behaves, used with
+ * `accessibilityAddTraits` / `accessibilityRemoveTraits`.
+ *
+ * - `isToggle` requires iOS 17.0+ and is ignored on earlier versions.
+ */
+type AccessibilityTrait = 'isButton' | 'isHeader' | 'isSelected' | 'isLink' | 'isSearchField' | 'isImage' | 'playsSound' | 'isKeyboardKey' | 'isStaticText' | 'isSummaryElement' | 'updatesFrequently' | 'startsMediaSession' | 'allowsDirectInteraction' | 'causesPageTurn' | 'isModal' | 'isToggle';
+/**
+ * The hierarchical level of a heading exposed to accessibility, used with `accessibilityHeading`.
+ */
+type AccessibilityHeadingLevel = 'unspecified' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+/**
+ * The way that accessibility treats the children of a view that becomes a single accessibility
+ * element, used with `accessibilityElement`.
+ *
+ * - `ignore` — the children are not exposed as accessibility elements.
+ * - `contain` — the view contains the children as separate accessibility elements.
+ * - `combine` — the children are combined into a single accessibility element.
+ */
+type AccessibilityChildBehavior = 'ignore' | 'contain' | 'combine';
+
+type AccessibilityProps = {
+    /**
+     * Adds a label to the view that describes its contents for accessibility technologies such as VoiceOver.
+     */
+    accessibilityLabel?: string;
+    /**
+     * Communicates to the user what happens after performing the view's action.
+     */
+    accessibilityHint?: string;
+    /**
+     * Adds a textual description of the value that the view contains (for example, the current value of a slider).
+     */
+    accessibilityValue?: string;
+    /**
+     * Specifies whether to hide this view from accessibility technologies.
+     */
+    accessibilityHidden?: boolean;
+    /**
+     * Uses the provided string to identify the view for UI testing (the accessibility identifier).
+     */
+    accessibilityIdentifier?: string;
+    /**
+     * Sets the sort priority order for this view's accessibility element, relative to other elements at the same level. Higher numbers are read first.
+     */
+    accessibilitySortPriority?: number;
+    /**
+     * Adds the given accessibility trait(s) to the view.
+     */
+    accessibilityAddTraits?: AccessibilityTrait | AccessibilityTrait[];
+    /**
+     * Removes the given accessibility trait(s) from the view.
+     */
+    accessibilityRemoveTraits?: AccessibilityTrait | AccessibilityTrait[];
+    /**
+     * Sets the accessibility heading level of this view.
+     */
+    accessibilityHeading?: AccessibilityHeadingLevel;
+    /**
+     * Creates a single accessibility element for this view and controls how its children are exposed.
+     * Pass a child behavior (`ignore` / `contain` / `combine`), or `true` for the default (`ignore`).
+     */
+    accessibilityElement?: boolean | AccessibilityChildBehavior;
+};
+
+type CommonViewProps = DialogProps & GesturesProps & FrameSizeProps & ForeAndBackgroundProps & PaddingAndBorderProps & ViewVisibilityProps & ImageViewProps & ViewStyleProps & TextFieldViewProps & TextViewProps & ShapeViewProps & ChartViewProps & ScrollProps & ToolbarsProps & SafeAreaProps & WidgetProps & ExtensionProps & ViewAppearProps & GridViewProps & ModalPresentationViewProps & TransformAndEffectProps & NavigationProps & ListViewProps & EditActionsProps & SymbolProps & TransitionProps & SearchableProps & ViewAnimationProps & LiveActivityProps & EnvironmentsProps & GlassProps & ScreenshotProps & PiPProps & DragDropProps & KeyboardShortcutProps & AccessibilityProps & {
     disabled?: boolean;
     /**
      * Sets whether this view mirrors its contents based on the layout direction.
@@ -4574,6 +4826,28 @@ type CommonViewProps = DialogProps & GesturesProps & FrameSizeProps & ForeAndBac
      * ```
      */
     tag?: number | string;
+    /**
+     * Sets the preferred visibility of the non-transient system views overlaying the app,
+     * such as the Home indicator and multitasking indicator.
+     *
+     * Pass `"hidden"` to let the system auto-hide the Home indicator (it dims and fades out,
+     * then reappears on interaction — iOS never removes it permanently). `"visible"` keeps it
+     * shown (the default), so setting `"visible"` has no observable effect.
+     *
+     * For this to take effect, apply it to the page's root view (for example the `NavigationStack`)
+     * and present the page full screen (`Navigation.present(element, { modalPresentationStyle: "fullScreen" })`).
+     * In a sheet presentation the system owns the overlays and ignores this preference.
+     */
+    persistentSystemOverlays?: Visibility;
+    /**
+     * Sets the visibility of the status bar. Pass `true` to hide the status bar.
+     *
+     * For this to take effect, apply it to the page's root view (for example the `NavigationStack`,
+     * not an inner child — a navigation container intercepts the preference) and present the page
+     * full screen (`Navigation.present(element, { modalPresentationStyle: "fullScreen" })`).
+     * In a sheet presentation the status bar is owned by the presenting page and stays visible.
+     */
+    statusBarHidden?: boolean;
     /**
      * Plays the specified feedback when the provided trigger value changes.
      */
@@ -4665,6 +4939,9 @@ declare class ViewModifiers {
     textInputAutocapitalization(value: CommonViewProps["textInputAutocapitalization"]): this;
     textContentType(value: CommonViewProps["textContentType"]): this;
     allowsHitTesting(value: CommonViewProps["allowsHitTesting"]): this;
+    hoverEffect(value: CommonViewProps["hoverEffect"]): this;
+    onHover(value: CommonViewProps["onHover"]): this;
+    help(value: CommonViewProps["help"]): this;
     textFieldStyle(value: CommonViewProps["textFieldStyle"]): this;
     keyboardType(value: CommonViewProps["keyboardType"]): this;
     keyboardShortcut(value: CommonViewProps["keyboardShortcut"]): this;
@@ -4761,6 +5038,9 @@ declare class ViewModifiers {
     contextMenu(options: CommonViewProps["contextMenu"]): this;
     menuStyle(value: CommonViewProps["menuStyle"]): this;
     menuIndicator(value: CommonViewProps["menuIndicator"]): this;
+    menuOrder(value: CommonViewProps["menuOrder"]): this;
+    statusBarHidden(value: CommonViewProps["statusBarHidden"]): this;
+    persistentSystemOverlays(value: CommonViewProps["persistentSystemOverlays"]): this;
     controlGroupStyle(value: CommonViewProps["controlGroupStyle"]): this;
     tabItem(value: CommonViewProps["tabItem"]): this;
     tabViewStyle(value: CommonViewProps["tabViewStyle"]): this;
@@ -4778,8 +5058,33 @@ declare class ViewModifiers {
     offset(value: CommonViewProps["offset"]): this;
     rotationEffect(value: CommonViewProps["rotationEffect"]): this;
     scaleEffect(value: CommonViewProps["scaleEffect"]): this;
+    rotation3DEffect(value: CommonViewProps["rotation3DEffect"]): this;
+    transformEffect(value: CommonViewProps["transformEffect"]): this;
+    coordinateSpace(value: CommonViewProps["coordinateSpace"]): this;
     shadow(value: CommonViewProps["shadow"]): this;
     blur(value: CommonViewProps["blur"]): this;
+    brightness(value: CommonViewProps["brightness"]): this;
+    contrast(value: CommonViewProps["contrast"]): this;
+    saturation(value: CommonViewProps["saturation"]): this;
+    grayscale(value: CommonViewProps["grayscale"]): this;
+    luminanceToAlpha(value: CommonViewProps["luminanceToAlpha"]): this;
+    colorMultiply(value: CommonViewProps["colorMultiply"]): this;
+    blendMode(value: CommonViewProps["blendMode"]): this;
+    alignmentGuide(value: CommonViewProps["alignmentGuide"]): this;
+    dynamicTypeSize(value: CommonViewProps["dynamicTypeSize"]): this;
+    scrollBounceBehavior(value: CommonViewProps["scrollBounceBehavior"]): this;
+    scenePadding(value: CommonViewProps["scenePadding"]): this;
+    presentationBackground(value: CommonViewProps["presentationBackground"]): this;
+    accessibilityLabel(value: CommonViewProps["accessibilityLabel"]): this;
+    accessibilityHint(value: CommonViewProps["accessibilityHint"]): this;
+    accessibilityValue(value: CommonViewProps["accessibilityValue"]): this;
+    accessibilityHidden(value: CommonViewProps["accessibilityHidden"]): this;
+    accessibilityIdentifier(value: CommonViewProps["accessibilityIdentifier"]): this;
+    accessibilitySortPriority(value: CommonViewProps["accessibilitySortPriority"]): this;
+    accessibilityAddTraits(value: CommonViewProps["accessibilityAddTraits"]): this;
+    accessibilityRemoveTraits(value: CommonViewProps["accessibilityRemoveTraits"]): this;
+    accessibilityHeading(value: CommonViewProps["accessibilityHeading"]): this;
+    accessibilityElement(value: CommonViewProps["accessibilityElement"]): this;
     sliderThumbVisibility(value: CommonViewProps["sliderThumbVisibility"]): this;
     searchable(value: CommonViewProps["searchable"]): this;
     searchSuggestions(value: CommonViewProps["searchSuggestions"]): this;
@@ -4800,6 +5105,7 @@ declare class ViewModifiers {
     presentationBackgroundInteraction(value: CommonViewProps["presentationBackgroundInteraction"]): this;
     presentationContentInteraction(value: CommonViewProps["presentationContentInteraction"]): this;
     presentationCornerRadius(value: CommonViewProps["presentationCornerRadius"]): this;
+    presentationSizing(value: CommonViewProps["presentationSizing"]): this;
     navigationContainerBackground(value: CommonViewProps["navigationContainerBackground"]): this;
     navigationSplitViewContainerBackground(value: CommonViewProps["navigationSplitViewContainerBackground"]): this;
     listItemTint(value: CommonViewProps["listItemTint"]): this;
@@ -6326,6 +6632,14 @@ type EditorProps = {
      */
     showAccessoryView?: boolean;
     /**
+     * Whether to show a search button alongside the editor's bottom controls. Tapping it reveals a find/replace panel (replace is hidden when the editor is read-only). Defaults to `false`.
+     */
+    searchEnabled?: boolean;
+    /**
+     * Whether to show an export button alongside the editor's bottom controls. Tapping it shares the current content as a file via the share sheet. Defaults to `false`.
+     */
+    exportEnabled?: boolean;
+    /**
      * The editor controller to access and set content, file extension, read only state, listen for content changes.
      */
     controller: EditorController;
@@ -6494,9 +6808,20 @@ declare const ForEach: ForEachComponent;
 
 type FlowLayoutProps = {
     /**
-     * The spacing between each item. Defaults to 8.
+     * The base spacing between items, applied to both axes. Defaults to 8.
+     * Override a single axis with `horizontalSpacing` / `verticalSpacing`.
      */
     spacing?: number;
+    /**
+     * The horizontal spacing between items within the same row.
+     * Overrides `spacing` on the horizontal axis when set.
+     */
+    horizontalSpacing?: number;
+    /**
+     * The vertical spacing between wrapped rows.
+     * Overrides `spacing` on the vertical axis when set.
+     */
+    verticalSpacing?: number;
     children?: (VirtualNode | boolean | undefined | null | (VirtualNode | undefined | null | boolean)[])[] | VirtualNode | null | boolean;
 };
 declare const FlowLayout: FunctionComponent<FlowLayoutProps>;
@@ -6869,6 +7194,67 @@ type LabelProps = {
  *
  */
 declare const Label: FunctionComponent<LabelProps>;
+
+type LabeledContentChildren = (VirtualNode | boolean | undefined | null | (VirtualNode | undefined | null | boolean)[])[] | VirtualNode | null | boolean | undefined;
+/**
+ * The label of a `LabeledContent`: either a plain `title` string or a custom `label` view.
+ */
+type LabeledContentLabel = {
+    /**
+     * A string that describes the content.
+     */
+    title: string;
+} | {
+    /**
+     * A custom view that describes the content.
+     */
+    label: VirtualNode;
+};
+/**
+ * The content of a `LabeledContent`: either a `value` string shorthand or custom `children`.
+ * `value` and `children` are mutually exclusive.
+ */
+type LabeledContentContent = {
+    /**
+     * A string value to display as the content. Mutually exclusive with `children`.
+     */
+    value: string;
+    children?: never;
+} | {
+    value?: never;
+    /**
+     * The content views to display, trailing the label.
+     */
+    children: LabeledContentChildren;
+};
+type LabeledContentProps = LabeledContentLabel & LabeledContentContent;
+/**
+ * A container for attaching a label to a value-bearing view.
+ *
+ * Use `LabeledContent` to label a value, typically inside a `Form` or `List` row. The
+ * label appears at the leading edge and the content at the trailing edge.
+ *
+ * Provide the content either as a `value` string shorthand or as custom `children`
+ * (these are mutually exclusive), and the label either as a `title` string or a custom `label` view.
+ *
+ * @example
+ * ```tsx
+ * // value shorthand
+ * <LabeledContent title="Version" value="1.0.0" />
+ *
+ * // custom content
+ * <LabeledContent title="Status">
+ *   <Image systemName="checkmark.circle.fill" foregroundStyle="systemGreen" />
+ * </LabeledContent>
+ *
+ * // custom label
+ * <LabeledContent
+ *   label={<Label title="Battery" systemImage="battery.100" />}
+ *   value="100%"
+ * />
+ * ```
+ */
+declare const LabeledContent: FunctionComponent<LabeledContentProps>;
 
 type LazyHGridProps = {
     /**
@@ -9006,6 +9392,7 @@ declare class ReadableStreamDefaultController<R> {
     private closeRequested;
     private errorSignaled;
     private _errorReason;
+    private pulling;
     /**
      * @internal
      */
@@ -9032,6 +9419,15 @@ declare class ReadableStreamDefaultController<R> {
      * @internal
      */
     dequeue(): R | undefined;
+    /**
+     * @internal
+     * 主动请求生产者补货（WHATWG pull）。返回是否真的执行了 pullAlgorithm——
+     * reader.read() 在队列空时据此决定走 pull 还是 setTimeout 兜底。
+     * 纯 pull 驱动的流（无 start-enqueue，靠 pull 产数据，如 hono/streaming 的 responseReadable）
+     * 必须靠 read 触发 pull 才能拿到数据；start-enqueue 流无 pullAlgorithm 时返回 false，行为不变。
+     * `pulling` 重入 guard：上一次 pull（可能是异步）未结束前不重复调，避免 busy-loop。
+     */
+    pull(): Promise<boolean>;
     get closed(): boolean;
     get errored(): boolean;
     get errorReason(): any;
@@ -9072,7 +9468,7 @@ declare class ReadableStream<R> {
      *      This method, also defined by the developer, will be called if the app signals that the stream is to be cancelled (e.g. if ReadableStream.cancel() is called). The contents should do whatever is necessary to release access to the stream source. If this process is asynchronous, it can return a promise to signal success or failure. The reason parameter contains a string describing why the stream was cancelled.
      * @param underlyingSource An object containing methods and properties that define how the constructed stream instance will behave.
      */
-    constructor(underlyingSource: UnderlyingSource<R>);
+    constructor(underlyingSource?: UnderlyingSource<R>);
     [Symbol.asyncIterator](): AsyncIterableIterator<R>;
     /**
      * The `locked` read-only property of the `ReadableStream` interface returns whether or not the readable stream is locked to a reader.
@@ -9128,6 +9524,71 @@ declare class ReadableStreamDefaultReader<R> {
      * The `releaseLock()` method of the `ReadableStreamDefaultReader` interface releases the reader's lock on the stream.
      */
     releaseLock(): void;
+}
+
+type UnderlyingSink<W = any> = {
+    start?: (controller: WritableStreamDefaultController) => void | Promise<void>;
+    write?: (chunk: W, controller: WritableStreamDefaultController) => void | Promise<void>;
+    close?: () => void | Promise<void>;
+    abort?: (reason?: any) => void | Promise<void>;
+};
+/** WHATWG 有 error()/signal；hono 不用，仅留 error() 供 sink 报错。 */
+declare class WritableStreamDefaultController {
+    error(_reason?: any): void;
+}
+declare class WritableStream<W = any> {
+    private sink;
+    private state;
+    private storedError;
+    private _locked;
+    private controller;
+    private closeResolvers;
+    private closeRejecters;
+    constructor(sink?: UnderlyingSink<W>);
+    get locked(): boolean;
+    getWriter(): WritableStreamDefaultWriter<W>;
+    /** @internal */
+    _write(chunk: W): Promise<void>;
+    /** @internal */
+    _close(): Promise<void>;
+    /** @internal */
+    _abort(reason?: any): Promise<void>;
+    private _error;
+    /** @internal：writer.closed 的底层 promise。 */
+    _closedPromise(): Promise<void>;
+}
+declare class WritableStreamDefaultWriter<W = any> {
+    private stream;
+    private releaseLockCallback;
+    private released;
+    /** @internal */
+    constructor(stream: WritableStream<W>, releaseLockCallback: () => void);
+    get desiredSize(): number;
+    get ready(): Promise<void>;
+    get closed(): Promise<void>;
+    write(chunk: W): Promise<void>;
+    close(): Promise<void>;
+    abort(reason?: any): Promise<void>;
+    releaseLock(): void;
+}
+type Transformer<I = any, O = any> = {
+    start?: (controller: TransformStreamDefaultController<O>) => void | Promise<void>;
+    transform?: (chunk: I, controller: TransformStreamDefaultController<O>) => void | Promise<void>;
+    flush?: (controller: TransformStreamDefaultController<O>) => void | Promise<void>;
+};
+declare class TransformStreamDefaultController<O = any> {
+    private readableController;
+    /** @internal */
+    constructor(readableController: ReadableStreamDefaultController<O>);
+    enqueue(chunk: O): void;
+    error(reason?: any): void;
+    terminate(): void;
+    get desiredSize(): number;
+}
+declare class TransformStream<I = any, O = any> {
+    readable: ReadableStream<O>;
+    writable: WritableStream<I>;
+    constructor(transformer?: Transformer<I, O>);
 }
 
 /**
@@ -9222,6 +9683,77 @@ declare namespace AppEvents {
      * ```
      */
     const colorScheme: AppEventListenerManager<ColorScheme>;
+}
+
+type AlarmLiveActivityMode = AlarmManager.AlarmState;
+type AlarmLiveActivitySchedule = AlarmManager.Schedule;
+type AlarmLiveActivityCountdownState = {
+    fireDate: Date;
+    totalCountdownDuration: number;
+};
+type AlarmLiveActivityPausedState = {
+    totalCountdownDuration: number;
+    previouslyElapsedDuration: number;
+    remainingDuration: number;
+};
+type AlarmLiveActivityAction = {
+    title: string;
+    textColor?: Color | null;
+    systemImageName: string;
+    intent: AppIntent<any, AppIntentProtocol.LiveActivityIntent>;
+};
+type AlarmLiveActivityPresentationButton = {
+    title: string;
+    textColor?: Color | null;
+    systemImageName: string;
+};
+type AlarmLiveActivityPresentation = {
+    alert: {
+        title: string;
+        stopButton?: AlarmLiveActivityPresentationButton | null;
+        secondaryButton?: AlarmLiveActivityPresentationButton | null;
+        secondaryBehavior?: AlarmManager.SecondaryButtonBehavior | null;
+    };
+    countdown?: {
+        title?: string | null;
+        pauseButton?: AlarmLiveActivityPresentationButton | null;
+    } | null;
+    paused?: {
+        title?: string | null;
+        resumeButton?: AlarmLiveActivityPresentationButton | null;
+    } | null;
+};
+type AlarmLiveActivityState<TMetadata = Record<string, string>> = {
+    alarmID: string;
+    mode: AlarmLiveActivityMode;
+    title: string;
+    tintColor?: Color | null;
+    metadata: TMetadata;
+    schedule?: AlarmLiveActivitySchedule | null;
+    countdown?: AlarmLiveActivityCountdownState | null;
+    paused?: AlarmLiveActivityPausedState | null;
+    presentation: AlarmLiveActivityPresentation;
+    actions: {
+        pause?: AlarmLiveActivityAction | null;
+        resume?: AlarmLiveActivityAction | null;
+        stop: AlarmLiveActivityAction;
+        secondary?: AlarmLiveActivityAction | null;
+    };
+};
+interface AlarmLiveActivityUIBuilder<TMetadata = Record<string, string>> {
+    (state: AlarmLiveActivityState<TMetadata>): VirtualNode;
+}
+
+/**
+ * Registers UI builders for AlarmKit-driven Live Activities.
+ *
+ * Use this API from `alarm_live_activity.tsx`. AlarmKit owns the
+ * lifecycle; the builder only renders the current alarm presentation state.
+ */
+declare class AlarmLiveActivity {
+    private static _builderMap;
+    static register<TMetadata = Record<string, string>>(name: string, builder: AlarmLiveActivityUIBuilder<TMetadata>): void;
+    private static build;
 }
 
 type ControlWidgetLabel = {
@@ -9837,6 +10369,12 @@ type LiveActivityEndOptions = LiveActivityOptions & {
     dismissTimeInterval?: DurationInSeconds;
 };
 
+declare function LiveActivityUI(props: LiveActivityUIProps): JSX.Element;
+declare function LiveActivityUIExpandedLeading(props: LiveActivityUIExpandedViewProps): JSX.Element;
+declare function LiveActivityUIExpandedTrailing(props: LiveActivityUIExpandedViewProps): JSX.Element;
+declare function LiveActivityUIExpandedCenter(props: LiveActivityUIExpandedViewProps): JSX.Element;
+declare function LiveActivityUIExpandedBottom(props: LiveActivityUIExpandedViewProps): JSX.Element;
+
 /**
  * Display your Script’s data in the Dynamic Island and on the Lock Screen and offer quick interactions.
  */
@@ -9844,7 +10382,6 @@ declare class LiveActivity<T> {
     private static _builderMap;
     static register<T>(name: string, builder: LiveActivityUIBuilder<T>): () => LiveActivity<T>;
     private static build;
-    private static _renderView;
     name: string;
     private _updateListeners;
     private _updateListenerId?;
@@ -9944,11 +10481,6 @@ declare class LiveActivity<T> {
      */
     static endAllActivities(options?: LiveActivityEndOptions): Promise<boolean>;
 }
-declare function LiveActivityUI(props: LiveActivityUIProps): JSX.Element;
-declare function LiveActivityUIExpandedLeading(props: LiveActivityUIExpandedViewProps): JSX.Element;
-declare function LiveActivityUIExpandedTrailing(props: LiveActivityUIExpandedViewProps): JSX.Element;
-declare function LiveActivityUIExpandedCenter(props: LiveActivityUIExpandedViewProps): JSX.Element;
-declare function LiveActivityUIExpandedBottom(props: LiveActivityUIExpandedViewProps): JSX.Element;
 
 /**
  * Constants that indicate the importance and delivery timing of a notification.
@@ -10258,165 +10790,18 @@ declare namespace Path {
     };
 }
 
-interface Cookie {
-    name: string;
-    value: string;
-    domain: string;
-    path: string;
-    isSecure: boolean;
-    isHTTPOnly: boolean;
-    isSessionOnly: boolean;
-    expiresDate?: Date | null;
-}
-interface RedirectRequest {
-    method: string;
-    url: string;
-    headers: Record<string, string>;
-    cookies: Cookie[];
-    body?: Data;
-    timeout?: number;
-}
-
-/**
- * Provides a way to easily construct a set of key/value pairs representing form fields and their values, which can then be easily sent using the XMLHttpRequest.send() method. It uses the same format a form would use if the encoding type were set to "multipart/form-data".
- *
- * [MDN Reference](https://developer.mozilla.org/docs/Web/API/FormData)
- */
-type FormBinaryData = {
-    data: Data;
-    mimeType?: string;
-    filename?: string;
-};
-declare class FormData {
-    private formData;
-    append(name: string, value: string): void;
-    append(name: string, value: Data, mimeType: string, filename?: string): void;
-    get(name: string): string | FormBinaryData | null;
-    getAll(name: string): Array<string | FormBinaryData>;
-    has(name: string): boolean;
-    delete(name: string): void;
-    set(name: string, value: string): void;
-    set(name: string, value: Data, mimeType: string, filename?: string): void;
-    forEach(callback: (value: string | FormBinaryData, name: string, parent: FormData) => void): void;
-    entries(): [string, string | FormBinaryData][];
-    toJson(): Record<string, Array<string | FormBinaryData>>;
-}
-
-type HeadersInit = [string, string][] | Record<string, string> | Headers;
-/**
- * This Fetch API interface allows you to perform various actions on HTTP request and response headers. These actions include retrieving, setting, adding to, and removing. A Headers object has an associated header list, which is initially empty and consists of zero or more name and value pairs.  You can add to this using methods like append() (see Examples.) In all methods of this interface, header names are matched by case-insensitive byte sequence.
- *
- * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Headers)
- */
-declare class Headers {
-    private map;
-    constructor(init?: HeadersInit);
-    append(name: string, value: string): void;
-    get(name: string): string | null;
-    has(name: string): boolean;
-    set(name: string, value: string): void;
-    delete(name: string): void;
-    forEach(callback: (value: string, name: string) => void): void;
-    keys(): string[];
-    values(): string[];
-    entries(): [string, string][];
-    toJson(): {
-        [x: string]: string;
-    };
-}
-
-type ResponseInit = {
-    status?: number;
-    statusText?: string;
-    headers?: HeadersInit;
-    cookies?: Cookie[];
-    url?: string;
-    mimeType?: string;
-    expectedContentLength?: number;
-    textEncodingName?: string;
-};
-/**
- * This Fetch API interface represents the response to a request.
- *
- * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Response)
- */
-declare class Response {
-    private _status;
-    private _statusText;
-    private _headers;
-    private _cookies;
-    private _ok;
-    private _url?;
-    private _mimeType?;
-    private _expectedContentLength?;
-    private _textEncodingName?;
-    private _bodyUsed;
-    body: ReadableStream<Data>;
-    /**
-     * @internal
-     */
-    constructor(body: ReadableStream<Data>, init?: ResponseInit);
-    get bodyUsed(): boolean;
-    get cookies(): Cookie[];
-    json(): Promise<any>;
-    text(): Promise<string>;
-    data(): Promise<Data>;
-    bytes(): Promise<Uint8Array>;
-    arrayBuffer(): Promise<ArrayBuffer>;
-    formData(): Promise<FormData>;
-    clone(): Response;
-    private consumeBody;
-    /**
-     * Get response status code.
-     */
-    get status(): number;
-    /**
-     * Get response status text.
-     */
-    get statusText(): string;
-    /**
-     * Get response headers.
-     */
-    get headers(): Headers;
-    /**
-     * Whether response is ok.
-     */
-    get ok(): boolean;
-    /**
-     * Get response URL.
-     */
-    get url(): string;
-    /**
-     * Get response mime type.
-     */
-    get mimeType(): string | undefined;
-    /**
-     * Get response expected content length.
-     */
-    get expectedContentLength(): number | undefined;
-    /**
-     * Get response text encoding name.
-     */
-    get textEncodingName(): string | undefined;
-}
-
-/** Error thrown when an operation is aborted */
-declare class AbortError extends Error {
-    name: string;
-    constructor(message?: string);
-}
 /** Event representing an abort, analogous to the browser's AbortEvent */
-declare class AbortEvent {
+declare class AbortEvent$1 {
     readonly type = "abort";
-    readonly target: AbortSignal;
-    constructor(signal: AbortSignal);
+    readonly target: AbortSignal$1;
+    constructor(signal: AbortSignal$1);
 }
 /** Listener callback invoked when an AbortEvent is dispatched */
-type AbortEventListener = (event: AbortEvent) => void;
+type AbortEventListener = (event: AbortEvent$1) => void;
 /**
  * Allows communicating with and aborting DOM requests (e.g., fetch).
  */
-declare class AbortSignal {
+declare class AbortSignal$1 {
     private _aborted;
     private _reason?;
     private listeners;
@@ -10431,7 +10816,7 @@ declare class AbortSignal {
      * @internal
      */
     _dispatchAbort(reason?: any): void;
-    /** Throws an AbortError if the signal has already been aborted */
+    /** Throws a DOMException (name "AbortError") if the signal has already been aborted */
     throwIfAborted(): void;
     /** Adds a listener for the 'abort' event */
     addEventListener(type: 'abort', listener: AbortEventListener): void;
@@ -10440,28 +10825,80 @@ declare class AbortSignal {
     /**
      * Creates a signal that is already aborted with an optional reason
      */
-    static abort(reason?: any): AbortSignal;
+    static abort(reason?: any): AbortSignal$1;
     /**
-     * Returns a signal that will abort after the given delay (in milliseconds)
+     * Returns a signal that will abort after the given delay (in milliseconds).
+     * Per WHATWG, the abort reason is a DOMException with name "TimeoutError".
      */
-    static timeout(delay: number): AbortSignal;
+    static timeout(delay: number): AbortSignal$1;
     /**
      * Returns a signal that will abort when any of the provided signals abort
      */
-    static any(signals: AbortSignal[]): AbortSignal;
+    static any(signals: AbortSignal$1[]): AbortSignal$1;
 }
 /**
  * Controller object that allows aborting one or more DOM requests
  */
-declare class AbortController {
+declare class AbortController$1 {
     /** The AbortSignal object associated with this controller */
-    readonly signal: AbortSignal;
+    readonly signal: AbortSignal$1;
     constructor();
     /**
      * Aborts the associated signal, setting the reason if provided
-     * @param reason - Optional reason for abort, defaults to an AbortError
+     * @param reason - Optional reason for abort, defaults to a DOMException (name "AbortError")
      */
     abort(reason?: any): void;
+}
+
+type BlobPart = string | ArrayBuffer | ArrayBufferView | Blob$1;
+/**
+ * This interface represents a blob, which is a file-like object of immutable, raw data;
+ * they can be read as text or binary data, or converted into a ReadableStream so its
+ * methods can be used for processing the data.
+ */
+declare class Blob$1 {
+    private _parts;
+    private _size;
+    private _type;
+    constructor(blobParts?: BlobPart[], options?: {
+        type?: string;
+        endings?: 'transparent' | 'native';
+    });
+    /**
+     * The size read-only property of the Blob interface returns the size of the Blob in bytes.
+     */
+    get size(): number;
+    /**
+     * The type read-only property of the Blob interface returns the MIME type of the file.
+     */
+    get type(): string;
+    /**
+     * Returns a promise that resolves with an ArrayBuffer containing the entire contents of
+     * the Blob as binary data.
+     */
+    arrayBuffer(): Promise<ArrayBuffer>;
+    /**
+     * Returns a promise that resolves with a Uint8Array containing the entire contents of the Blob.
+     */
+    bytes(): Promise<Uint8Array>;
+    /**
+     * Returns a promise that resolves with a string containing the entire contents of the Blob
+     * interpreted as UTF-8 text.
+     */
+    text(): Promise<string>;
+    /**
+     * Returns a ReadableStream that yields the Blob's data as Uint8Array chunks.
+     */
+    stream(): ReadableStream<Uint8Array>;
+    /**
+     * Returns a new Blob object containing the data in the specified byte range of the blob on
+     * which it's called.
+     *
+     * @param start First byte to include (negative = offset from end). Default 0.
+     * @param end First byte NOT included (negative = offset from end). Default size.
+     * @param contentType The content type for the new Blob. Default empty string.
+     */
+    slice(start?: number, end?: number, contentType?: string): Blob$1;
 }
 
 type CancelEventListener = (reason?: any) => void;
@@ -10493,6 +10930,319 @@ declare class CancelToken {
     addEventListener(type: 'cancel', listener: CancelEventListener): void;
     removeEventListener(type: 'cancel', listener: CancelEventListener): void;
 }
+
+/**
+ * Provides a way to easily construct a set of key/value pairs representing form fields and their values, which can then be easily sent using the XMLHttpRequest.send() method. It uses the same format a form would use if the encoding type were set to "multipart/form-data".
+ *
+ * [MDN Reference](https://developer.mozilla.org/docs/Web/API/FormData)
+ */
+type FormBinaryData = {
+    data: Data;
+    mimeType?: string;
+    filename?: string;
+};
+declare class FormData$1 {
+    private formData;
+    append(name: string, value: string): void;
+    append(name: string, value: Blob$1, filename?: string): void;
+    append(name: string, value: Data, mimeType: string, filename?: string): void;
+    get(name: string): string | FormBinaryData | Blob$1 | null;
+    getAll(name: string): Array<string | FormBinaryData | Blob$1>;
+    has(name: string): boolean;
+    delete(name: string): void;
+    set(name: string, value: string): void;
+    set(name: string, value: Blob$1, filename?: string): void;
+    set(name: string, value: Data, mimeType: string, filename?: string): void;
+    forEach(callback: (value: string | FormBinaryData | Blob$1, name: string, parent: FormData$1) => void): void;
+    entries(): [string, string | FormBinaryData | Blob$1][];
+    toJson(): Record<string, Array<string | FormBinaryData | Blob$1>>;
+}
+
+type HeadersInit = [string, string][] | Record<string, string> | Headers$1;
+/**
+ * This Fetch API interface allows you to perform various actions on HTTP request and response headers. These actions include retrieving, setting, adding to, and removing. A Headers object has an associated header list, which is initially empty and consists of zero or more name and value pairs.  You can add to this using methods like append() (see Examples.) In all methods of this interface, header names are matched by case-insensitive byte sequence.
+ *
+ * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Headers)
+ */
+declare class Headers$1 {
+    private map;
+    private setCookieList;
+    constructor(init?: HeadersInit);
+    append(name: string, value: string): void;
+    get(name: string): string | null;
+    /** 返回所有 Set-Cookie 值的数组（WHATWG getSetCookie），其余 header 用 get()。 */
+    getSetCookie(): string[];
+    has(name: string): boolean;
+    set(name: string, value: string): void;
+    delete(name: string): void;
+    forEach(callback: (value: string, name: string) => void): void;
+    keys(): string[];
+    values(): string[];
+    entries(): [string, string][];
+    /**
+     * WHATWG Headers 可迭代：`for...of` / 解构 / 展开 yield `[name, value]` 对。
+     * set-cookie 逐条 yield（不被 map 的合并串掩盖），与 getSetCookie() 一致。
+     * 注意：缺此方法时 `for (const [k,v] of headers)` 会抛 TypeError——@hono/node-server 的
+     * buildOutgoingHttpHeaders 正是这样读 header，缺它会导致 c.json() 等带 Headers 实例的响应
+     * 在 responseViaCache（无 try/catch）内 reject → 客户端请求超时。
+     */
+    [Symbol.iterator](): IterableIterator<[string, string]>;
+    toJson(): {
+        [x: string]: string;
+    };
+}
+
+interface Cookie {
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    isSecure: boolean;
+    isHTTPOnly: boolean;
+    isSessionOnly: boolean;
+    expiresDate?: Date | null;
+}
+interface RedirectRequest {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    cookies: Cookie[];
+    body?: Data;
+    timeout?: number;
+}
+
+type RequestInit = {
+    method?: string;
+    headers?: HeadersInit;
+    body?: Data | FormData$1 | string | ArrayBuffer | ArrayBufferView | null;
+    /**
+     * Whether to allow insecure request, default is false.
+     * If the request URL is HTTP and the app is served over HTTPS, the request will be blocked unless this option is set to true.
+     */
+    allowInsecureRequest?: boolean;
+    /**
+     * A callback function that is called when a redirect response is received.
+     * The function receives the new Request as an argument and should return a Promise that resolves to a `RedirectRequest` or null. If returns null, the redirect will be canceled. If the function is not provided, all redirects will be allowed by default.
+     */
+    handleRedirect?: (newRequest: RedirectRequest) => Promise<RedirectRequest | null>;
+    /**
+     * A function that is called when a redirect response is received. The function receives the new Request as an argument and should return a Promise that resolves to a boolean indicating whether to allow the redirect. If the function is not provided, all redirects will be allowed by default.
+     *
+     * @deprecated
+     * Use `handleRedirect` instead.
+     */
+    shouldAllowRedirect?: (newRequest: Request$1) => Promise<boolean>;
+    /**
+     * Request timeout in seconds.
+     */
+    timeout?: DurationInSeconds;
+    /**
+     * If this option is set, the request can be canceled by calling abort() on the corresponding AbortController.
+     */
+    signal?: AbortSignal$1;
+    /**
+     * `CancelToken` instance, you can call the `cancel` method at the appropriate time to cancel the request.
+     * @deprecated
+     * Use `signal` instead.
+     */
+    cancelToken?: CancelToken;
+    /**
+     * Debug label will display in log panel.
+     */
+    debugLabel?: string;
+};
+/**
+ * The Request interface of the Fetch API represents a resource request.
+ */
+declare class Request$1 {
+    url: string;
+    method: string;
+    headers: Headers$1;
+    body?: Data | FormData$1 | string | ArrayBuffer | ArrayBufferView | null;
+    /**
+     * Whether to allow insecure request, default is false.
+     * If the request URL is HTTP and the app is served over HTTPS, the request will be blocked unless this option is set to true.
+     */
+    allowInsecureRequest?: boolean;
+    /**
+     * A callback function that is called when a redirect response is received.
+     * The function receives the new Request as an argument and should return a Promise that resolves to a `RedirectRequest` or `null`.
+     * If returns `null`, the redirect will be canceled.
+     * If the function is not provided, all redirects will be allowed by default.
+     */
+    handleRedirect?: (newRequest: RedirectRequest) => Promise<RedirectRequest | null>;
+    /**
+     * A function that is called when a redirect response is received. The function receives the new Request as an argument and should return a Promise that resolves to a boolean indicating whether to allow the redirect. If the function is not provided, all redirects will be allowed by default.
+     *
+     * @deprecated
+     * Use `handleRedirect` instead.
+     */
+    shouldAllowRedirect?: (newRequest: Request$1) => Promise<boolean>;
+    /**
+     * Request timeout in seconds.
+     */
+    timeout?: DurationInSeconds;
+    /**
+     * If this option is set, the request can be canceled by calling abort() on the corresponding AbortController.
+     */
+    signal?: AbortSignal$1;
+    /**
+     * `CancelToken` instance, you can call the `cancel` method at the appropriate time to cancel the request.
+     * @deprecated
+     * Use `signal` instead.
+     */
+    cancelToken?: CancelToken;
+    /**
+     * Debug label will display in log panel.
+     */
+    debugLabel?: string;
+    private _bodyUsed;
+    constructor(input: string | Request$1, init?: RequestInit);
+    /** WHATWG Body：body 是否已被读取（读方法消费后置 true）。 */
+    get bodyUsed(): boolean;
+    /** 按需消费 this.body（不改写它——出站转发依赖原始 body）；只能读一次。 */
+    private consume;
+    text(): Promise<string>;
+    json(): Promise<any>;
+    bytes(): Promise<Uint8Array>;
+    arrayBuffer(): Promise<ArrayBuffer>;
+    blob(): Promise<Blob$1>;
+    formData(): Promise<FormData$1>;
+    clone(): Request$1;
+}
+
+/** WHATWG BodyInit：Response/Request 公开构造器接受的 body 类型。
+ * （URLSearchParams 是运行时 web-globals 注入的全局，SDK 类型环境无声明，故运行时 duck-type 处理。） */
+type BodyInit = string | ArrayBuffer | ArrayBufferView | Blob$1 | FormData$1 | ReadableStream<Uint8Array> | Data | null | undefined;
+
+type ResponseInit = {
+    status?: number;
+    statusText?: string;
+    headers?: HeadersInit;
+    cookies?: Cookie[];
+    /** 拆分后的多条原始 Set-Cookie（native 从合并串还原）；供 Headers.getSetCookie()。 */
+    setCookies?: string[];
+    url?: string;
+    mimeType?: string;
+    expectedContentLength?: number;
+    textEncodingName?: string;
+};
+/**
+ * This Fetch API interface represents the response to a request.
+ *
+ * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Response)
+ */
+declare class Response$1 {
+    private _status;
+    private _statusText;
+    private _headers;
+    private _cookies;
+    private _ok;
+    private _url?;
+    private _mimeType?;
+    private _expectedContentLength?;
+    private _textEncodingName?;
+    private _bodyUsed;
+    private _rawBody;
+    private _bodyU8?;
+    private _bodyDataStream?;
+    /**
+     * Create a Response. `body` accepts the WHATWG BodyInit set
+     * (string / ArrayBuffer / TypedArray / Blob / URLSearchParams / ReadableStream / null);
+     * non-stream bodies are normalized to a single-chunk stream that closes immediately.
+     * `fetch()` passes a ReadableStream, which is forwarded as-is.
+     */
+    constructor(body?: BodyInit, init?: ResponseInit);
+    /** WHATWG `Response.json(data, init)`：JSON 序列化 + 默认 application/json。Hono v4 走它。 */
+    static json(data: any, init?: ResponseInit): Response$1;
+    /** WHATWG `Response.error()`：网络错误响应（status 0）。 */
+    static error(): Response$1;
+    /** WHATWG `Response.redirect(url, status?)`：重定向响应。 */
+    static redirect(url: string, status?: number): Response$1;
+    /**
+     * The response body as a stream of Uint8Array chunks (WHATWG-compatible).
+     * Lazily wraps the raw transport stream — chunks are converted to Uint8Array on demand,
+     * so consumers that never read `body` (e.g. those using `json()`/`data()`) pay nothing.
+     */
+    get body(): ReadableStream<Uint8Array>;
+    set body(stream: ReadableStream<Uint8Array>);
+    /**
+     * The response body as a stream of native `Data` chunks (zero-copy fast path).
+     * Use this to stream the body as `Data` without the per-chunk `Data → Uint8Array`
+     * conversion that `body` performs. Mutually exclusive with `body` and the read
+     * methods — the body can only be consumed once.
+     */
+    get dataStream(): ReadableStream<Data>;
+    get bodyUsed(): boolean;
+    get cookies(): Cookie[];
+    json(): Promise<any>;
+    text(): Promise<string>;
+    data(): Promise<Data>;
+    bytes(): Promise<Uint8Array>;
+    arrayBuffer(): Promise<ArrayBuffer>;
+    blob(): Promise<Blob$1>;
+    formData(): Promise<FormData$1>;
+    clone(): Response$1;
+    private consumeBody;
+    /**
+     * Get response status code.
+     */
+    get status(): number;
+    /**
+     * Get response status text.
+     */
+    get statusText(): string;
+    /**
+     * Get response headers.
+     */
+    get headers(): Headers$1;
+    /**
+     * Whether response is ok.
+     */
+    get ok(): boolean;
+    /**
+     * Get response URL.
+     */
+    get url(): string;
+    /**
+     * Get response mime type.
+     */
+    get mimeType(): string | undefined;
+    /**
+     * Get response expected content length.
+     */
+    get expectedContentLength(): number | undefined;
+    /**
+     * Get response text encoding name.
+     */
+    get textEncodingName(): string | undefined;
+}
+
+/**
+ * The fetch() method starts the process of fetching a resource from the network,
+ * returning a promise that is fulfilled once the response is available.
+ */
+declare const fetch: {
+    (url: string, init?: RequestInit): Promise<Response$1>;
+    (request: Request$1): Promise<Response$1>;
+};
+declare const Request: typeof Request$1;
+type Request = Request$1;
+declare const Response: typeof Response$1;
+type Response = Response$1;
+declare const Headers: typeof Headers$1;
+type Headers = Headers$1;
+declare const FormData: typeof FormData$1;
+type FormData = FormData$1;
+declare const Blob: typeof Blob$1;
+type Blob = Blob$1;
+declare const AbortController: typeof AbortController$1;
+type AbortController = AbortController$1;
+declare const AbortSignal: typeof AbortSignal$1;
+type AbortSignal = AbortSignal$1;
+declare const AbortEvent: typeof AbortEvent$1;
+type AbortEvent = AbortEvent$1;
+
 type CancelTokenHook = {
     /**
      * Get the `CancelToken` instance, if `create` hasn't been called, it would return `undefined`.
@@ -10536,109 +11286,6 @@ type CancelTokenHook = {
  */
 declare function useCancelToken(): CancelTokenHook;
 
-type RequestInit = {
-    method?: string;
-    headers?: HeadersInit;
-    body?: Data | FormData | string | ArrayBuffer | ArrayBufferView | null;
-    /**
-     * Whether to allow insecure request, default is false.
-     * If the request URL is HTTP and the app is served over HTTPS, the request will be blocked unless this option is set to true.
-     */
-    allowInsecureRequest?: boolean;
-    /**
-     * A callback function that is called when a redirect response is received.
-     * The function receives the new Request as an argument and should return a Promise that resolves to a `RedirectRequest` or null. If returns null, the redirect will be canceled. If the function is not provided, all redirects will be allowed by default.
-     */
-    handleRedirect?: (newRequest: RedirectRequest) => Promise<RedirectRequest | null>;
-    /**
-     * A function that is called when a redirect response is received. The function receives the new Request as an argument and should return a Promise that resolves to a boolean indicating whether to allow the redirect. If the function is not provided, all redirects will be allowed by default.
-     *
-     * @deprecated
-     * Use `handleRedirect` instead.
-     */
-    shouldAllowRedirect?: (newRequest: Request) => Promise<boolean>;
-    /**
-     * Request timeout in seconds.
-     */
-    timeout?: DurationInSeconds;
-    /**
-     * If this option is set, the request can be canceled by calling abort() on the corresponding AbortController.
-     */
-    signal?: AbortSignal;
-    /**
-     * `CancelToken` instance, you can call the `cancel` method at the appropriate time to cancel the request.
-     * @deprecated
-     * Use `signal` instead.
-     */
-    cancelToken?: CancelToken;
-    /**
-     * Debug label will display in log panel.
-     */
-    debugLabel?: string;
-};
-/**
- * The Request interface of the Fetch API represents a resource request.
- */
-declare class Request {
-    url: string;
-    method: string;
-    headers: Headers;
-    body?: Data | FormData | string | ArrayBuffer | ArrayBufferView | null;
-    /**
-     * Whether to allow insecure request, default is false.
-     * If the request URL is HTTP and the app is served over HTTPS, the request will be blocked unless this option is set to true.
-     */
-    allowInsecureRequest?: boolean;
-    /**
-     * A callback function that is called when a redirect response is received.
-     * The function receives the new Request as an argument and should return a Promise that resolves to a `RedirectRequest` or `null`.
-     * If returns `null`, the redirect will be canceled.
-     * If the function is not provided, all redirects will be allowed by default.
-     */
-    handleRedirect?: (newRequest: RedirectRequest) => Promise<RedirectRequest | null>;
-    /**
-     * A function that is called when a redirect response is received. The function receives the new Request as an argument and should return a Promise that resolves to a boolean indicating whether to allow the redirect. If the function is not provided, all redirects will be allowed by default.
-     *
-     * @deprecated
-     * Use `handleRedirect` instead.
-     */
-    shouldAllowRedirect?: (newRequest: Request) => Promise<boolean>;
-    /**
-     * Request timeout in seconds.
-     */
-    timeout?: DurationInSeconds;
-    /**
-     * If this option is set, the request can be canceled by calling abort() on the corresponding AbortController.
-     */
-    signal?: AbortSignal;
-    /**
-     * `CancelToken` instance, you can call the `cancel` method at the appropriate time to cancel the request.
-     * @deprecated
-     * Use `signal` instead.
-     */
-    cancelToken?: CancelToken;
-    /**
-     * Debug label will display in log panel.
-     */
-    debugLabel?: string;
-    constructor(input: string | Request, init?: RequestInit);
-    clone(): Request;
-}
-
-/**
- * The fetch() method starts the process of fetching a resource from the network,
- * returning a promise that is fulfilled once the response is available.
- *
- * The promise resolves to the Response object representing the response to your request.
- *
- * A fetch() promise only rejects when the request fails, for example, because of a
- * badly-formed request URL or a network error. A fetch() promise does not reject if
- * the server responds with HTTP status codes that indicate errors (404, 504, etc.).
- * Instead, a then() handler must check the Response.ok and/or Response.status properties.
- */
-declare function fetch(url: string, init?: RequestInit): Promise<Response>;
-declare function fetch(request: Request): Promise<Response>;
-
 type ScriptDeveloper = {
     name: string;
     email: string | null;
@@ -10663,6 +11310,12 @@ type ScriptMetadata = {
     };
 };
 /**
+ * Identifiers for the device capabilities that can be granted to a script or skill
+ * on a per-script basis (see `Script.requestAccess`). These are gated only when the
+ * "Require Per-Script Permission" setting is enabled.
+ */
+type ScriptingApi = "calendar" | "reminders" | "alarms" | "contacts" | "location" | "homeKit" | "photos" | "health" | "clipboard" | "fileSystem";
+/**
  * Access information about the script, and provides convenient methods to control the scripts.
  *
  */
@@ -10678,9 +11331,10 @@ declare namespace Script {
      *  - `"keyboard"`: The script is running in the custom keyboard extension, "keyboard.tsx" is the entry point.
      *  - `"control_widget"`: The script is running in the control widget, "control_widget_button.tsx" or "control_widget_toggle.tsx" is the entry point.
      *  - `"live_activity"`: The script is running in the live activity extension, "live_activity.tsx" is the entry point.
+     *  - `"alarm_live_activity"`: The script is rendering an AlarmKit live activity, "alarm_live_activity.tsx" is the entry point.
      *  - `"translation_ui_provider"`: The script is running in the translation UI provider extension, "translation_ui_provider.tsx" is the entry point.
      */
-    const env: "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "translation_ui_provider";
+    const env: "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "alarm_live_activity" | "translation_ui_provider";
     /**
      * Name of the current script.
      */
@@ -10905,6 +11559,21 @@ declare namespace Script {
      */
     function minimize(): Promise<boolean>;
     /**
+     * Enable minimize-on-swipe-dismiss for this script's root presented UI.
+     *
+     * Once enabled, when the user interactively swipes the first presented page
+     * down to dismiss it, the script is minimized instead of being ended: it
+     * keeps running and can be resumed from the running scripts list.
+     *
+     * Programmatic dismissal via `Navigation.useDismiss()(result)` still closes
+     * the page and resolves the `present` promise as usual, and `Script.exit()`
+     * still fully terminates the script.
+     *  - Has no effect when the multiple windows mode is enabled.
+     *
+     * @param enabled Whether to enable the behavior. Defaults to `true`.
+     */
+    function enableMinimize(enabled?: boolean): void;
+    /**
      * Listen to the minimize event.
      * @param callback The callback function to be called when the script is minimized.
      * @returns A function that can be used to remove the event listener.
@@ -10948,6 +11617,35 @@ declare namespace Script {
      * @returns `true` if the user has full access to the Scripting PRO features, otherwise `false`.
      */
     function hasFullAccess(): boolean;
+    /**
+     * Request per-script access to one or more device capabilities up front, instead of
+     * letting them prompt one by one on first use.
+     *
+     * Behavior:
+     * - Prompts for the requested capabilities that have not been decided yet for this script,
+     *   remembers the choices, and enforces them when the corresponding API is later used.
+     * - Capabilities already allowed or denied are not asked again. If every requested
+     *   capability is already decided, no prompt is shown.
+     * - In environments without a presenting view controller (Widget / Keyboard / Notification /
+     *   Share extensions), no prompt is shown.
+     * - The prompt lets the user set each capability individually, or use "Allow All" / "Deny All".
+     * - The resolved value is the set of requested capabilities that end up granted.
+     *
+     * This does NOT perform a Scripting PRO check. Capabilities that require PRO (such as
+     * `alarms`, `health`, `homeKit`) are still enforced when the corresponding API is called.
+     *
+     * @param apis The capabilities to request. Must be a non-empty array; the promise rejects
+     *   if it is empty or contains an unknown identifier.
+     * @returns The capabilities that are granted after the request resolves.
+     * @example
+     * ```ts
+     * const granted = await Script.requestAccess(["calendar", "reminders"])
+     * if (granted.includes("calendar")) {
+     *   // safe to use the Calendar API without a first-use prompt
+     * }
+     * ```
+     */
+    function requestAccess(apis: ScriptingApi[]): Promise<ScriptingApi[]>;
 }
 
 /**
@@ -11115,4 +11813,4 @@ declare global {
     }
 }
 
-export { type AVLayerVideoGravity, AVPlayerView, type AVPlayerViewProps, AbortController, AbortError, AbortEvent, type AbortEventListener, AbortSignal, AccessoryWidgetBackground, type AdaptableTabBarPlacement, type Alignment, type Angle, type AngleValue, type AngularGradient, AnimatedFrames, type AnimatedFramesProps, AnimatedGif, type AnimatedGifProps, AnimatedImage, type AnimatedImageProps, Annotation, type AnnotationOverflowResolution, type AnnotationOverflowResolutionStrategy, type AnnotationPosition, type AnnotationProps, AppEventListenerManager, AppEvents, type AppIntent, type AppIntentFactory, AppIntentManager, type AppIntentPerform, AppIntentProtocol, AreaChart, AreaPlot, type AreaPlotProps, AreaStackChart, type Axis, type AxisGridLineConfig, type AxisLabelFormat, type AxisMarkOrientation, type AxisMarkPosition, type AxisMarkPreset, type AxisMarkValues, type AxisMarksConfig, type AxisSet, type AxisTickConfig, type AxisValueLabelCollisionResolution, type AxisValueLabelConfig, type BadgeProminence, Bar1DChart, BarChart, type BarChartProps, BarGanttChart, type BarGanttChartProps, BarStackChart, Button, type ButtonBorderShape, type ButtonProps, type ButtonRole, type ButtonStyle, type CalendarComponent, CancelError, type CancelEventListener, CancelToken, type CancelTokenHook, Canvas, CanvasGradient, type CanvasImageSource, CanvasPattern, type CanvasProps, CanvasRenderingContext, type CanvasSize, Capsule, CaptureVideoPreviewView, type CaptureVideoPreviewViewProps, Chart, type ChartAxisScaleType, type ChartDateRangeSelection, ChartGesture, type ChartGestureProps, type ChartInterpolationMethod, type ChartMarkProps, type ChartMarkStackingMethod, type ChartNumberRangeSelection, type ChartNumberSelection, ChartOverlay, type ChartOverlayProps, ChartPlotProxy, ChartPlotStyle, type ChartPlotStyleProps, type ChartProxy, type ChartRangeSelection, type ChartScrollPosition, type ChartScrollTargetBehavior, type ChartSelection, type ChartStringRangeSelection, type ChartStringSelection, type ChartSymbolShape, Circle, type ClockHandRotationEffectPeriod, type ClosedRange, type Color, ColorPicker, type ColorPickerProps, type ColorRenderingMode, type ColorScheme, type ColorSchemeContrast, type ColorStringHSL, type ColorStringHSLA, type ColorStringHex, type ColorStringRGB, type ColorStringRGBA, type ColorWithGradientOrOpacity, type CommonViewProps, type ComponentCallback, type ComponentEffect, type ComponentEffectEvent, type ComponentMemo, type ComponentProps, ConcentricRectangle, type ConcentricRectangleProps, type ConcentricRectangleShape, type Consumer, type ConsumerProps, type ContentAvailableViewProps, type ContentAvailableViewWithLabelProps, type ContentAvailableViewWithTitleProps, type ContentMarginPlacement, type ContentMode, type ContentShapeKinds, type ContentTransition, ContentUnavailableView, type Context, ControlGroup, type ControlGroupProps, type ControlGroupStyle, type ControlSize, ControlWidget, ControlWidgetButton, type ControlWidgetButtonProps, type ControlWidgetLabel, ControlWidgetToggle, type ControlWidgetToggleProps, type Cookie, DateIntervalLabel, type DateIntervalLabelProps, DateLabel, type DateLabelProps, DatePicker, type DatePickerComponents, type DatePickerProps, type DatePickerStyle, DateRangeLabel, type DateRangeLabelProps, DefaultToolbarItem, type DefaultToolbarItemProps, Device, DirectoryBrowserView, type DirectoryBrowserViewProps, DisclosureGroup, type DisclosureGroupProps, type DiscreteSymbolEffect, type Dispatch, Divider, DonutChart, DragGesture, type DragGestureDetails, type DragGestureOptions, type DurationInMilliseconds, type DynamicImageSource, type DynamicShapeStyle, type Edge, type EdgeCornerStyle, type EdgeInsets, type EdgeSet, type EdgeSetOption, EditButton, Editor, type EditorProps, type EffectDestructor, type EffectSetup, Ellipse, EmptyView, type EnvironmentValues, EnvironmentValuesReader, type EnvironmentValuesReaderProps, type FileImageProps, FlowLayout, type FlowLayoutProps, type Font, type FontDesign, type FontWeight, type FontWidth, ForEach, type ForEachComponent, type ForEachDeprecatedProps, type ForEachProps, Form, type FormBinaryData, FormData, type FormProps, type FormStyle, type FunctionComponent, Gauge, type GaugeProps, type GaugeStyle, type GeometryProxy, GeometryReader, type GeometryReaderProps, type Gesture, GestureInfo, GlassEffectContainer, type GlassEffectContainerProps, type GlobalCompositeOperation, type Gradient, type GradientStop$1 as GradientStop, Grid, type GridItem, type GridProps, GridRow, type GridRowProps, type GridSize, Group, GroupBox, type GroupBoxProps, type GroupProps, HStack, type HStackProps, Headers, type HeadersInit, HeatMapChart, type HorizontalAlignment, type HorizontalEdge, type HorizontalEdgeSet, type IdProps, Image, type ImageInterpolation, type ImageProps, type ImageRenderOptions, ImageRenderer, type ImageRenderingBehaviorProps, type ImageRenderingMode, type ImageResizable, type ImageResizingMode, type ImageScale, type IndexViewStyle, Intent, IntentAttributedTextValue, IntentFileURLValue, IntentFileValue, IntentImageValue, IntentJsonValue, IntentRequestConfirmationValue, IntentSnippetIntentValue, IntentTextValue, IntentURLValue, IntentValue, IntentViewValue, type InternalWidgetRender, type KeyboardType, type KeywordPoint, type KeywordsColor, Label, type LabelProps, type LabelStyle, type LayoutDirection, type LayoutDirectionBehavior, LazyHGrid, type LazyHGridProps, LazyHStack, type LazyHStackProps, LazyVGrid, type LazyVGridProps, LazyVStack, type LazyVStackProps, LineCategoryChart, LineChart, LinePlot, type LinePlotFunctionProps, type LinePlotParametricProps, type LineStylePattern, type LinearGradient, Link, type LinkProps, List, type ListProps, type ListSectionSpacing, type ListStyle, LiveActivity, type LiveActivityActivitiesEnabledListener, type LiveActivityActivityUpdateListener, type LiveActivityDetail, type LiveActivityEndOptions, type LiveActivityOptions, type LiveActivityState, LiveActivityUI, type LiveActivityUIBuilder, LiveActivityUIExpandedBottom, LiveActivityUIExpandedCenter, LiveActivityUIExpandedLeading, LiveActivityUIExpandedTrailing, type LiveActivityUIExpandedViewProps, type LiveActivityUIProps, type LiveActivityUpdateOptions, LivePhotoView, type LivePhotoViewProps, LongPressGesture, type LongPressGestureOptions, LookAroundPreview, type LookAroundPreviewProps, MagnifyGesture, type MagnifyGestureValue, Map, type MapAnnotationLabelVisibility, MapCircle, type MapCircleProps, MapCompass, type MapCoordinate, MapPitchToggle, type MapPointOfInterestCategory, type MapPointsOfInterestSpec, MapPolygon, type MapPolygonProps, MapPolyline, type MapPolylineProps, type MapProps, type MapRegion, MapScaleView, type MapSelectionAccessoryStyle, type MapSelectionValue, type MapStrokeStyle, type MapStyleSpec, MapUserLocationButton, type MarkDimension, Markdown, type MarkdownProps, Marker, type MarkerByCoordinateProps, type MarkerByItemProps, type MarkerProps, type MatchedGeometryProperties, type Material, Menu, type MenuProps, type MenuStyle, type MeshGradient, type ModalPresentation, type ModalPresentationStyle, MultiColumnsPicker, type MultiColumnsPickerProps, MultiPicker, type MutableRefObject, NamespaceReader, type NamespaceReaderProps, Navigation, type NavigationBarTitleDisplayMode, NavigationDestination, type NavigationDestinationProps, NavigationLink, type NavigationLinkProps, NavigationSplitView, type NavigationSplitViewColumn, type NavigationSplitViewProps, type NavigationSplitViewStyle, type NavigationSplitViewVisibility, NavigationStack, type NavigationStackProps, type NetworkImageProps, type NormalProgressViewProps, Notification, type NotificationAction, type NotificationInfo, type NotificationInterruptionLevel, type NotificationRequest, type PIPStatus, type ParagraphStyle, Path, Path2D, type PathAffineTransform, PathShape, type PathShapeProps, type PathShapeValue, Picker, type PickerProps, type PickerStyle, type PickerValue, PieChart, type PinnedScrollViews, type Point, Point1DChart, PointCategoryChart, PointChart, type PopoverPresentation, type PresentationAdaptation, type PresentationBackgroundInteraction, type PresentationContentInteraction, type PresentationDetent, ProgressView, type ProgressViewProps, type ProgressViewStyle, type Prominence, type Provider, type ProviderProps, QRImage, type QRImageProps, type RadialGradient, RangeAreaChart, ReadableStream, ReadableStreamDefaultController, ReadableStreamDefaultReader, type Rect, RectAreaChart, RectChart, type RectCornerRadii, type RectWithCornerRadii, type RectWithCornerRadius, type RectWithCornerSize, Rectangle, type Reducer, type ReducerAction, type ReducerState, type RefObject, type RenderNode, ReorderableForEach, type ReorderableForEachComponent, type ReorderableForEachProps, Request, type RequestInit, Response, type ResponseInit, RotateGesture, type RotateGestureValue, type RoundedCornerStyle, RoundedRectangle, type RoundedRectangleProps, RuleChart, RuleLineForLabelChart, RuleLineForValueChart, SVG, type SVGCodeSourceProps, type SVGFilePathSourceProps, type SVGProps, type SVGURLSourceProps, type SafeAreaRegions, type ScenePhase, ScreenshotMaker, Script, type ScriptDeveloper, type ScriptMetadata, type ScriptingDeviceInfo, type ScrollDismissesKeyboardMode, type ScrollScrollIndicatorVisibility, type ScrollTargetBehavior, ScrollView, type ScrollViewProps, type ScrollViewProxy, ScrollViewReader, type ScrollViewReaderProps, type SearchFieldPlacement, type SearchSuggestionsPlacementSet, Section, type SectionProps, SecureField, type SecureFieldProps, type SensoryFeedback, type SetStateAction, type Shape, type ShapeProps, type ShapeStyle, type ShortcutFileURLParameter, type ShortcutJsonParameter, type ShortcutParameter, type ShortcutTextParameter, type Size, Slider, type SliderProps, type SliderWithLabelProps, type SliderWithRangeValueLabelsProps, type SliderWithTicksProps, Spacer, type StateInitializer, Stepper, type StepperProps, type StrokeStyle, type StyledText, type SubmitTriggers, type SwingAnimation, type SymbolEffect, type SymbolEffectOptions, type SymbolRenderingMode, type SymbolVariants, type SystemImageProps, Tab, type TabCustomizationBehavior, type TabPlacement, type TabProps, type TabRole, TabSection, type TabSectionProps, TabView, type TabViewProps, type TabViewStyle, TapGesture, Text, type TextAlignment, type TextContentType, TextField, type TextFieldProps, type TextFieldStyle, type TextInputAutocapitalization, TextMetrics, type TextProps, TimelineCanvas, type TimelineCanvasDrawSize, type TimelineCanvasProps, type TimelineCanvasSchedule, TimerIntervalLabel, type TimerIntervalLabelProps, type TimerIntervalProgressViewProps, Toggle, type ToggleProps, type ToggleStyle, type ToolBarProps, Toolbar, type ToolbarDefaultItemKind, ToolbarItem, ToolbarItemGroup, type ToolbarItemGroupProps, type ToolbarItemPlacement, type ToolbarItemProps, type ToolbarPlacement, ToolbarSpacer, type ToolbarSpacerProps, type ToolbarSpacerSizing, type ToolbarTitleDisplayMode, type TriggerSymbolEffect, type TruncationMode, type UIImageProps, type UnderlineStyle, type UnderlyingSource, UnevenRoundedRectangle, type UnevenRoundedRectangleProps, type UserInterfaceSizeClass, VStack, type VStackProps, type VerticalAlignment, type VerticalEdge, type VerticalEdgeSet, VideoPlayer, type VideoPlayerProps, VideoRecorderPreviewView, type VideoRecorderPreviewViewProps, ViewModifiers, type VirtualNode, type Visibility, WebView, type WebViewProps, Widget, type WidgetAccentedRenderingMode, type WidgetDisplaySize, type WidgetFamily, type WidgetRelevance, type WidgetReloadPolicy, type WidgetRenderingMode, ZStack, type ZStackProps, createContext, fetch, gradient, modifiers, useCallback, useCancelToken, useColorScheme, useContext, useEffect, useEffectEvent, useKeyboardVisible, useMemo, useObservable, useReducer, useRef, useSelector, useState };
+export { type AVLayerVideoGravity, AVPlayerView, type AVPlayerViewProps, AbortController, AbortEvent, type AbortEventListener, AbortSignal, AccessoryWidgetBackground, type AdaptableTabBarPlacement, AlarmLiveActivity, type AlarmLiveActivityAction, type AlarmLiveActivityCountdownState, type AlarmLiveActivityMode, type AlarmLiveActivityPausedState, type AlarmLiveActivityPresentation, type AlarmLiveActivityPresentationButton, type AlarmLiveActivitySchedule, type AlarmLiveActivityState, type AlarmLiveActivityUIBuilder, type Alignment, type Angle, type AngleValue, type AngularGradient, AnimatedFrames, type AnimatedFramesProps, AnimatedGif, type AnimatedGifProps, AnimatedImage, type AnimatedImageProps, Annotation, type AnnotationOverflowResolution, type AnnotationOverflowResolutionStrategy, type AnnotationPosition, type AnnotationProps, AppEventListenerManager, AppEvents, type AppIntent, type AppIntentFactory, AppIntentManager, type AppIntentPerform, AppIntentProtocol, AreaChart, AreaPlot, type AreaPlotProps, AreaStackChart, type Axis, type AxisGridLineConfig, type AxisLabelFormat, type AxisMarkOrientation, type AxisMarkPosition, type AxisMarkPreset, type AxisMarkValues, type AxisMarksConfig, type AxisSet, type AxisTickConfig, type AxisValueLabelCollisionResolution, type AxisValueLabelConfig, type BadgeProminence, Bar1DChart, BarChart, type BarChartProps, BarGanttChart, type BarGanttChartProps, BarStackChart, type BlendMode, Blob, Button, type ButtonBorderShape, type ButtonProps, type ButtonRole, type ButtonStyle, type CalendarComponent, CancelError, type CancelEventListener, CancelToken, type CancelTokenHook, Canvas, CanvasGradient, type CanvasImageSource, CanvasPattern, type CanvasProps, CanvasRenderingContext, type CanvasSize, Capsule, CaptureVideoPreviewView, type CaptureVideoPreviewViewProps, Chart, type ChartAxisScaleType, type ChartDateRangeSelection, ChartGesture, type ChartGestureProps, type ChartInterpolationMethod, type ChartMarkProps, type ChartMarkStackingMethod, type ChartNumberRangeSelection, type ChartNumberSelection, ChartOverlay, type ChartOverlayProps, ChartPlotProxy, ChartPlotStyle, type ChartPlotStyleProps, type ChartProxy, type ChartRangeSelection, type ChartScrollPosition, type ChartScrollTargetBehavior, type ChartSelection, type ChartStringRangeSelection, type ChartStringSelection, type ChartSymbolShape, Circle, type ClockHandRotationEffectPeriod, type ClosedRange, type Color, ColorPicker, type ColorPickerProps, type ColorRenderingMode, type ColorScheme, type ColorSchemeContrast, type ColorStringHSL, type ColorStringHSLA, type ColorStringHex, type ColorStringRGB, type ColorStringRGBA, type ColorWithGradientOrOpacity, type CommonViewProps, type ComponentCallback, type ComponentEffect, type ComponentEffectEvent, type ComponentMemo, type ComponentProps, ConcentricRectangle, type ConcentricRectangleProps, type ConcentricRectangleShape, type Consumer, type ConsumerProps, type ContentAvailableViewProps, type ContentAvailableViewWithLabelProps, type ContentAvailableViewWithTitleProps, type ContentMarginPlacement, type ContentMode, type ContentShapeKinds, type ContentTransition, ContentUnavailableView, type Context, ControlGroup, type ControlGroupProps, type ControlGroupStyle, type ControlSize, ControlWidget, ControlWidgetButton, type ControlWidgetButtonProps, type ControlWidgetLabel, ControlWidgetToggle, type ControlWidgetToggleProps, type Cookie, DateIntervalLabel, type DateIntervalLabelProps, DateLabel, type DateLabelProps, DatePicker, type DatePickerComponents, type DatePickerProps, type DatePickerStyle, DateRangeLabel, type DateRangeLabelProps, DefaultToolbarItem, type DefaultToolbarItemProps, Device, DirectoryBrowserView, type DirectoryBrowserViewProps, DisclosureGroup, type DisclosureGroupProps, type DiscreteSymbolEffect, type Dispatch, Divider, DonutChart, DragGesture, type DragGestureDetails, type DragGestureOptions, type DurationInMilliseconds, type DynamicImageSource, type DynamicShapeStyle, type DynamicTypeSize, type Edge, type EdgeCornerStyle, type EdgeInsets, type EdgeSet, type EdgeSetOption, EditButton, Editor, type EditorProps, type EffectDestructor, type EffectSetup, Ellipse, EmptyView, type EnvironmentValues, EnvironmentValuesReader, type EnvironmentValuesReaderProps, type FileImageProps, FlowLayout, type FlowLayoutProps, type Font, type FontDesign, type FontWeight, type FontWidth, ForEach, type ForEachComponent, type ForEachDeprecatedProps, type ForEachProps, Form, type FormBinaryData, FormData, type FormProps, type FormStyle, type FunctionComponent, Gauge, type GaugeProps, type GaugeStyle, type GeometryProxy, GeometryReader, type GeometryReaderProps, type Gesture, GestureInfo, GlassEffectContainer, type GlassEffectContainerProps, type GlobalCompositeOperation, type Gradient, type GradientStop$1 as GradientStop, Grid, type GridItem, type GridProps, GridRow, type GridRowProps, type GridSize, Group, GroupBox, type GroupBoxProps, type GroupProps, HStack, type HStackProps, Headers, type HeadersInit, HeatMapChart, type HorizontalAlignment, type HorizontalEdge, type HorizontalEdgeSet, type HoverEffect, type IdProps, Image, type ImageInterpolation, type ImageProps, type ImageRenderOptions, ImageRenderer, type ImageRenderingBehaviorProps, type ImageRenderingMode, type ImageResizable, type ImageResizingMode, type ImageScale, type IndexViewStyle, Intent, IntentAttributedTextValue, IntentFileURLValue, IntentFileValue, IntentImageValue, IntentJsonValue, IntentRequestConfirmationValue, IntentSnippetIntentValue, IntentTextValue, IntentURLValue, IntentValue, IntentViewValue, type InternalWidgetRender, type KeyboardType, type KeywordPoint, type KeywordsColor, Label, type LabelProps, type LabelStyle, LabeledContent, type LabeledContentProps, type LayoutDirection, type LayoutDirectionBehavior, LazyHGrid, type LazyHGridProps, LazyHStack, type LazyHStackProps, LazyVGrid, type LazyVGridProps, LazyVStack, type LazyVStackProps, LineCategoryChart, LineChart, LinePlot, type LinePlotFunctionProps, type LinePlotParametricProps, type LineStylePattern, type LinearGradient, Link, type LinkProps, List, type ListProps, type ListSectionSpacing, type ListStyle, LiveActivity, type LiveActivityActivitiesEnabledListener, type LiveActivityActivityUpdateListener, type LiveActivityDetail, type LiveActivityEndOptions, type LiveActivityOptions, type LiveActivityState, LiveActivityUI, type LiveActivityUIBuilder, LiveActivityUIExpandedBottom, LiveActivityUIExpandedCenter, LiveActivityUIExpandedLeading, LiveActivityUIExpandedTrailing, type LiveActivityUIExpandedViewProps, type LiveActivityUIProps, type LiveActivityUpdateOptions, LivePhotoView, type LivePhotoViewProps, LongPressGesture, type LongPressGestureOptions, LookAroundPreview, type LookAroundPreviewProps, MagnifyGesture, type MagnifyGestureValue, Map, type MapAnnotationLabelVisibility, MapCircle, type MapCircleProps, MapCompass, type MapCoordinate, MapPitchToggle, type MapPointOfInterestCategory, type MapPointsOfInterestSpec, MapPolygon, type MapPolygonProps, MapPolyline, type MapPolylineProps, type MapProps, type MapRegion, MapScaleView, type MapSelectionAccessoryStyle, type MapSelectionValue, type MapStrokeStyle, type MapStyleSpec, MapUserLocationButton, type MarkDimension, Markdown, type MarkdownProps, Marker, type MarkerByCoordinateProps, type MarkerByItemProps, type MarkerProps, type MatchedGeometryProperties, type Material, Menu, type MenuProps, type MenuStyle, type MeshGradient, type ModalPresentation, type ModalPresentationStyle, MultiColumnsPicker, type MultiColumnsPickerProps, MultiPicker, type MutableRefObject, NamespaceReader, type NamespaceReaderProps, Navigation, type NavigationBarTitleDisplayMode, NavigationDestination, type NavigationDestinationProps, NavigationLink, type NavigationLinkProps, NavigationSplitView, type NavigationSplitViewColumn, type NavigationSplitViewProps, type NavigationSplitViewStyle, type NavigationSplitViewVisibility, NavigationStack, type NavigationStackProps, type NetworkImageProps, type NormalProgressViewProps, Notification, type NotificationAction, type NotificationInfo, type NotificationInterruptionLevel, type NotificationRequest, type PIPStatus, type ParagraphStyle, Path, Path2D, type PathAffineTransform, PathShape, type PathShapeProps, type PathShapeValue, Picker, type PickerProps, type PickerStyle, type PickerValue, PieChart, type PinnedScrollViews, type Point, Point1DChart, PointCategoryChart, PointChart, type PopoverPresentation, type PresentationAdaptation, type PresentationBackgroundInteraction, type PresentationContentInteraction, type PresentationDetent, type PresentationSizing, ProgressView, type ProgressViewProps, type ProgressViewStyle, type Prominence, type Provider, type ProviderProps, QRImage, type QRImageProps, type RadialGradient, RangeAreaChart, ReadableStream, ReadableStreamDefaultController, ReadableStreamDefaultReader, type Rect, RectAreaChart, RectChart, type RectCornerRadii, type RectWithCornerRadii, type RectWithCornerRadius, type RectWithCornerSize, Rectangle, type RedirectRequest, type Reducer, type ReducerAction, type ReducerState, type RefObject, type RenderNode, ReorderableForEach, type ReorderableForEachComponent, type ReorderableForEachProps, Request, type RequestInit, Response, type ResponseInit, RotateGesture, type RotateGestureValue, type RoundedCornerStyle, RoundedRectangle, type RoundedRectangleProps, RuleChart, RuleLineForLabelChart, RuleLineForValueChart, SVG, type SVGCodeSourceProps, type SVGFilePathSourceProps, type SVGProps, type SVGURLSourceProps, type SafeAreaRegions, type ScenePhase, ScreenshotMaker, Script, type ScriptDeveloper, type ScriptMetadata, type ScriptingApi, type ScriptingDeviceInfo, type ScrollBounceBehavior, type ScrollDismissesKeyboardMode, type ScrollScrollIndicatorVisibility, type ScrollTargetBehavior, ScrollView, type ScrollViewProps, type ScrollViewProxy, ScrollViewReader, type ScrollViewReaderProps, type SearchFieldPlacement, type SearchSuggestionsPlacementSet, Section, type SectionProps, SecureField, type SecureFieldProps, type SensoryFeedback, type SetStateAction, type Shape, type ShapeProps, type ShapeStyle, type ShortcutFileURLParameter, type ShortcutJsonParameter, type ShortcutParameter, type ShortcutTextParameter, type Size, Slider, type SliderProps, type SliderWithLabelProps, type SliderWithRangeValueLabelsProps, type SliderWithTicksProps, Spacer, type StateInitializer, Stepper, type StepperProps, type StrokeStyle, type StyledText, type SubmitTriggers, type SwingAnimation, type SymbolEffect, type SymbolEffectOptions, type SymbolRenderingMode, type SymbolVariants, type SystemImageProps, Tab, type TabCustomizationBehavior, type TabPlacement, type TabProps, type TabRole, TabSection, type TabSectionProps, TabView, type TabViewProps, type TabViewStyle, TapGesture, Text, type TextAlignment, type TextContentType, TextField, type TextFieldProps, type TextFieldStyle, type TextInputAutocapitalization, TextMetrics, type TextProps, TimelineCanvas, type TimelineCanvasDrawSize, type TimelineCanvasProps, type TimelineCanvasSchedule, TimerIntervalLabel, type TimerIntervalLabelProps, type TimerIntervalProgressViewProps, Toggle, type ToggleProps, type ToggleStyle, type ToolBarProps, Toolbar, type ToolbarDefaultItemKind, ToolbarItem, ToolbarItemGroup, type ToolbarItemGroupProps, type ToolbarItemPlacement, type ToolbarItemProps, type ToolbarPlacement, ToolbarSpacer, type ToolbarSpacerProps, type ToolbarSpacerSizing, type ToolbarTitleDisplayMode, TransformStream, TransformStreamDefaultController, type Transformer, type TriggerSymbolEffect, type TruncationMode, type UIImageProps, type UnderlineStyle, type UnderlyingSink, type UnderlyingSource, UnevenRoundedRectangle, type UnevenRoundedRectangleProps, type UserInterfaceSizeClass, VStack, type VStackProps, type VerticalAlignment, type VerticalEdge, type VerticalEdgeSet, VideoPlayer, type VideoPlayerProps, VideoRecorderPreviewView, type VideoRecorderPreviewViewProps, ViewModifiers, type VirtualNode, type Visibility, WebView, type WebViewProps, Widget, type WidgetAccentedRenderingMode, type WidgetDisplaySize, type WidgetFamily, type WidgetRelevance, type WidgetReloadPolicy, type WidgetRenderingMode, WritableStream, WritableStreamDefaultController, WritableStreamDefaultWriter, ZStack, type ZStackProps, createContext, fetch, gradient, modifiers, useCallback, useCancelToken, useColorScheme, useContext, useEffect, useEffectEvent, useKeyboardVisible, useMemo, useObservable, useReducer, useRef, useSelector, useState };

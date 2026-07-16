@@ -643,6 +643,33 @@ declare global {
   }
 
   /**
+   * A color extracted from an image. Components are 0..1; `hex` is a `"#RRGGBBAA"` string that can
+   * be used directly anywhere a `Color` is expected.
+   */
+  type RGBAColor = {
+    /** Red component, 0..1. */
+    red: number
+    /** Green component, 0..1. */
+    green: number
+    /** Blue component, 0..1. */
+    blue: number
+    /** Alpha component, 0..1. */
+    alpha: number
+    /** `"#RRGGBBAA"` hex string, usable directly as a `Color`. */
+    hex: string
+  }
+
+  /**
+   * A dominant color of an image, together with the fraction of the sampled pixels it covers.
+   */
+  type DominantColor = {
+    /** The representative color. */
+    color: RGBAColor
+    /** Fraction of the sampled pixels this color covers, 0..1. */
+    fraction: number
+  }
+
+  /**
    * UIImage instance for displaying or saving an Image.
    */
   class UIImage {
@@ -795,6 +822,58 @@ declare global {
      * @returns The PNG base64 string, or null if the conversion fails.
      */
     toPNGBase64String(): string | null
+
+    /**
+     * Computes the average color of the entire image.
+     * @returns The average color, or null if the image cannot be read.
+     */
+    averageColor(): RGBAColor | null
+    /**
+     * Extracts the most dominant colors of the image, sorted from most to least dominant.
+     * The image is downsampled before analysis, so this stays fast even for large images.
+     * @param count The maximum number of colors to return. Defaults to 5, clamped to 1–16.
+     * @returns An array of colors, each with the fraction of the image it covers.
+     */
+    dominantColors(count?: number): DominantColor[]
+    /**
+     * Reads the color of a single pixel.
+     * @param x The pixel x coordinate, in pixels (0 = left edge). Note: pixels = points × `scale`.
+     * @param y The pixel y coordinate, in pixels (0 = top edge).
+     * @returns The pixel color, or null if the coordinate is out of bounds.
+     */
+    pixelColor(x: number, y: number): RGBAColor | null
+    /**
+     * Reads the raw RGBA pixel buffer (8 bits per channel, straight alpha, row-major, top-left origin).
+     * `width` and `height` are in pixels (points × `scale`), and `data` is `width × height × 4` bytes.
+     * @returns The pixel buffer with its pixel dimensions, or null if the image cannot be read.
+     */
+    getPixelData(): { width: number; height: number; data: Data } | null
+
+    /**
+     * Returns a cropped copy of the image. The rect is in points (the same space as `width` /
+     * `height`) and is clamped to the image bounds.
+     * @param rect The crop rectangle in points.
+     * @returns A cropped image, or null if the rect does not overlap the image.
+     */
+    croppedTo(rect: { x: number; y: number; width: number; height: number }): UIImage | null
+    /**
+     * Returns a copy of the image rotated clockwise. The canvas is expanded to fit the whole
+     * rotated image.
+     * @param degrees The clockwise rotation angle, in degrees.
+     */
+    rotated(degrees: number): UIImage
+    /**
+     * Returns a Gaussian-blurred copy of the image.
+     * @param radius The blur radius. Larger values produce a stronger blur.
+     * @returns A blurred image, or null if the effect cannot be applied.
+     */
+    blurred(radius: number): UIImage | null
+    /**
+     * Returns a grayscale (desaturated) copy of the image.
+     * @returns A grayscale image, or null if the effect cannot be applied.
+     */
+    grayscale(): UIImage | null
+
     /**
      * Create a new UIImage instance from a Data instance.
      * @param data The Data instance to convert to UIImage.
@@ -2883,6 +2962,36 @@ declare global {
   }
 
   /**
+   * Presents the system "Open in…" / options menu for a file, letting the user pick an app to
+   * open or copy the file with.
+   *
+   * Note: iOS has no concept of a "default app" for a file type and no API to open a file directly
+   * in its associated app — presenting this menu and letting the user choose is the only supported way.
+   *
+   * On iPad the menu appears as a popover anchored to the center of the current page.
+   */
+  namespace DocumentInteraction {
+    /**
+     * Presents the "Open in…" menu, listing the apps that can open or copy the file.
+     * @param filePath The absolute path of an existing file.
+     * @returns A promise that resolves to the bundle identifier of the app the file was sent to,
+     * or `null` if the user dismissed the menu without choosing an app.
+     * Rejects if the file does not exist, or if no app is available to open it.
+     */
+    function openInMenu(filePath: string): Promise<string | null>
+
+    /**
+     * Presents the full options menu for the file (Open in… plus actions such as Copy, Print,
+     * Save to Files, and Markup, depending on the file type).
+     * @param filePath The absolute path of an existing file.
+     * @returns A promise that resolves to the bundle identifier of the app the file was sent to
+     * if the user chose "Open in" an app, or `null` if the menu was dismissed or a non-open action
+     * was performed. Rejects if the file does not exist.
+     */
+    function optionsMenu(filePath: string): Promise<string | null>
+  }
+
+  /**
    * Parse the QR code image file, or open the scan code page to scan.
    */
   namespace QRCode {
@@ -3028,6 +3137,266 @@ declare global {
      * Reads the result as a video, if this result can be read as a video, the video will be copy to the app group's sandbox, returns a promise that resolves to the video path, otherwise returns null, or rejects with an error. You should delete the video file when you no longer need it.
      */
     videoPath(): Promise<string | null>
+  }
+
+  /**
+   * The media subtype of a photo asset.
+   */
+  type PHAssetMediaSubtype =
+    | "photoPanorama"
+    | "photoHDR"
+    | "photoScreenshot"
+    | "photoLive"
+    | "photoDepthEffect"
+    | "videoStreamed"
+    | "videoHighFrameRate"
+    | "videoTimelapse"
+
+  /**
+   * Options for fetching photo assets from the library.
+   */
+  type PHFetchOptions = {
+    /**
+     * Only fetch assets of this media type.
+     */
+    mediaType?: "image" | "video" | "audio"
+    /**
+     * Only fetch assets matching any of these media subtypes.
+     */
+    mediaSubtypes?: PHAssetMediaSubtype[]
+    /**
+     * Only fetch favorite assets.
+     */
+    favoritesOnly?: boolean
+    /**
+     * Whether to include hidden assets. Defaults to false.
+     */
+    includeHidden?: boolean
+    /**
+     * Whether to include all assets from bursts. Defaults to false.
+     */
+    includeAllBurstAssets?: boolean
+    /**
+     * The key to sort by. Defaults to "creationDate".
+     */
+    sortBy?: "creationDate" | "modificationDate"
+    /**
+     * Whether to sort in ascending order. Defaults to false (newest first).
+     */
+    ascending?: boolean
+    /**
+     * The maximum number of assets to fetch. 0 means no limit.
+     */
+    limit?: number
+    /**
+     * Only fetch assets created at or after this timestamp (milliseconds since epoch).
+     */
+    createdAfter?: number
+    /**
+     * Only fetch assets created at or before this timestamp (milliseconds since epoch).
+     */
+    createdBefore?: number
+  }
+
+  /**
+   * The geographic location attached to a photo asset.
+   */
+  type PHAssetLocation = {
+    latitude: number
+    longitude: number
+    altitude: number
+    horizontalAccuracy: number
+    verticalAccuracy: number
+    speed: number
+    course: number
+    /**
+     * The time at which this location was determined (milliseconds since epoch).
+     */
+    timestamp: number
+  }
+
+  /**
+   * A representation of an image, video, or Live Photo in the user's photo library.
+   * Obtain instances via `Photos.fetchAssets`, `Photos.fetchAsset`, or `PHAssetCollection.fetchAssets`.
+   */
+  class PHAsset {
+    private constructor()
+
+    /**
+     * The unique, persistent identifier of the asset. You can store this and use
+     * `Photos.fetchAsset(localIdentifier)` to retrieve the asset later.
+     */
+    readonly localIdentifier: string
+    /**
+     * The media type of the asset.
+     */
+    readonly mediaType: "image" | "video" | "audio" | "unknown"
+    /**
+     * The media subtypes of the asset (e.g. "photoLive", "photoHDR", "photoScreenshot").
+     */
+    readonly mediaSubtypes: PHAssetMediaSubtype[]
+    /**
+     * The width, in pixels, of the asset.
+     */
+    readonly pixelWidth: number
+    /**
+     * The height, in pixels, of the asset.
+     */
+    readonly pixelHeight: number
+    /**
+     * The date the asset was created (milliseconds since epoch), or null if unknown.
+     */
+    readonly creationDate: number | null
+    /**
+     * The date the asset was last modified (milliseconds since epoch), or null if unknown.
+     */
+    readonly modificationDate: number | null
+    /**
+     * The duration, in seconds, of the asset. 0 for images.
+     */
+    readonly duration: number
+    /**
+     * Whether the asset is marked as a favorite.
+     */
+    readonly isFavorite: boolean
+    /**
+     * Whether the asset is hidden.
+     */
+    readonly isHidden: boolean
+    /**
+     * The geographic location attached to the asset, or null if none.
+     */
+    readonly location: PHAssetLocation | null
+    /**
+     * The unique identifier shared by photos in the same burst sequence, or null.
+     */
+    readonly burstIdentifier: string | null
+    /**
+     * Whether the asset is the representative photo of a burst sequence.
+     */
+    readonly representsBurst: boolean
+    /**
+     * The source of the asset.
+     */
+    readonly sourceType: "userLibrary" | "cloudShared" | "itunesSynced" | "unknown"
+
+    /**
+     * Request a UIImage representation of the asset.
+     * @param options Request options.
+     * @param options.targetWidth The desired width in pixels. Omit to use the original size.
+     * @param options.targetHeight The desired height in pixels. Omit to use the original size.
+     * @param options.contentMode How the image fits the target size. Defaults to "aspectFit".
+     * @param options.deliveryMode The desired image quality and delivery behavior. Defaults to "highQualityFormat".
+     * @param options.version The version of the asset to request. Defaults to "current".
+     * @param options.allowNetworkAccess Whether to allow downloading from iCloud. Defaults to true.
+     * @returns A promise that resolves to a UIImage, or null if unavailable.
+     */
+    requestImage(options?: {
+      targetWidth?: number
+      targetHeight?: number
+      contentMode?: "aspectFit" | "aspectFill"
+      deliveryMode?: "opportunistic" | "highQualityFormat" | "fastFormat"
+      version?: "current" | "original" | "unadjusted"
+      allowNetworkAccess?: boolean
+    }): Promise<UIImage | null>
+
+    /**
+     * Request the original file data of the asset.
+     * @param options Request options.
+     * @returns A promise that resolves to the data, uniform type identifier, and EXIF orientation, or null.
+     */
+    requestImageData(options?: {
+      version?: "current" | "original" | "unadjusted"
+      allowNetworkAccess?: boolean
+    }): Promise<{ data: Data; uti: UTType; orientation: number } | null>
+
+    /**
+     * Export the video of the asset to a temporary file in the app's sandbox and resolve its path.
+     * You should delete the file when you no longer need it.
+     * @returns A promise that resolves to the file path, or null if the asset has no video.
+     */
+    requestVideoURL(options?: {
+      version?: "current" | "original" | "unadjusted"
+      allowNetworkAccess?: boolean
+    }): Promise<string | null>
+
+    /**
+     * Request a LivePhoto representation of the asset.
+     * @returns A promise that resolves to a LivePhoto, or null if the asset is not a Live Photo.
+     */
+    requestLivePhoto(options?: {
+      targetWidth?: number
+      targetHeight?: number
+      allowNetworkAccess?: boolean
+    }): Promise<LivePhoto | null>
+
+    /**
+     * Mark or unmark the asset as a favorite.
+     * @returns A promise that resolves to whether the change succeeded.
+     */
+    setFavorite(value: boolean): Promise<boolean>
+
+    /**
+     * Delete the asset from the library. The system presents a confirmation prompt.
+     * @returns A promise that resolves to true if deleted, or false if the user cancelled.
+     */
+    delete(): Promise<boolean>
+  }
+
+  /**
+   * A collection of photo assets, such as an album or smart album.
+   * Obtain instances via `Photos.fetchAlbums`, `Photos.fetchAlbum`, or `Photos.createAlbum`.
+   */
+  class PHAssetCollection {
+    private constructor()
+
+    /**
+     * The unique, persistent identifier of the collection.
+     */
+    readonly localIdentifier: string
+    /**
+     * The localized title of the collection, or null.
+     */
+    readonly title: string | null
+    /**
+     * The type of the collection.
+     */
+    readonly type: "album" | "smartAlbum" | "moment"
+    /**
+     * The subtype of the collection (e.g. "smartAlbumUserLibrary", "smartAlbumFavorites", "albumRegular").
+     */
+    readonly subtype: string
+    /**
+     * The number of assets in the collection. Uses the library's fast estimate when
+     * available, otherwise falls back to an exact count (common for smart albums).
+     */
+    readonly estimatedAssetCount: number
+    /**
+     * The earliest creation date among assets in the collection (milliseconds since epoch), or null.
+     */
+    readonly startDate: number | null
+    /**
+     * The latest creation date among assets in the collection (milliseconds since epoch), or null.
+     */
+    readonly endDate: number | null
+
+    /**
+     * Fetch the assets contained in this collection.
+     * @param options Fetch options.
+     */
+    fetchAssets(options?: PHFetchOptions): Promise<PHAsset[]>
+
+    /**
+     * Add assets to this collection. Only valid for user-created albums.
+     * @returns A promise that resolves to whether the change succeeded.
+     */
+    addAssets(assets: PHAsset[]): Promise<boolean>
+
+    /**
+     * Remove assets from this collection. Only valid for user-created albums.
+     * @returns A promise that resolves to whether the change succeeded.
+     */
+    removeAssets(assets: PHAsset[]): Promise<boolean>
   }
 
   /**
@@ -3196,6 +3565,62 @@ declare global {
      * @returns Returns a promise that resolves when the operation is complete, or rejects with an error if the operation fails.
      */
     function saveLivePhoto(options: { imagePath: string, videoPath: string, shouldMoveFile?: boolean }): Promise<void>
+
+    /**
+     * Get the current authorization status for the photo library, without prompting.
+     * Access is requested automatically the first time you read or write the library.
+     * @param accessLevel The access level to query. Defaults to "readWrite".
+     */
+    function authorizationStatus(accessLevel?: "addOnly" | "readWrite"): "notDetermined" | "restricted" | "denied" | "authorized" | "limited"
+
+    /**
+     * Fetch assets from the photo library matching the given options.
+     * @param options Fetch options. Omit to fetch all assets (newest first).
+     */
+    function fetchAssets(options?: PHFetchOptions): Promise<PHAsset[]>
+    /**
+     * Fetch assets by their local identifiers, preserving the requested order where possible.
+     * @param localIdentifiers The local identifiers of the assets to fetch.
+     */
+    function fetchAssets(localIdentifiers: string[]): Promise<PHAsset[]>
+    /**
+     * Fetch a single asset by its local identifier.
+     * @param localIdentifier The local identifier of the asset.
+     * @returns A promise that resolves to the asset, or null if not found.
+     */
+    function fetchAsset(localIdentifier: string): Promise<PHAsset | null>
+
+    /**
+     * Fetch albums and smart albums from the photo library.
+     * @param options Filter options.
+     * @param options.type Only fetch collections of this type. Omit to fetch both albums and smart albums.
+     * @param options.assetCollectionSubtype Only fetch collections of this subtype.
+     */
+    function fetchAlbums(options?: {
+      type?: "album" | "smartAlbum"
+      assetCollectionSubtype?: string
+    }): Promise<PHAssetCollection[]>
+    /**
+     * Fetch a single album by its local identifier.
+     * @returns A promise that resolves to the album, or null if not found.
+     */
+    function fetchAlbum(localIdentifier: string): Promise<PHAssetCollection | null>
+    /**
+     * Create a new user album with the given title.
+     * @returns A promise that resolves to the created album, or null on failure.
+     */
+    function createAlbum(title: string): Promise<PHAssetCollection | null>
+    /**
+     * Delete the given albums. The system presents a confirmation prompt.
+     * @returns A promise that resolves to whether the deletion succeeded.
+     */
+    function deleteAlbums(albums: PHAssetCollection[]): Promise<boolean>
+
+    /**
+     * Delete the given assets from the library. The system presents a confirmation prompt.
+     * @returns A promise that resolves to true if deleted, or false if the user cancelled.
+     */
+    function deleteAssets(assets: PHAsset[]): Promise<boolean>
   }
 
   /**
@@ -3740,6 +4165,113 @@ declare global {
      * Returns an array of all keys in the persistent storage.
      */
     function keys(): string[]
+  }
+
+  /**
+   * An iCloud-backed shared data store you can collaborate on with other users.
+   *
+   * Construct one with a store **UUID** that you obtained either by creating a store in
+   * Settings → iCloud Shared Data, or from a share someone sent you. Scripts are pure
+   * consumers: they read, write, and can share a store, but **cannot create or list**
+   * stores — create them in the management page (or ask the assistant), then paste the
+   * store UUID into your script.
+   *
+   * The first time a script touches a given store, the user is asked to grant access for
+   * that script + store; denying makes all calls for that store fail. Across users, a person
+   * only sees a store after they accept a share for it (CloudKit + Apple ID enforced).
+   *
+   * Data lives in CloudKit (the owner's private iCloud database) and syncs across
+   * participants. Requires the user to be signed in to iCloud and a Pro subscription.
+   * The script must declare the `cloudSharedData` permission.
+   *
+   * @example
+   * const store = new CloudSharedData("3F2504E0-4F89-41D3-9A0C-0305E82C3301")
+   * await store.put(new Date().toISOString(), { note: "first tooth" })
+   * const all = await store.entries()
+   */
+  class CloudSharedData {
+    /**
+     * @param storeId A store UUID created in Settings → iCloud Shared Data, or shared with you.
+     */
+    constructor(storeId: string)
+
+    /**
+     * Write (upsert) an entry. Creates the store on first write (if you own it).
+     * @param key Any string key. Re-writing the same key overwrites it (last write wins).
+     * @param value Any JSON-serializable value.
+     * @param blob Optional binary attachment.
+     */
+    put(key: string, value: any, blob?: Data): Promise<void>
+    /**
+     * Read an entry. Returns null if the store or key does not exist.
+     */
+    get(key: string): Promise<{ value: any; blob: Data | null } | null>
+    /**
+     * Remove an entry (no-op if it does not exist).
+     */
+    remove(key: string): Promise<void>
+    /**
+     * List all entries (binary blobs are not loaded; use `get`).
+     */
+    entries(): Promise<CloudSharedData.EntryInfo[]>
+    /**
+     * Overwrite the store's single-file data (independent of entries).
+     */
+    writeFile(data: Data): Promise<void>
+    /**
+     * Read the store's single-file data, or null if not set.
+     */
+    readFile(): Promise<Data | null>
+    /**
+     * Cheaply check whether the store changed since the last `refresh` call.
+     * Returns true on the first call (to prime) and whenever there are remote changes.
+     * Poll this and call `entries`/`get` again when it returns true.
+     */
+    refresh(): Promise<boolean>
+    /**
+     * Register a callback fired when the store changes remotely (push-driven).
+     * Returns a function that unregisters the callback — call it when no longer needed.
+     * Inside the callback, call `entries`/`get` to read the latest data.
+     */
+    onChange(callback: () => void): () => void
+    /**
+     * Start (or fetch) sharing for the store and return its share info, including a link
+     * you can send to invite collaborators. Only the owner can share.
+     */
+    share(options?: { permission?: "readOnly" | "readWrite" }): Promise<CloudSharedData.ShareInfo>
+    /**
+     * Present the system collaboration sheet to invite people to the store.
+     * Available where a presentation context exists (main app, Share/Translation UI extensions);
+     * elsewhere it rejects — use `share` to get a link instead. Only the owner can share.
+     */
+    presentShareSheet(options?: { permission?: "readOnly" | "readWrite" }): Promise<void>
+    /**
+     * Get the current share info of the store, or null if it is not shared.
+     */
+    shareInfo(): Promise<CloudSharedData.ShareInfo | null>
+    /**
+     * Stop sharing the store. Only the owner can do this.
+     */
+    stopSharing(): Promise<void>
+  }
+
+  namespace CloudSharedData {
+    type EntryInfo = {
+      /** The entry key. */
+      key: string
+      /** The decoded JSON value. */
+      value: any
+      /** Whether this entry has an attached binary blob (fetch it with `get`). */
+      hasBlob: boolean
+    }
+    type ShareInfo = {
+      /** The permission granted via the share. */
+      permission: "readOnly" | "readWrite"
+      /** Display names of the participants (may be empty if unavailable). */
+      participants: string[]
+      /** A link to the share, or null. Send it to invite collaborators. */
+      url: string | null
+    }
   }
 
   /**
@@ -8488,13 +9020,13 @@ If the event’s calendar does not support availability settings, this property�
      */
     static passwordBased(username: string, password: string): SSHAuthenticationMethod
     /**
-     * Creates a private key based authentication method.
+     * Creates an RSA private key based authentication method.
      * @param username The username to authenticate with.
      * @param sshRsa The RSA private key in OpenSSH format.
      * @param decryptionKey An optional decryption key for the private key, if it is encrypted.
      * @returns An SSHAuthenticationMethod instance
      */
-    static ras(username: string, sshRsa: Data, decryptionKey?: Data): SSHAuthenticationMethod | null
+    static rsa(username: string, sshRsa: Data, decryptionKey?: Data): SSHAuthenticationMethod | null
     static ed25519(username: string, sshEd25519: Data, decryptionKey?: Data): SSHAuthenticationMethod | null
     static p256(username: string, pemRepresentation: string): SSHAuthenticationMethod | null
     static p384(username: string, pemRepresentation: string): SSHAuthenticationMethod | null
@@ -8717,6 +9249,10 @@ If the event’s calendar does not support availability settings, this property�
      *
      * Output decoding is controlled by `options.encoding`:
      * - `"utf8"` (default): lossy UTF-8 decode. Invalid bytes are replaced with U+FFFD.
+     *   Note: a decoded string can still contain NUL (` `) or other control characters
+     *   that survive lossy decoding. Passing such a string onward through serialization layers
+     *   (e.g. returning it from `Script.exit(...)`) may truncate or corrupt it. For commands whose
+     *   output may contain such bytes, prefer `"binary"` and sanitize the bytes yourself.
      * - `"ascii"`: lossy ASCII decode.
      * - `"binary"`: returns raw bytes as `Data`, no decoding. Use this for commands whose
      *   output may contain binary or terminal control characters (e.g. `softwareupdate -l`,
@@ -8773,8 +9309,10 @@ If the event’s calendar does not support availability settings, this property�
      * @param options.terminalRowHeight The row height of the terminal. Defaults to 24.
      * @param options.terminalPixelWidth The pixel width of the terminal. Defaults to 0.
      * @param options.terminalPixelHeight The pixel height of the terminal. Defaults to 0.
+     * @param options.echo Whether the terminal echoes local input. Defaults to `true`. Set to `false` to disable local echo (e.g. interactive password prompts).
      * @param options.onOutput A callback function that is called for each chunk of output from the PTY session. The function receives the output data and a boolean indicating whether it is standard error output. Return `true` to continue receiving output, or `false` to stop the stream.
      * @param options.onError An optional callback function that is called when an error occurs after the PTY session has started streaming. The function receives the error message as a string. Errors thrown before the session is established cause the returned promise to reject instead.
+     * @param options.onClose An optional callback function that is called when the output stream ends naturally (e.g. the server closes the session). It is not called when you stop the stream yourself by returning `false` from `onOutput`, nor when an error occurs (use `onError` for that).
      * @returns A promise that resolves to a TTYStdinWriter instance if the PTY session is successfully opened, or rejects with an error if the PTY session fails to open.
      */
     withPTY(optoins: {
@@ -8784,8 +9322,10 @@ If the event’s calendar does not support availability settings, this property�
       terminalRowHeight?: number
       terminalPixelWidth?: number
       terminalPixelHeight?: number
+      echo?: boolean
       onOutput: (data: Data, isStderr: boolean) => boolean
       onError?: (error: string) => void
+      onClose?: () => void
     }): Promise<TTYStdinWriter>
 
     /**
@@ -8797,11 +9337,13 @@ If the event’s calendar does not support availability settings, this property�
      * @param options An object containing options for the TTY session.
      * @param options.onOutput A callback function that is called for each chunk of output from the TTY session. The function receives the output data and a boolean indicating whether it is standard error output. Return `true` to continue receiving output, or `false` to stop the stream.
      * @param options.onError An optional callback function that is called when an error occurs after the TTY session has started streaming. The function receives the error message as a string. Errors thrown before the session is established cause the returned promise to reject instead.
+     * @param options.onClose An optional callback function that is called when the output stream ends naturally (e.g. the server closes the session). It is not called when you stop the stream yourself by returning `false` from `onOutput`, nor when an error occurs (use `onError` for that).
      * @returns A promise that resolves to a TTYStdinWriter instance if the TTY session is successfully created, or rejects with an error if the TTY session fails to open.
      */
     withTTY(options: {
       onOutput: (data: Data, isStderr: boolean) => boolean
       onError?: (error: string) => void
+      onClose?: () => void
     }): Promise<TTYStdinWriter>
 
     /**
@@ -9412,6 +9954,42 @@ If the event’s calendar does not support availability settings, this property�
   }
 
   /**
+   * A matched text range in the editor, returned by `EditorController.searchText`.
+   */
+  type EditorTextRange = {
+    /**
+     * The start offset (character index) of the match in the document.
+     */
+    start: number
+    /**
+     * The end offset (character index) of the match in the document.
+     */
+    end: number
+    /**
+     * The 1-based line number where the match starts.
+     */
+    line: number
+  }
+
+  /**
+   * Options for `EditorController.searchText`.
+   */
+  type EditorSearchOptions = {
+    /**
+     * Whether the search is case sensitive. Defaults to false.
+     */
+    caseSensitive?: boolean
+    /**
+     * Whether the `query` is treated as a regular expression. Defaults to false.
+     */
+    regexp?: boolean
+    /**
+     * Whether to match whole words only. Defaults to false.
+     */
+    wholeWord?: boolean
+  }
+
+  /**
    * This interface allows you to create an editor controller, access and set editor content, listen for content changes, and display an editor or render it through an `Editor` view.
    */
   class EditorController {
@@ -9448,6 +10026,65 @@ If the event’s calendar does not support availability settings, this property�
      * Dismissing the editor. The editor has not been disposed, so you can call the `present` method again to show the editor.
      */
     dismiss(): Promise<void>
+    /**
+     * Scroll the editor so that the given 1-based line number is centered, and place the cursor there.
+     * @param line The 1-based line number.
+     */
+    scrollToLine(line: number): void
+    /**
+     * Scroll the editor so that the given character offset is centered, and place the cursor there.
+     * @param position The character offset (index) in the document.
+     */
+    scrollToPosition(position: number): void
+    /**
+     * Scroll the editor so that the current selection is visible.
+     */
+    scrollSelectionIntoView(): void
+    /**
+     * Get the currently selected text. Resolves to an empty string when there is no selection.
+     * The returned promise rejects if the editor is not presented (timeout) or has been disposed.
+     */
+    getSelectedText(): Promise<string>
+    /**
+     * Select the text range `[start, end)` and scroll it into view. Combine with `searchText` (or your
+     * own matching over `content`) and `replaceSelection` to build a custom search & replace UI.
+     * @param start The start character offset.
+     * @param end The end character offset.
+     */
+    setSelection(start: number, end: number): void
+    /**
+     * Replace the current selection with the given text. When there is no selection, the text is inserted at the cursor.
+     * @param text The replacement text.
+     */
+    replaceSelection(text: string): void
+    /**
+     * Select all the text in the editor.
+     */
+    selectAll(): void
+    /**
+     * Search the whole document and return all matched ranges. The matching runs in the editor, so you don't
+     * need to compute offsets yourself; use `setSelection` to highlight a match and `replaceSelection` to replace it.
+     * The returned promise rejects if the editor is not presented (timeout) or has been disposed.
+     * @param query The text or regular expression source to search for.
+     * @param options Search options.
+     */
+    searchText(query: string, options?: EditorSearchOptions): Promise<EditorTextRange[]>
+    /**
+     * Undo the last change.
+     */
+    undo(): void
+    /**
+     * Redo the last undone change.
+     */
+    redo(): void
+    /**
+     * Toggle line comments for the selected lines.
+     */
+    toggleLineComment(): void
+    /**
+     * Toggle a block comment around the current selection.
+     */
+    toggleBlockComment(): void
     /**
      * Release resources. When you no longer need this instance, you must call this method to avoid memory leaks.
      */
@@ -13460,6 +14097,186 @@ If the event’s calendar does not support availability settings, this property�
     yes = 2,
   }
 
+  /**
+   * The manufactured form of a medication.
+   * @see {@link https://developer.apple.com/documentation/healthkit/hkmedicationgeneralform}
+   */
+  type HealthMedicationGeneralForm =
+    | "capsule"
+    | "cream"
+    | "device"
+    | "drops"
+    | "foam"
+    | "gel"
+    | "inhaler"
+    | "injection"
+    | "liquid"
+    | "lotion"
+    | "ointment"
+    | "patch"
+    | "powder"
+    | "spray"
+    | "suppository"
+    | "tablet"
+    | "topical"
+    | "unknown"
+
+  /**
+   * The status the system assigns to a logged medication dose event.
+   * - `notInteracted`: The person didn't interact with a scheduled medication reminder.
+   * - `notificationNotSent`: The system failed to deliver a scheduled medication notification.
+   * - `snoozed`: The person snoozed a scheduled medication notification.
+   * - `taken`: The person logged that they took the medication dose.
+   * - `skipped`: The person logged that they skipped the medication dose.
+   * - `notLogged`: The person undid a previously logged medication status.
+   */
+  type HealthMedicationDoseEventLogStatus =
+    | "notInteracted"
+    | "notificationNotSent"
+    | "snoozed"
+    | "taken"
+    | "skipped"
+    | "notLogged"
+
+  /**
+   * The kind of schedule the system associates with a logged medication dose event.
+   * - `asNeeded`: The person logged this dose event ad-hoc, outside of any scheduled reminder.
+   * - `schedule`: The person logged this dose event in response to a scheduled medication reminder.
+   */
+  type HealthMedicationDoseEventScheduleType = "asNeeded" | "schedule"
+
+  /**
+   * A clinical coding that links a medication to an external medical terminology system, such as RxNorm.
+   * @see {@link https://developer.apple.com/documentation/healthkit/hkclinicalcoding}
+   */
+  class HealthClinicalCoding {
+    private constructor()
+    /**
+     * The terminology system the coding belongs to, for example `"http://www.nlm.nih.gov/research/umls/rxnorm"`.
+     */
+    readonly system: string
+    /**
+     * The version of the terminology system, if any.
+     */
+    readonly version: string | null
+    /**
+     * The code that identifies the medication within the terminology system.
+     */
+    readonly code: string
+  }
+
+  /**
+   * A specific medication concept, such as ibuprofen or insulin.
+   * @see {@link https://developer.apple.com/documentation/healthkit/hkmedicationconcept}
+   */
+  class HealthMedicationConcept {
+    private constructor()
+    /**
+     * A stable identifier for the medication concept. The same medication produces the same
+     * identifier across devices, so you can use it to compare medications, or pass it to
+     * `Health.queryMedicationDoseEvents` via `medicationConceptIdentifiers` to fetch the doses of a medication.
+     */
+    readonly identifier: string
+    /**
+     * The display name for the medication, as the person entered or selected it.
+     */
+    readonly displayText: string
+    /**
+     * The general manufactured form of the medication, such as `"tablet"`, `"capsule"`, or `"injection"`.
+     */
+    readonly generalForm: HealthMedicationGeneralForm
+    /**
+     * The related clinical codings for the medication, such as RxNorm codes.
+     */
+    readonly relatedCodings: HealthClinicalCoding[]
+  }
+
+  /**
+   * A medication a person is tracking in the Health app, together with the details they can customize.
+   * Requires iOS 26.0 or later.
+   * @see {@link https://developer.apple.com/documentation/healthkit/hkuserannotatedmedication}
+   */
+  class HealthUserAnnotatedMedication {
+    private constructor()
+    /**
+     * The nickname the person added to the medication, if any.
+     */
+    readonly nickname: string | null
+    /**
+     * Whether the medication is in the archived section of the Health app (finished or no longer taken).
+     */
+    readonly isArchived: boolean
+    /**
+     * Whether the person set up a reminders schedule for the medication. Scheduled medications can still be taken as needed.
+     */
+    readonly hasSchedule: boolean
+    /**
+     * The specific medication concept the person is tracking.
+     */
+    readonly medication: HealthMedicationConcept
+  }
+
+  /**
+   * A logged dose of a medication — taken, skipped, snoozed, or otherwise.
+   * Requires iOS 26.0 or later.
+   * @see {@link https://developer.apple.com/documentation/healthkit/hkmedicationdoseevent}
+   */
+  class HealthMedicationDoseEvent {
+    private constructor()
+    /**
+     * The UUID of the dose event sample.
+     */
+    readonly uuid: string
+    /**
+     * The start date of the dose event.
+     */
+    readonly startDate: Date
+    /**
+     * The end date of the dose event.
+     */
+    readonly endDate: Date
+    /**
+     * The metadata dictionary attached to the dose event, if any.
+     */
+    readonly metadata: Record<string, any> | null
+    /**
+     * The device that generated the dose event, if any.
+     */
+    readonly device: HealthDevice | null
+    /**
+     * The source revision that generated the dose event.
+     */
+    readonly sourceRevision: HealthSourceRevision
+    /**
+     * Whether the dose was logged ad-hoc (`"asNeeded"`) or in response to a scheduled reminder (`"schedule"`).
+     */
+    readonly scheduleType: HealthMedicationDoseEventScheduleType
+    /**
+     * The identifier of the medication concept this dose event belongs to. Matches `HealthMedicationConcept.identifier`.
+     */
+    readonly medicationConceptIdentifier: string
+    /**
+     * The date and time the person was scheduled to take the medication. Non-null only for scheduled dose events.
+     */
+    readonly scheduledDate: Date | null
+    /**
+     * The dose quantity the person was expected to take, based on their schedule. Non-null only for scheduled dose events.
+     */
+    readonly scheduledDoseQuantity: number | null
+    /**
+     * The dose quantity the person reported as taken.
+     */
+    readonly doseQuantity: number | null
+    /**
+     * The log status the system assigned to this dose event.
+     */
+    readonly logStatus: HealthMedicationDoseEventLogStatus
+    /**
+     * The unit associated with the dose quantity.
+     */
+    readonly unit: HealthUnit
+  }
+
   namespace Health {
     /**
      * Indicates whether health data is available on the device.
@@ -13770,6 +14587,61 @@ If the event’s calendar does not support availability settings, this property�
     function deleteObject(
       object: HealthQuantitySample | HealthCumulativeQuantitySample | HealthDiscreteQuantitySample | HealthCategorySample | HealthCorrelation | HealthWorkout | HealthHeartbeatSeriesSample
     ): Promise<void>
+
+    /**
+     * Queries the medications a person is tracking in the Health app.
+     *
+     * Medications use per-object authorization: the first time you call this, the system asks the
+     * person to choose which medications your script may access. Authorization is requested automatically.
+     *
+     * Requires iOS 26.0 or later.
+     * @param options Optional parameters for the query, including:
+     * - isArchived: If set, only returns medications whose archived state matches (archived medications are finished or no longer taken).
+     * - hasSchedule: If set, only returns medications whose schedule state matches (whether a reminders schedule is set up).
+     * - limit: The maximum number of medications to return.
+     * @returns A promise that resolves to an array of the person's tracked medications.
+     * @see {@link https://developer.apple.com/documentation/healthkit/hkuserannotatedmedication}
+     */
+    function queryMedications(
+      options?: {
+        isArchived?: boolean
+        hasSchedule?: boolean
+        limit?: number
+      }
+    ): Promise<HealthUserAnnotatedMedication[]>
+
+    /**
+     * Queries logged medication dose events (each time a medication was taken, skipped, snoozed, etc.).
+     *
+     * Requires iOS 26.0 or later.
+     * @param options Optional parameters for the query, including:
+     * - startDate / endDate: The date range for the dose events.
+     * - limit: The maximum number of dose events to return.
+     * - strictStartDate / strictEndDate: Whether the range bounds match exactly.
+     * - sortDescriptors: How to sort the results by "startDate" or "endDate".
+     * - statuses: If set, only returns dose events whose log status is one of the given values.
+     * - scheduledStartDate / scheduledEndDate: If set, only returns scheduled dose events whose scheduled time falls within the window.
+     * - medicationConceptIdentifiers: If set, only returns dose events belonging to the given medications (use `HealthMedicationConcept.identifier`).
+     * @returns A promise that resolves to an array of medication dose events.
+     * @see {@link https://developer.apple.com/documentation/healthkit/hkmedicationdoseevent}
+     */
+    function queryMedicationDoseEvents(
+      options?: {
+        startDate?: Date
+        endDate?: Date
+        limit?: number
+        strictStartDate?: boolean
+        strictEndDate?: boolean
+        sortDescriptors?: Array<{
+          key: "startDate" | "endDate"
+          order?: "forward" | "reverse"
+        }>
+        statuses?: HealthMedicationDoseEventLogStatus[]
+        scheduledStartDate?: Date
+        scheduledEndDate?: Date
+        medicationConceptIdentifiers?: string[]
+      }
+    ): Promise<HealthMedicationDoseEvent[]>
 
     /**
      * Retrieves the preferred units for a given array of health quantity types.
@@ -15248,9 +16120,16 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
   class HttpRequest {
     private constructor()
     /**
-     * The path of the request.
+     * The path of the request, excluding the query string.
      */
     readonly path: string
+    /**
+     * The raw request-target from the request line, including the query string
+     * if present. Unlike `path`, which is stripped of the query, `target`
+     * preserves the original target exactly as the client sent it
+     * (e.g. `"/search?keyword=apple&page=2"`).
+     */
+    readonly target: string
     /**
      * The method of the request.
      */
@@ -16638,6 +17517,9 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
         paused?: PausedPresentation | null
         tintColor?: Color
         metadata?: Record<string, string>
+        liveActivity?: {
+          name: string
+        }
       }): Attributes | null
     }
     class Configuration {
@@ -17784,7 +18666,7 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     contentModificationDate: number
   }
 
-  declare const Spotlight: {
+  const Spotlight: {
     /**
      * Spotlight launch context. This is non-null when the current script is
      * running from `spotlight.tsx` after a user taps a Spotlight result.

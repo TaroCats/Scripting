@@ -144,9 +144,9 @@ export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) 
     <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 35 }}>
       {forecast.map((h, i) => (
         <VStack key={i} alignment="center" spacing={4}>
-          <Text font={10} foregroundStyle={foregroundStyle}>{h.time}</Text>
-          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' />
-          <Text font="footnote" bold foregroundStyle={foregroundStyle}>{h.temperature}°</Text>
+          <Text font={10} foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.time}</Text>
+          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' frame={{ height: 20 }} />
+          <Text font="footnote" bold foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.temperature}°</Text>
         </VStack>
       ))}
     </FlowLayout>
@@ -207,7 +207,7 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
 
       {hasSpacer && <Spacer />}
 
-      <HStack spacing={10} frame={{ height: 50 }}>
+      <HStack spacing={10} frame={{ height: 40 }}>
         <VStack alignment="center" spacing={10} >
           <HStack alignment="center" spacing={4} frame={{ height: 20 }}>
             <VerticalLabel text="最高" font={8} />
