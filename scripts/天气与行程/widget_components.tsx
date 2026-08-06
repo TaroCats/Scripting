@@ -184,9 +184,9 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
 
   return (
     <VStack alignment="leading" spacing={10}>
-      <HStack alignment="top" spacing={10}>
-        <Image systemName={w.symbolName} font="largeTitle" symbolRenderingMode='multicolor' padding={{ top: 5 }} />
-        <Text font="largeTitle" bold>{w.temperature}°</Text>
+      <HStack alignment="center" spacing={10} frame={{height: 40}}>
+        <Image systemName={w.symbolName} font="largeTitle" symbolRenderingMode='multicolor'/>
+        <Text font="largeTitle" bold frame={{ height: 40 }}>{w.temperature}°</Text>
       </HStack>
       <HStack alignment="center" spacing={4}>
         <Text font="footnote" foregroundStyle={foregroundStyle} lineLimit={1}>
