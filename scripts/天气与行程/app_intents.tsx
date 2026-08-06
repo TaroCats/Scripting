@@ -1,9 +1,3 @@
-/*
- * @Author: taro etsy@live.com
- * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-06-03 13:09:20
- * @Description: 
- */
 import { Widget, AppIntentManager, AppIntentProtocol } from "scripting"
 
 export const CompleteReminderIntent = AppIntentManager.register({
@@ -32,8 +26,6 @@ export const ToggleReminderIntent = AppIntentManager.register({
   protocol: AppIntentProtocol.AppIntent,
   perform: async () => {
     Storage.set("showReminder", !Storage.get("showReminder"))
-    setTimeout(() => {
-      Widget.reloadAll()
-    }, 100)
+    await Widget.reloadAll()
   }
 })

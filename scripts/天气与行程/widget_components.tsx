@@ -4,7 +4,7 @@
  * @LastEditTime: 2026-06-03 13:51:29
  * @Description: 
  */
-import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatMonthDay, formatWeekday } from "./shared"
+import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatDay, formatWeekday } from "./shared"
 import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "./app_intents"
 import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle, FlowLayout } from "scripting"
 
@@ -143,7 +143,7 @@ export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) 
   return (
     <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 35 }}>
       {forecast.map((h, i) => (
-        <VStack key={i} alignment="center" spacing={4}>
+        <VStack key={i} alignment="center" spacing={4} frame={{ height: 40 }}>
           <Text font={10} foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.time}</Text>
           <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' frame={{ height: 20 }} />
           <Text font="footnote" bold foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.temperature}°</Text>
@@ -209,13 +209,13 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
 
       <HStack spacing={10} frame={{ height: 40 }}>
         <VStack alignment="center" spacing={10} >
-          <HStack alignment="center" spacing={4} frame={{ height: 20 }}>
+          <HStack alignment="top" spacing={4} frame={{ height: 20 }}>
             <VerticalLabel text="最高" font={8} />
-            <Text font={18} bold>{w.highTemperature}°</Text>
+            <Text font={20} bold frame={{ height: 20 }}>{w.highTemperature}°</Text>
           </HStack>
-          <HStack alignment="center" spacing={4} frame={{ height: 20 }}>
+          <HStack alignment="bottom" spacing={4} frame={{ height: 20 }}>
             <VerticalLabel text="最低" font={8} />
-            <Text font={18} bold>{w.lowTemperature}°</Text>
+            <Text font={20} bold frame={{ height: 20 }}>{w.lowTemperature}°</Text>
           </HStack>
         </VStack>
         <HourlyForecastView forecast={w.hourlyForecast.slice(0, maxHour)} />
@@ -230,7 +230,7 @@ export function AgendaColumn({ dashboard, maxLines = 10 }: { dashboard: Dashboar
     <VStack alignment="leading" spacing={8}>
       <Button intent={ToggleReminderIntent({})} buttonStyle="plain" >
         <HStack alignment="center" spacing={6}>
-          <Text font="largeTitle" bold>{formatMonthDay(now)}</Text>
+          <Text font="largeTitle" bold>{formatDay(now)}</Text>
           <Rectangle
             fill="systemGray"
             stroke={{

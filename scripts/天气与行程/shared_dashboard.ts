@@ -1,7 +1,5 @@
 import { Notification } from "scripting"
-import { addDays, endOfDay, startOfDay } from "./shared_date"
-import { formatEventDateTime, formatShortTime } from "./shared_format"
-import { sortEvents } from "./shared_misc"
+import { addDays, endOfDay, startOfDay, formatEventDateTime, formatShortTime, sortEvents } from "./shared_format"
 import { summarizeWeather, translateWeatherCondition } from "./shared_weather"
 import { type AgendaItem, type DashboardData, type ReminderResult, type WeatherSummary } from "./shared_types"
 
@@ -9,20 +7,37 @@ const REMINDER_THREAD_ID = "weather-calendar-assistant"
 
 const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000
 const WEATHER_CACHE_PATH = `${FileManager.appGroupDocumentsDirectory}/weather_cache.json`
-function isTitleSimilar(title1: string, title2: string, threshold = 0.9): boolean {
-  // 标准化：转小写，移除常见标点
+function isTitleSimilar(title1: string, title2: string, threshold: number): boolean {
   const normalize = (str: string) =>
     str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
 
   const norm1 = normalize(title1)
   const norm2 = normalize(title2)
 
-  // 如果完全相同，直接返回
   if (norm1 === norm2) return true
+  if (norm1.includes(norm2) || norm2.includes(norm1)) return true
 
-  // 简单实现：检查一个是否包含另一个（可根据需要替换为更精确的算法）
-  return norm1.includes(norm2) || norm2.includes(norm1) ||
-    norm1 === norm2
+  // 基于 Levenshtein 距离的模糊匹配
+  const maxLen = Math.max(norm1.length, norm2.length)
+  if (maxLen === 0) return true
+
+  const distance = levenshtein(norm1, norm2)
+  return 1 - distance / maxLen >= threshold
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i)
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]
+    dp[0] = i
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j]
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1])
+      prev = tmp
+    }
+  }
+  return dp[n]
 }
 /**
  * 过滤事件数组，保留每个相似标题组的第一个事件
@@ -248,7 +263,7 @@ async function loadAgendaPart(now: Date, todayStart: Date, todayEnd: Date, lookA
     })
     const showReminder = Storage.get("showReminder") ?? true
     upcomingEvents = filterSimilarTitleEvents(sortedEvents, 0.85)
-      .filter((event) => showReminder ? event.type === "event" : event.type)
+      .filter((event) => showReminder ? event.type : event.type === "event")
       .filter((event) => event.endDate.getTime() >= now.getTime())
 
       .slice(0, 10)

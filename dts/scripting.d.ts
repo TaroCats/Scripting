@@ -6567,7 +6567,7 @@ type DirectoryBrowserViewProps = {
  * <NavigationStack>
  *   <DirectoryBrowserView
  *     title="Workspace"
- *     directoryPath={Script.directoryPath}
+ *     directoryPath={Script.directory}
  *     onFilesChanged={() => console.log("Files changed")}
  *   />
  * </NavigationStack>
@@ -6681,6 +6681,11 @@ type EnvironmentValues = {
     colorScheme: ColorScheme;
     colorSchemeContrast: ColorSchemeContrast;
     displayScale: number;
+    /**
+     * The current Dynamic Type size of the view hierarchy, reflecting the user's
+     * preferred text size (including the accessibility sizes).
+     */
+    dynamicTypeSize: DynamicTypeSize;
     horizontalSizeClass: UserInterfaceSizeClass | null;
     verticalSizeClass: UserInterfaceSizeClass | null;
     dismiss: () => void;
@@ -10111,7 +10116,22 @@ declare namespace Intent {
      *
      * If you have enabled `Images` as a intent input from the Intent Settings, when the system shares Images, the script will be displayed in the share sheet and can be selected to run.
      *
-     * When large images are passed from a share sheet or a shortcut action, the system may terminate the process due to memory constraints. In this case you should use `Run Script in App` action in Shortcuts app or enable the `Run in App` option in `Intent Inputs` settings.
+     * Prefer this over `imagesParameter` when you only need the file paths (for example
+     * to pass them along, or to decode selectively): reading a path does not decode the
+     * image, so it never risks the memory pressure that decoding a large image does.
+     */
+    const imagePathsParameter: string[] | undefined;
+    /**
+     * The images passed from a share sheet or a shortcut action, lazily decoded from
+     * `imagePathsParameter` on first access (and cached afterwards).
+     *
+     * If you have enabled `Images` as a intent input from the Intent Settings, when the system shares Images, the script will be displayed in the share sheet and can be selected to run.
+     *
+     * When large images are passed from a share sheet or a shortcut action, accessing this
+     * property decodes them and the system may terminate the process due to memory
+     * constraints. In that case, read `imagePathsParameter` instead, or use the
+     * `Run Script in App` action in the Shortcuts app / enable the `Run in App` option in
+     * `Intent Inputs` settings so decoding happens in the main app.
      */
     const imagesParameter: UIImage[] | undefined;
     /**
@@ -10626,6 +10646,7 @@ declare namespace Notification {
      * @param options.body The body of the notification.
      * @param options.badge The badge count for the app icon.
      * @param options.silent If true, the notification will be delivered silently without sound. Defaults to false.
+     * @param options.sound The name of a custom notification sound to play. Provide the full file name including its extension (e.g. `"chime.caf"`). You can reference a built-in sound or a custom sound you imported under Tools > Notifications > Notification Sounds. Supported formats are `.caf`, `.aiff` and `.wav`, and the sound must be shorter than 30 seconds. Ignored when `silent` is true. If omitted, the default notification sound is used.
      * @param options.iconImageData The custom notification icon image data, you can use it to replace the default icon, or use `SystemImageIcon` to use a system image with specific color.
      * @param options.interruptionLevel The importance and delivery timing of the notification.
      * @param options.userInfo Custom information associated with the notification.
@@ -10645,6 +10666,7 @@ declare namespace Notification {
         body?: string;
         badge?: number;
         silent?: boolean;
+        sound?: string;
         iconImageData?: Data | SystemImageIcon | null;
         interruptionLevel?: NotificationInterruptionLevel;
         userInfo?: Record<string, any>;
@@ -11333,8 +11355,9 @@ declare namespace Script {
      *  - `"live_activity"`: The script is running in the live activity extension, "live_activity.tsx" is the entry point.
      *  - `"alarm_live_activity"`: The script is rendering an AlarmKit live activity, "alarm_live_activity.tsx" is the entry point.
      *  - `"translation_ui_provider"`: The script is running in the translation UI provider extension, "translation_ui_provider.tsx" is the entry point.
+     *  - `"home_screen"`: The script is rendering the Home tab, "home_screen_default_ui.tsx" is the entry point.
      */
-    const env: "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "alarm_live_activity" | "translation_ui_provider";
+    const env: "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "alarm_live_activity" | "translation_ui_provider" | "home_screen";
     /**
      * Name of the current script.
      */
@@ -11611,6 +11634,40 @@ declare namespace Script {
      * @returns A function that can be used to remove the event listener.
      */
     function onResume(callback: (eventDetails: ResumeEventDetails) => void): () => void;
+    /**
+     * An event that happened on the Home tab. The three cases are mutually exclusive:
+     * a single switch or tap delivers exactly one of them.
+     *  - `"selected"`: the Home tab became the active tab.
+     *  - `"reselected"`: the Home tab was already active and the user tapped it again.
+     *  - `"deselected"`: another tab became active.
+     */
+    type HomeTabEvent = "selected" | "reselected" | "deselected";
+    /**
+     * Listen to Home tab events.
+     *
+     * Only meaningful for a script rendered on the Home tab, that is, a script whose
+     * `home_screen_default_ui.tsx` is selected in Settings. Registering in any other
+     * environment is harmless, but the callback is never called.
+     *
+     * The callback is not called for the initial appearance: the top-level code of
+     * `home_screen_default_ui.tsx` already runs while the tab is on screen.
+     *
+     * App-wide foreground/background changes are a different axis and are not reported here.
+     *
+     * @param callback Called with the event that happened.
+     * @returns A function that can be used to remove the event listener.
+     * @example
+     * ```tsx
+     * const off = Script.onHomeTabEvent(event => {
+     *   switch (event) {
+     *     case "selected": refresh(); break
+     *     case "reselected": scrollToTop(); break
+     *     case "deselected": pauseTimer(); break
+     *   }
+     * })
+     * ```
+     */
+    function onHomeTabEvent(callback: (event: HomeTabEvent) => void): () => void;
     /**
      * Determine whether user has full access to the Scripting PRO features.
      *

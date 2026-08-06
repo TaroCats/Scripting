@@ -185,7 +185,11 @@ declare global {
     const systemScriptCode: string | undefined
 
     /**
-     * Retrieve the current wakelock status.
+     * Whether **this script** currently holds the wake lock.
+     *
+     * The wake lock is shared by the whole app and each holder is tracked
+     * separately, so this reports only what your own script requested — it
+     * stays `false` when the screen is being kept awake by something else.
      */
     const isWakeLockEnabled: Promise<boolean>
 
@@ -202,6 +206,10 @@ declare global {
 
     /**
      * Enable or disable the wakelock. This method is only available in Scripting app.
+     *
+     * The lock is held per script: disabling it only drops your own script's
+     * hold, and the screen keeps staying awake if another script or an app
+     * screen still needs it.
      * @param enabled Whether to enable or disable the wake lock.
      */
     function setWakeLockEnabled(enabled: boolean): void
@@ -935,6 +943,14 @@ declare global {
     gps?: Record<string, any>
     tiff?: Record<string, any>
     iptc?: Record<string, any>
+    /**
+     * Apple MakerNote dictionary. Keys are numeric strings; key `'17'` holds the
+     * Live Photo asset identifier that pairs a still with its `.mov`.
+     *
+     * Only containers that support an EXIF MakerNote (jpeg / heic) can store this.
+     * You rarely need to write it by hand — `LivePhoto.createFromVideo` fills it in for you.
+     */
+    makerApple?: Record<string, any>
   }
 
   /**
@@ -2535,8 +2551,68 @@ declare global {
    * via `data:image/png;base64,${snap.pngBase64}`.
    */
   namespace MapSnapshotter {
+    /**
+     * A geographic overlay drawn on top of the snapshot image. Feed a
+     * `MapDirections` route straight in as a polyline:
+     * `{ type: "polyline", coordinates: route.coordinates }`.
+     */
+    type SnapshotOverlay =
+      | {
+          type: "polyline"
+          /** Ordered points of the line (needs at least 2). */
+          coordinates: MapCoordinate[]
+          /** Line color. Defaults to the system blue. */
+          strokeColor?: Color
+          /** Line width in points. Defaults to `4`. */
+          lineWidth?: number
+        }
+      | {
+          type: "polygon"
+          /** Ordered vertices; automatically closed (needs at least 3). */
+          coordinates: MapCoordinate[]
+          /** Outline color. Defaults to the system blue. */
+          strokeColor?: Color
+          /** Fill color. Defaults to a translucent version of the stroke. */
+          fillColor?: Color
+          /** Outline width in points. Defaults to `2`. */
+          lineWidth?: number
+        }
+      | {
+          type: "circle"
+          /** Center of the circle. */
+          center: MapCoordinate
+          /** Radius in meters. */
+          radius: number
+          /** Outline color. Defaults to the system blue. */
+          strokeColor?: Color
+          /** Fill color. Defaults to a translucent version of the stroke. */
+          fillColor?: Color
+          /** Outline width in points. Defaults to `2`. */
+          lineWidth?: number
+        }
+
+    /** A pin marker drawn on top of the snapshot image. */
+    type SnapshotAnnotation = {
+      /** Where the marker's tip points. */
+      coordinate: MapCoordinate
+      /** Marker color. Defaults to the system red. */
+      tintColor?: Color
+      /**
+       * Optional badge inside the marker head — an SF Symbol name
+       * (e.g. `"star.fill"`) if one exists, otherwise up to two characters
+       * of plain text. Omit for a plain dot.
+       */
+      glyph?: string
+      /** Optional caption drawn above the marker. */
+      title?: string
+    }
+
     type Options = {
-      /** Region to capture. Mutually exclusive with `camera`. */
+      /**
+       * Region to capture. Mutually exclusive with `camera`. When neither is
+       * given but `overlays`/`annotations` are, the region is computed
+       * automatically to fit all of them.
+       */
       region?: MapRegion
       /** Eye-style camera framing. Mutually exclusive with `region`; wins when both are provided. */
       camera?: MapCamera
@@ -2554,6 +2630,13 @@ declare global {
       mapStyle?: MapStyleSpec
       /** `"light"` (default) or `"dark"`. Adjusts the rendered map's color tinting. */
       appearance?: "light" | "dark"
+      /**
+       * Geographic overlays (routes, areas, circles) composited onto the
+       * snapshot. Drawn in array order, beneath the annotations.
+       */
+      overlays?: SnapshotOverlay[]
+      /** Pin markers composited on top of the snapshot and overlays. */
+      annotations?: SnapshotAnnotation[]
     }
 
     function take(options: Options): Promise<MapSnapshot>
@@ -3086,6 +3169,88 @@ declare global {
         cancelled: boolean | null
       }) => void
     }): Promise<() => void>
+
+    /**
+     * Turns an ordinary local video into a Live Photo resource pair that
+     * `Photos.saveLivePhoto` accepts.
+     *
+     * A Live Photo is not just "a photo plus a video": the Photo Library only pairs the two
+     * when the still image and the movie share a Live Photo asset identifier, and the movie
+     * carries a still-image-time metadata track. A plain `.mp4` plus a frame grabbed with
+     * `AVAsset` is rejected with `PHPhotosErrorDomain 3302`. This method writes all of that
+     * for you, so you never have to build the metadata by hand.
+     *
+     * The source video is trimmed around `stillTime`, its orientation is preserved, and both
+     * output files are written to the temporary directory unless you pass explicit paths.
+     *
+     * @example
+     * const pair = await LivePhoto.createFromVideo({ videoPath })
+     * await Photos.saveLivePhoto({
+     *   imagePath: pair.imagePath,
+     *   videoPath: pair.videoPath,
+     * })
+     */
+    static createFromVideo(options: {
+      /** Path of the local source video (mov / mp4 / any container AVFoundation can read). */
+      videoPath: string
+      /** Where to write the still image. Defaults to a file in the temporary directory. */
+      imageOutputPath?: string
+      /**
+       * Where to write the paired movie. Defaults to a file in the temporary directory.
+       * Must end with `.mov` — the Photo Library does not accept `.mp4` as a paired video.
+       */
+      videoOutputPath?: string
+      /**
+       * Which moment becomes the still cover, in seconds from the start of the source video.
+       * Defaults to the middle of the source. Values outside the video are clamped.
+       */
+      stillTime?: number
+      /**
+       * Maximum length of the paired movie in seconds. Defaults to 10. The kept window is
+       * centred on `stillTime`.
+       *
+       * There is no upper limit other than the source video itself — pass a larger number,
+       * or `Infinity`, to keep the whole thing. Bear in mind that a very long Live Photo is
+       * still stored as one item in the photo library, and how the library plays it back is
+       * up to iOS.
+       */
+      maxDuration?: number
+      /** Still image format. Defaults to `"jpeg"`. */
+      imageFormat?: "jpeg" | "heic"
+      /** Lossy compression quality 0..1 for the still image. Defaults to 0.9. */
+      quality?: number
+      /** Whether to keep the source audio track. Defaults to `true`. */
+      includeAudio?: boolean
+      /**
+       * Reuse a specific Live Photo asset identifier. Normally you should omit this and let
+       * a fresh one be generated.
+       *
+       * Must be a UUID string — the field that carries it inside the still image is
+       * fixed-length, so any other shape would be padded and would no longer match the
+       * movie. A non-UUID value is rejected.
+       */
+      assetIdentifier?: string
+    }): Promise<{
+      /** Path of the still image; pass this to `Photos.saveLivePhoto`. */
+      imagePath: string
+      /** Path of the paired `.mov`; pass this to `Photos.saveLivePhoto`. */
+      videoPath: string
+      /** The identifier shared by the still image and the movie. */
+      assetIdentifier: string
+      /** Length of the paired movie, in seconds. */
+      duration: number
+      /** The still moment, in seconds from the start of the **output** movie. */
+      stillTime: number
+      /** Pixel width of the still image. */
+      width: number
+      /** Pixel height of the still image. */
+      height: number
+      /**
+       * `true` when the source track could not be copied as-is and had to be re-encoded,
+       * which is slower and slightly lossy. Most videos copy through untouched.
+       */
+      reencoded: boolean
+    }>
   }
 
   /**
@@ -3559,6 +3724,13 @@ declare global {
     }): Promise<boolean>
     /**
      * Save a live photo to the Photos app
+     *
+     * The two files must be a matching pair: the still image and the movie have to share a
+     * Live Photo asset identifier, and the movie needs a still-image-time metadata track.
+     * An arbitrary photo plus an arbitrary video is rejected with `PHPhotosErrorDomain 3302`.
+     * Use `LivePhoto.createFromVideo(...)` to build a valid pair from an ordinary video, or
+     * `AVCapturePhotoOutput.capturePhoto` with `livePhotoMovieFile` to capture one directly.
+     *
      * @param imagePath The path of the image
      * @param videoPath The path of the video
      * @param shouldMoveFile If true, the file will be moved to the Photos app, otherwise it will be copied. Defaults to false.
