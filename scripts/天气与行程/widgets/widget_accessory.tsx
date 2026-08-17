@@ -4,7 +4,7 @@
  * @LastEditTime: 2026-05-22 15:34:47
  * @Description: 
  */
-import { type DashboardData, formatEventTime } from "./shared"
+import { type DashboardData, formatEventTime } from "../shared/shared"
 import { HStack, VStack, Text, Image } from "scripting"
 
 export function RectangularWidget({ dashboard }: { dashboard: DashboardData }) {

@@ -5,7 +5,7 @@
  * @Description: 小型天气日程助手小部件
  */
 import { HStack, VStack, Text, Image, Spacer } from "scripting"
-import { foregroundStyle, type DashboardData } from "./shared"
+import { foregroundStyle, type DashboardData } from "../shared/shared"
 import { EventLines } from "./widget_components"
 
 export function CompactWidget({ dashboard }: { dashboard: DashboardData }) {

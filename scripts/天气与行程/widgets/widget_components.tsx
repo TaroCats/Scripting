@@ -1,5 +1,5 @@
-import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatDay, formatWeekday } from "./shared"
-import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "./app_intents"
+import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatDay, formatWeekday } from "../shared/shared"
+import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "../app_intents"
 import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Divider, FlowLayout } from "scripting"
 
 type DayGroup = {

@@ -3,7 +3,7 @@ import {
   type AgendaItem,
   loadDashboardData,
   formatEventTime,
-} from "./shared";
+} from "./shared/shared";
 import {
   Text,
   Widget,

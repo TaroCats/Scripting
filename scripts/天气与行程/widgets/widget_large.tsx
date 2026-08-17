@@ -5,7 +5,7 @@
  * @Description: 
  */
 import { VStack, Spacer} from "scripting"
-import { type DashboardData } from "./shared"
+import { type DashboardData } from "../shared/shared"
 
 import { AgendaColumn, WeatherColumn } from "./widget_components"
 

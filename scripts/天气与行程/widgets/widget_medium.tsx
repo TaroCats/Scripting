@@ -5,7 +5,7 @@
  * @Description: 中型天气日程助手小部件
  * */
 import { HStack, Spacer, ZStack } from "scripting"
-import { type DashboardData } from "./shared"
+import { type DashboardData } from "../shared/shared"
 import { AgendaColumn, WeatherColumn } from "./widget_components"
 
 

@@ -1,9 +1,9 @@
 import { ZStack, Widget, AccessoryWidgetBackground } from "scripting"
-import { type DashboardData, loadDashboardData, buildWidgetReloadDate } from "./shared"
-import { CompactWidget } from "./widget_compact"
-import { MediumWidget } from "./widget_medium"
-import { LargeWidget } from "./widget_large"
-import { RectangularWidget, CircularWidget } from "./widget_accessory"
+import { type DashboardData, loadDashboardData, buildWidgetReloadDate } from "./shared/shared"
+import { CompactWidget } from "./widgets/widget_compact"
+import { MediumWidget } from "./widgets/widget_medium"
+import { LargeWidget } from "./widgets/widget_large"
+import { RectangularWidget, CircularWidget } from "./widgets/widget_accessory"
 
 function Root({ dashboard }: { dashboard: DashboardData }) {
   return (
