@@ -14,7 +14,7 @@ export function RectangularWidget({ dashboard }: { dashboard: DashboardData }) {
   return (
     <VStack alignment="leading" spacing={4}>
       <HStack alignment="center" spacing={4}>
-        <Image systemName={w?.symbolName ?? "cloud"} font="footnote" />
+        <Image systemName={w?.symbolName ?? "cloud"} font="footnote" shadow={{ color: "systemGray", radius: 2, y: 1 }} />
         <Text font="headline" bold>{w?.temperature ?? "--"}</Text>
         <Text font="footnote">{w ? `H:${w.highTemperature} L:${w.lowTemperature}` : ""}</Text>
       </HStack>
@@ -34,7 +34,7 @@ export function CircularWidget({ dashboard }: { dashboard: DashboardData }) {
   const w = dashboard.weather
   return (
     <VStack alignment="center" spacing={2}>
-      <Image systemName={w?.symbolName ?? "cloud"} font="headline" />
+      <Image systemName={w?.symbolName ?? "cloud"} font="headline" shadow={{ color: "systemGray", radius: 2, y: 1 }} />
       <Text font="caption" bold>{w?.temperature ?? "--"}</Text>
     </VStack>
   )

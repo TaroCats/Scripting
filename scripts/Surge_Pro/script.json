@@ -1,0 +1,49 @@
+{
+  "contributors" : [
+
+  ],
+  "name" : "Surge_Pro",
+  "version" : "1.5.1",
+  "iconImage" : null,
+  "entry" : "index.tsx",
+  "intentInputTypes" : [
+
+  ],
+  "color" : "rgba(174, 109, 216,1)",
+  "runInApp" : true,
+  "icon" : "square.2.layers.3d.fill",
+  "author" : {
+    "name" : "7452323",
+    "email" : "7452323@gmail.com",
+    "homepage" : null
+  },
+  "remoteResource" : {
+    "url" : "https:\/\/github.com\/7452323\/QuantumultX\/tree\/main\/Scripting\/Scripts\/Surge_Pro",
+    "hash" : "14d8489a104904269ebbd4ae703638ba",
+    "autoUpdateInterval" : 3600
+  },
+  "permissions" : null,
+  "description" : "原生 Scripting 版 Surge Core 状态、流量与策略组监控面板",
+  "localizedNames" : {
+    "pt" : "",
+    "de" : "",
+    "it" : "",
+    "ja" : "",
+    "es" : "",
+    "zh" : "",
+    "en" : "",
+    "fr" : "",
+    "ru" : ""
+  },
+  "localizedDescriptions" : {
+    "en" : "",
+    "zh" : "",
+    "ja" : "",
+    "es" : "",
+    "fr" : "",
+    "ru" : "",
+    "pt" : "",
+    "de" : "",
+    "it" : ""
+  }
+}

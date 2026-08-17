@@ -1,12 +1,6 @@
-/*
- * @Author: taro etsy@live.com
- * @LastEditors: taro etsy@live.com
- * @LastEditTime: 2026-06-03 13:51:29
- * @Description: 
- */
 import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatDay, formatWeekday } from "./shared"
 import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "./app_intents"
-import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Rectangle, FlowLayout } from "scripting"
+import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Divider, FlowLayout } from "scripting"
 
 type DayGroup = {
   key: string
@@ -96,11 +90,9 @@ export function EventLines({
 
   if (events.length === 0) {
     return (
-      <VStack alignment="leading" spacing={4}>
-        <Text foregroundStyle={foregroundStyle} font="footnote">
-          最近无事发生
-        </Text>
-      </VStack>
+      <Text foregroundStyle={foregroundStyle} font="footnote">
+        最近无事发生
+      </Text>
     )
   }
 
@@ -139,13 +131,13 @@ export function HourlyForecastView({ forecast }: { forecast: HourlyWeather[] }) 
   if (forecast.length === 0) {
     return null
   }
-
+  console.log(forecast)
   return (
     <FlowLayout spacing={6} frame={{ maxWidth: forecast.length * 35 }}>
       {forecast.map((h, i) => (
         <VStack key={i} alignment="center" spacing={4} frame={{ height: 40 }}>
           <Text font={10} foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.time}</Text>
-          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' frame={{ height: 20 }} />
+          <Image systemName={h.symbolName} font={16} foregroundStyle={foregroundStyle} symbolRenderingMode='multicolor' frame={{ height: 20 }} shadow={{ color: "systemGray", radius: 2, y: 1 }} />
           <Text font="footnote" bold foregroundStyle={foregroundStyle} frame={{ height: 10 }}>{h.temperature}°</Text>
         </VStack>
       ))}
@@ -181,11 +173,10 @@ export function WeatherColumn({ dashboard, maxHour = 3, hasSpacer = false }: { d
     )
   }
 
-
   return (
     <VStack alignment="leading" spacing={10}>
       <HStack alignment="center" spacing={10} frame={{height: 40}}>
-        <Image systemName={w.symbolName} font="largeTitle" symbolRenderingMode='multicolor'/>
+        <Image systemName={w.symbolName} font="largeTitle" symbolRenderingMode='multicolor' shadow={{ color: "systemGray", radius: 2, y: 1 }} />
         <Text font="largeTitle" bold frame={{ height: 40 }}>{w.temperature}°</Text>
       </HStack>
       <HStack alignment="center" spacing={4}>
@@ -231,18 +222,7 @@ export function AgendaColumn({ dashboard, maxLines = 10 }: { dashboard: Dashboar
       <Button intent={ToggleReminderIntent({})} buttonStyle="plain" >
         <HStack alignment="center" spacing={6}>
           <Text font="largeTitle" bold>{formatDay(now)}</Text>
-          <Rectangle
-            fill="systemGray"
-            stroke={{
-              shapeStyle: "systemGray",
-              strokeStyle: {
-                lineWidth: 1,
-                lineJoin: "round"
-              }
-            }}
-            opacity={0.3}
-            frame={{ width: .2, height: 20 }}
-          />
+          <Divider frame={{ height: 30 }} />
           <WeekdayVertical />
           <Spacer />
         </HStack>

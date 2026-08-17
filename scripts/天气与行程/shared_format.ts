@@ -20,16 +20,7 @@ export function sortEvents<T extends { startDate: Date }>(events: T[]) {
   return [...events].sort((left, right) => left.startDate.getTime() - right.startDate.getTime())
 }
 
-export function formatPlacemark(placemark: Record<string, unknown> | undefined) {
-  if (!placemark) return "当前位置"
-  const keys = ["name", "locality", "subLocality", "administrativeArea"]
-  const parts = keys
-    .map((key) => placemark[key])
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
-  return parts.length > 0 ? parts.join(" ") : "当前位置"
-}
-
-export function createFormatter(dateStyle: DateFormatterStyle, timeStyle: DateFormatterStyle) {
+function createFormatter(dateStyle: DateFormatterStyle, timeStyle: DateFormatterStyle) {
   /** @ts-ignore */
   const formatter = new DateFormatter()
   formatter.locale = "zh_CN"
@@ -44,12 +35,18 @@ const dayFormatter = createFormatter(DateFormatterStyle.medium, DateFormatterSty
 const timeFormatter = createFormatter(DateFormatterStyle.none, DateFormatterStyle.short)
 /** @ts-ignore */
 const dayTimeFormatter = createFormatter(DateFormatterStyle.medium, DateFormatterStyle.short)
+
 /** @ts-ignore */
-const dayFormatter2 = createFormatter(DateFormatterStyle.none, DateFormatterStyle.none)
+const dayNumberFormatter = new DateFormatter()
+dayNumberFormatter.locale = "zh_CN"
+dayNumberFormatter.dateFormat = "dd"
+dayNumberFormatter.timeZone = "Asia/Shanghai"
+
 /** @ts-ignore */
-const weekdayFormatter = createFormatter(DateFormatterStyle.none, DateFormatterStyle.none)
-/** @ts-ignore */
-const lunarFormatter = createFormatter(DateFormatterStyle.none, DateFormatterStyle.none)
+const weekdayFormatter = new DateFormatter()
+weekdayFormatter.locale = "zh_CN"
+weekdayFormatter.dateFormat = "EEEE"
+weekdayFormatter.timeZone = "Asia/Shanghai"
 
 export function formatEventTime(event: AgendaItem) {
   if (event.isAllDay) return "全天"
@@ -66,23 +63,9 @@ export function formatShortTime(date: Date) {
 }
 
 export function formatDay(date: Date) {
-  dayFormatter2.locale = "zh_CN"
-  dayFormatter2.dateFormat = "dd"
-  dayFormatter2.timeZone = "Asia/Shanghai"
-  return dayFormatter2.string(date)
+  return dayNumberFormatter.string(date)
 }
 
 export function formatWeekday(date: Date) {
-  weekdayFormatter.locale = "zh_CN"
-  weekdayFormatter.dateFormat = "EEEE"
-  weekdayFormatter.timeZone = "Asia/Shanghai"
   return weekdayFormatter.string(date).replace("星期", "周")
-}
-
-export function formatLunarDate(date: Date) {
-  lunarFormatter.locale = "zh_CN"
-  lunarFormatter.calendar = "chinese"
-  lunarFormatter.dateFormat = "MMMMd"
-  lunarFormatter.timeZone = "Asia/Shanghai"
-  return lunarFormatter.string(date)
 }

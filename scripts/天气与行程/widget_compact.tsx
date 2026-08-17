@@ -15,7 +15,7 @@ export function CompactWidget({ dashboard }: { dashboard: DashboardData }) {
       {w ? (
         <VStack alignment="leading" spacing={2}>
           <HStack alignment="center" spacing={4}>
-            <Image systemName={w.symbolName} font="title2" />
+            <Image systemName={w.symbolName} font="title2" shadow={{ color: "systemGray", radius: 2, y: 1 }} />
             <Text font="title2" bold>{w.temperature}°</Text>
           </HStack>
           <Text font={10} bold foregroundStyle={foregroundStyle} lineLimit={1}>

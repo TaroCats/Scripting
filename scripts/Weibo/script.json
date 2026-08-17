@@ -1,0 +1,42 @@
+{
+  "remoteResource" : {
+    "url" : "https:\/\/imarkr.com\/api\/github\/download\/Honye\/scripting-scripts\/scripts\/Weibo.zip",
+    "autoUpdateInterval" : 3600,
+    "hash" : "5f4718871728970fec8f675365f14dee"
+  },
+  "permissions" : null,
+  "name" : "Weibo",
+  "description" : null,
+  "entry" : "index.tsx",
+  "author" : {
+    "email" : "Honye@github.com",
+    "homepage" : "https:\/\/t.me\/iiMarkr",
+    "name" : "Jackie"
+  },
+  "localizedNames" : {
+    "en" : "Weibo",
+    "zh" : "微博热搜"
+  },
+  "color" : "rgba(238, 92, 98,1)",
+  "iconImage" : null,
+  "intentInputTypes" : [
+
+  ],
+  "contributors" : [
+
+  ],
+  "localizedDescriptions" : {
+    "zh" : "",
+    "it" : "",
+    "ja" : "",
+    "en" : "",
+    "ru" : "",
+    "de" : "",
+    "pt" : "",
+    "fr" : "",
+    "es" : ""
+  },
+  "icon" : "doc.text.magnifyingglass",
+  "runInApp" : false,
+  "version" : "1.1.0"
+}
