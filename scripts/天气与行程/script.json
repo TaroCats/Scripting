@@ -1,45 +1,49 @@
 {
-  "permissions" : null,
-  "localizedDescriptions" : {
-    "ja" : "",
-    "es" : "",
-    "en" : "",
-    "pt" : "",
-    "zh" : "",
+  "contributors" : [
+
+  ],
+  "version" : "1.0.0",
+  "localizedNames" : {
+    "de" : "",
     "fr" : "",
-    "it" : "",
+    "en" : "",
+    "ja" : "",
     "ru" : "",
-    "de" : ""
+    "zh" : "",
+    "it" : "",
+    "es" : "",
+    "pt" : ""
+  },
+  "permissions" : null,
+  "entry" : "index.tsx",
+  "localizedDescriptions" : {
+    "zh" : "",
+    "en" : "",
+    "fr" : "",
+    "es" : "",
+    "it" : "",
+    "de" : "",
+    "ru" : "",
+    "ja" : "",
+    "pt" : ""
+  },
+  "remoteResource" : {
+    "autoUpdateInterval" : 3600,
+    "url" : "https:\/\/github.com\/TaroCats\/Scripting\/tree\/main\/scripts\/%E5%A4%A9%E6%B0%94%E4%B8%8E%E8%A1%8C%E7%A8%8B",
+    "hash" : "695edecc3011d6f5714ac1d00360d40a"
   },
   "intentInputTypes" : [
 
   ],
-  "runInApp" : false,
-  "localizedNames" : {
-    "zh" : "",
-    "es" : "",
-    "ja" : "",
-    "it" : "",
-    "ru" : "",
-    "en" : "",
-    "de" : "",
-    "pt" : "",
-    "fr" : ""
-  },
-  "icon" : "map.fill",
-  "contributors" : [
-
-  ],
   "iconImage" : "https:\/\/raw.githubusercontent.com\/TaroCats\/Scripting\/refs\/heads\/main\/scripts\/%E5%A4%A9%E6%B0%94%E4%B8%8E%E8%A1%8C%E7%A8%8B\/icon.png",
-  "entry" : "index.tsx",
-  "remoteResource" : null,
-  "version" : "1.0.0",
-  "author" : {
-    "homepage" : null,
-    "name" : "TARO",
-    "email" : "i@taro.cat"
-  },
+  "runInApp" : false,
+  "icon" : "map.fill",
   "color" : "rgba(0, 0, 0, 1.00)",
   "description" : "",
-  "name" : "天气与行程"
+  "name" : "天气与行程",
+  "author" : {
+    "name" : "TARO",
+    "email" : "i@taro.cat",
+    "homepage" : null
+  }
 }
