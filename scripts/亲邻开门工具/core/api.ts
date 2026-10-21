@@ -4,8 +4,14 @@
  * 只做三件事：拼公共参数、签名、解包。
  * 主机名/签名顺序/响应外壳都是 UNKNOWN，集中在 config 与本文件，便于实测后单点修正。
  */
-import { encryptBodyToBase64, signParams } from "./crypto"
-import { EP, type ApiConfig } from "./protocol"
+import {
+  encryptBodyToBase64,
+  randomNumber4,
+  signHeader,
+  signParams,
+  timestampMicros,
+} from "./crypto"
+import { EP, SIGN_VERSION, type ApiConfig } from "./protocol"
 import type { Session } from "./session"
 
 export class ApiError extends Error {
@@ -51,10 +57,6 @@ export function isSuccess(env: Envelope): boolean {
   return SUCCESS_CODES.has(env.code) || env.code === ""
 }
 
-function nonce(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
-}
-
 export type RequestOptions = {
   cfg: ApiConfig
   session?: Session | null
@@ -67,22 +69,36 @@ async function post(path: string, params: Record<string, string>, opt: RequestOp
   const { cfg, session } = opt
   if (!cfg.baseURL) throw new ApiError("未配置 baseURL（设置页填写后再试）")
 
+  // 时间戳必须是微秒：原 App 用 DateTime.microsecondsSinceEpoch
   const payload: Record<string, string> = {
     ...params,
-    appId: cfg.appId,
-    channel: cfg.channel,
     version: cfg.appVersion,
-    timestamp: String(Date.now()),
-    nonce: nonce(),
+    timestamp: timestampMicros(),
+    nonce: randomNumber4(),
   }
   if (session?.token) payload.token = session.token
   if (session?.sessionId) payload.sessionId = session.sessionId
-  if (cfg.signMode === "md5") payload.sign = signParams(payload, cfg)
+  // 业务签名：ASCII 排序 + &key=<appSecret> → MD5
+  payload.sign = signParams(payload, cfg)
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
     Accept: "application/json",
     ...(opt.headers ?? {}),
+  }
+  // header 签名：{appid,nonce,timestamp,version:"v2"} + &appsecret=<headerSecret>
+  if (cfg.signMode === "header") {
+    const h = {
+      appid: cfg.appId,
+      nonce: payload.nonce,
+      timestamp: payload.timestamp,
+      version: SIGN_VERSION,
+    }
+    headers.appid = h.appid
+    headers.nonce = h.nonce
+    headers.timestamp = h.timestamp
+    headers.version = h.version
+    headers.sign = signHeader(h, cfg.headerSecret)
   }
 
   let body = JSON.stringify(payload)

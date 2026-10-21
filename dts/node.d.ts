@@ -2,9 +2,10 @@
  * Node compatibility type declarations for the Scripting app.
  *
  * Describes the Node-compatible runtime layered on JavaScriptCore: a curated
- * subset of Node that is ACTUALLY bridged/implemented. Modules NOT declared here
- * (net/tls/dgram/child_process/cluster/...) are intentionally absent — importing
- * them is a type error, matching the runtime which throws "not supported".
+ * subset of Node that is ACTUALLY bridged/implemented. Some runtime modules are
+ * compatibility placeholders and are intentionally not declared here; importing
+ * a module successfully does not prove that its operations have real effects.
+ * See the bundled node_compat guide for functional, placeholder and rejected APIs.
  *
  * Maintained DIRECTLY in this repo (ScriptingKit/Resources/scripting-js/dts/
  * node.d.ts). Unlike global.d.ts it has NO dependency on the "scripting" SDK
@@ -17,13 +18,13 @@
  *     Buffer, process, require, __dirname, __filename, global,
  *     setImmediate, clearImmediate, queueMicrotask,
  *     TextEncoder, TextDecoder, URL, URLSearchParams,
- *     crypto (Web Crypto subset: getRandomValues + randomUUID ONLY),
+ *     crypto (WebCrypto: getRandomValues, randomUUID, subtle, chacha20Poly1305),
  *     plus the global TYPES Buffer / BufferConstructor / BufferEncoding / NodeJS.
  *   MODULE (require import — `declare module` blocks further down):
  *     fs, fs/promises, crypto (Node crypto: createHash/...), path, os, stream,
  *     buffer, events, util, url, querystring, assert, string_decoder, http,
- *     https, timers (+ their "node:" aliases).
- * Note `crypto`: the GLOBAL `crypto` is Web Crypto (getRandomValues/randomUUID);
+ *     https, net (TCP clients/servers), tls (certificate TLS client), timers (+ their "node:" aliases).
+ * Note `crypto`: the GLOBAL `crypto` is WebCrypto (including subtle and chacha20Poly1305);
  * the Node `crypto` module (createHash/createHmac/...) needs `require("crypto")`.
  *
  * NOTE: this is intentionally a SCRIPT file (no top-level import/export), so its
@@ -127,8 +128,15 @@ declare namespace NodeJS {
     main: any
   }
 
-  type Timeout = ReturnType<typeof setTimeout>
-  type Immediate = { ref(): void; unref(): void }
+  interface Timeout {
+    ref(): this
+    unref(): this
+    hasRef(): boolean
+    refresh(): this
+    close(): this
+    [Symbol.toPrimitive](): number
+  }
+  interface Immediate { ref(): this; unref(): this; hasRef(): boolean; [Symbol.toPrimitive](): number }
 }
 
 declare const Buffer: BufferConstructor
@@ -139,7 +147,7 @@ declare const __filename: string
 declare const global: typeof globalThis
 
 declare function setImmediate(callback: (...args: any[]) => void, ...args: any[]): NodeJS.Immediate
-declare function clearImmediate(immediate: NodeJS.Immediate): void
+declare function clearImmediate(immediate: NodeJS.Immediate | number | undefined): void
 
 // Web globals (standard Web/WHATWG APIs available at runtime).
 declare class TextEncoder {
@@ -157,11 +165,12 @@ declare const crypto: {
   getRandomValues<T extends ArrayBufferView>(array: T): T
   randomUUID(): string
   /**
-   * WebCrypto SubtleCrypto. Symmetric algorithms only: `digest`, HMAC
-   * `sign`/`verify`, and AES-GCM `encrypt`/`decrypt`. Asymmetric algorithms
-   * (RSA, EC, ECDH, PBKDF2, …) reject with a `NotSupportedError`.
+   * WebCrypto API, including HKDF, X25519 key agreement and Ed25519 signatures.
+   * Also available as require('node:crypto').webcrypto.subtle.
    */
   readonly subtle: SubtleCrypto
+  /** Scripting extension: ciphertext followed by a 16-byte tag; nonce is supplied separately. */
+  readonly chacha20Poly1305: ChaCha20Poly1305
 }
 declare class URLSearchParams implements Iterable<[string, string]> {
   constructor(init?: string | Record<string, string> | [string, string][] | URLSearchParams)
@@ -267,10 +276,32 @@ type SubtleAlgorithm =
       length?: number
       [key: string]: any
     }
+interface HKDFDeriveParams {
+  name: "HKDF"
+  hash: "SHA-256" | "SHA-384" | "SHA-512" | { name: "SHA-256" | "SHA-384" | "SHA-512" }
+  salt: ArrayBufferView | ArrayBuffer
+  info: ArrayBufferView | ArrayBuffer
+}
+interface ChaCha20Poly1305Options {
+  /** Exactly 32 bytes. */
+  key: ArrayBufferView | ArrayBuffer
+  /** Exactly 12 bytes; unique for every encryption under the same key. */
+  nonce: ArrayBufferView | ArrayBuffer
+  additionalData?: ArrayBufferView | ArrayBuffer
+}
+interface ChaCha20Poly1305 {
+  encrypt(options: ChaCha20Poly1305Options, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>
+  decrypt(options: ChaCha20Poly1305Options, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>
+}
+interface CryptoKeyPair {
+  readonly privateKey: CryptoKey
+  readonly publicKey: CryptoKey
+}
+type Curve25519Algorithm = "X25519" | "Ed25519" | { name: "X25519" | "Ed25519" }
 interface SubtleCrypto {
   digest(algorithm: SubtleAlgorithm, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>
   importKey(
-    format: "raw" | "jwk",
+    format: "raw" | "jwk" | "spki" | "pkcs8",
     keyData: ArrayBufferView | ArrayBuffer | JsonWebKey,
     algorithm: SubtleAlgorithm,
     extractable: boolean,
@@ -288,7 +319,11 @@ interface SubtleCrypto {
   ): Promise<boolean>
   encrypt(algorithm: SubtleAlgorithm, key: CryptoKey, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>
   decrypt(algorithm: SubtleAlgorithm, key: CryptoKey, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>
+  generateKey(algorithm: Curve25519Algorithm, extractable: boolean, keyUsages: string[]): Promise<CryptoKeyPair>
   generateKey(algorithm: SubtleAlgorithm, extractable: boolean, keyUsages: string[]): Promise<CryptoKey>
+  deriveBits(algorithm: HKDFDeriveParams, baseKey: CryptoKey, length: number): Promise<ArrayBuffer>
+  deriveBits(algorithm: SubtleAlgorithm, baseKey: CryptoKey, length?: number | null): Promise<ArrayBuffer>
+  deriveKey(algorithm: SubtleAlgorithm, baseKey: CryptoKey, derivedKeyType: SubtleAlgorithm, extractable: boolean, keyUsages: string[]): Promise<CryptoKey>
 }
 
 // ---------------------------------------------------------------------------
@@ -411,8 +446,29 @@ declare module "fs" {
     ctime: Date
     birthtime: Date
   }
-  class Dirent {
-    name: string
+  interface OpenDirOptions {
+    encoding?: BufferEncoding | "buffer"
+    bufferSize?: number
+    recursive?: boolean
+  }
+  class Dir<Name extends string | Buffer = string> implements AsyncIterable<Dirent<Name>> {
+    readonly path: string
+    read(): Promise<Dirent<Name> | null>
+    read(callback: (error: Error | null, entry: Dirent<Name> | null) => void): void
+    readSync(): Dirent<Name> | null
+    close(): Promise<void>
+    close(callback: (error: Error | null) => void): void
+    closeSync(): void
+    [Symbol.asyncIterator](): AsyncIterator<Dirent<Name>>
+  }
+  function opendirSync(path: PathLike, options: OpenDirOptions & { encoding: "buffer" }): Dir<Buffer>
+  function opendirSync(path: PathLike, options?: OpenDirOptions | BufferEncoding): Dir
+  function opendir(path: PathLike, callback: (error: Error | null, dir: Dir) => void): void
+  function opendir(path: PathLike, options: OpenDirOptions | BufferEncoding, callback: (error: Error | null, dir: Dir) => void): void
+  class Dirent<Name extends string | Buffer = string> {
+    name: Name
+    readonly parentPath?: string
+    readonly path?: string
     isFile(): boolean
     isDirectory(): boolean
     isSymbolicLink(): boolean
@@ -470,6 +526,19 @@ declare module "fs" {
   }
 
   namespace promises {
+    interface FileHandle {
+      readonly fd: number
+      createReadStream(options?: { encoding?: BufferEncoding; highWaterMark?: number; start?: number; end?: number; autoClose?: boolean; emitClose?: boolean }): import("stream").Readable
+      readFile(options?: { encoding?: null } | null): Promise<Buffer>
+      readFile(options: { encoding: BufferEncoding } | BufferEncoding): Promise<string>
+      read(buffer: Uint8Array, offset?: number, length?: number, position?: number | null): Promise<{ bytesRead: number; buffer: Uint8Array }>
+      close(): Promise<void>
+      stat(): Promise<Stats>
+      truncate(len?: number): Promise<void>
+      sync(): Promise<void>
+      datasync(): Promise<void>
+    }
+    function open(path: PathLike, flags?: string | number, mode?: Mode): Promise<FileHandle>
     function readFile(path: PathLike, options?: { encoding?: null; flag?: string } | null): Promise<Buffer>
     function readFile(path: PathLike, options: { encoding: BufferEncoding; flag?: string } | BufferEncoding): Promise<string>
     function writeFile(path: PathLike, data: string | Uint8Array, options?: WriteFileOptions | BufferEncoding): Promise<void>
@@ -479,6 +548,8 @@ declare module "fs" {
     function unlink(path: PathLike): Promise<void>
     function readdir(path: PathLike, options?: { encoding?: BufferEncoding; withFileTypes?: false } | BufferEncoding): Promise<string[]>
     function readdir(path: PathLike, options: { withFileTypes: true }): Promise<Dirent[]>
+    function opendir(path: PathLike, options: OpenDirOptions & { encoding: "buffer" }): Promise<Dir<Buffer>>
+    function opendir(path: PathLike, options?: OpenDirOptions | BufferEncoding): Promise<Dir>
     function stat(path: PathLike): Promise<Stats>
     function lstat(path: PathLike): Promise<Stats>
     function access(path: PathLike, mode?: number): Promise<void>
@@ -554,6 +625,10 @@ declare module "os" {
 // ---------------------------------------------------------------------------
 
 declare module "crypto" {
+  /** Compares the raw bytes of equally sized buffers or views using the native timing-safe primitive. */
+  function timingSafeEqual(a: ArrayBufferLike | ArrayBufferView, b: ArrayBufferLike | ArrayBufferView): boolean
+  /** Shares global crypto, including HKDF and the Scripting ChaCha20-Poly1305 extension. */
+  const webcrypto: typeof crypto
   type BinaryLike = string | Uint8Array
   type Encoding = BufferEncoding
 
@@ -614,6 +689,8 @@ declare module "util" {
   function inherits(constructor: any, superConstructor: any): void
   function deprecate<T extends (...args: any[]) => any>(fn: T, msg: string): T
   function isDeepStrictEqual(a: any, b: any): boolean
+  /** Modern compatibility extension; runtime baseline remains Node 20.0.0. */
+  function styleText(format: string | string[], text: string, options?: {validateStream?: boolean; stream?: {isTTY?: boolean}}): string
   class TextEncoder {
     encode(input?: string): Uint8Array
     readonly encoding: string
@@ -792,12 +869,22 @@ declare module "https" {
 
 declare module "timers" {
   function setTimeout(callback: (...args: any[]) => void, ms?: number, ...args: any[]): NodeJS.Timeout
-  function clearTimeout(timeout: NodeJS.Timeout): void
+  function clearTimeout(timeout: NodeJS.Timeout | number | undefined): void
   function setInterval(callback: (...args: any[]) => void, ms?: number, ...args: any[]): NodeJS.Timeout
-  function clearInterval(interval: NodeJS.Timeout): void
+  function clearInterval(interval: NodeJS.Timeout | number | undefined): void
   function setImmediate(callback: (...args: any[]) => void, ...args: any[]): NodeJS.Immediate
-  function clearImmediate(immediate: NodeJS.Immediate): void
+  function clearImmediate(immediate: NodeJS.Immediate | number | undefined): void
+  const promises: typeof import("timers/promises")
 }
+
+declare module "timers/promises" {
+  interface TimerOptions {signal?: AbortSignal; /** Records intent; does not control iOS process lifetime. */ ref?: boolean}
+  function setTimeout<T = void>(delay?: number, value?: T, options?: TimerOptions): Promise<T>
+  function setImmediate<T = void>(value?: T, options?: TimerOptions): Promise<T>
+  function setInterval<T = void>(delay?: number, value?: T, options?: TimerOptions): AsyncIterableIterator<T>
+  const scheduler: {wait(delay: number, options?: TimerOptions): Promise<void>; yield(): Promise<void>}
+}
+declare module "node:timers/promises" {export * from "timers/promises"}
 
 // ---------------------------------------------------------------------------
 // zlib  (gzip / deflate / inflate — sync, async-callback, and stream forms.
@@ -952,3 +1039,147 @@ declare namespace NodeJS {
     syscall?: string
   }
 }
+
+// ---------------------------------------------------------------------------
+// net: bounded TCP streams and servers (full Scripting runtime, main JS execution queue)
+// ---------------------------------------------------------------------------
+declare module "net" {
+  import { Duplex } from "stream"
+  import { EventEmitter } from "events"
+  interface SocketOptions {
+    allowHalfOpen?: boolean
+    highWaterMark?: number
+    readableHighWaterMark?: number
+    writableHighWaterMark?: number
+    noDelay?: boolean
+    keepAlive?: boolean
+    keepAliveInitialDelay?: number
+  }
+  interface TCPConnectOptions extends SocketOptions {
+    port: number
+    host?: string
+    family?: 0 | 4 | 6
+    lookup?: (hostname: string, options: { family: 0 | 4 | 6; hints: 0; all: false }, callback: (error: Error | null, address?: string, family?: 4 | 6) => void) => void
+    timeout?: number
+    signal?: AbortSignal
+  }
+  interface AddressInfo { address: string; family: "IPv4" | "IPv6"; port: number }
+  class Socket extends Duplex {
+    constructor(options?: SocketOptions)
+    connect(options: TCPConnectOptions, listener?: () => void): this
+    connect(port: number, host?: string, listener?: () => void): this
+    connect(port: number, listener?: () => void): this
+    write(data: string | Uint8Array, callback?: (error?: Error | null) => void): boolean
+    write(data: string | Uint8Array, encoding?: BufferEncoding, callback?: (error?: Error | null) => void): boolean
+    end(callback?: (error?: Error) => void): this
+    end(data?: string | Uint8Array, callback?: (error?: Error) => void): this
+    end(data?: string | Uint8Array, encoding?: BufferEncoding, callback?: (error?: Error) => void): this
+    setTimeout(timeout: number, callback?: () => void): this
+    /** Configure before connect; post-connect changes explicitly reject. */
+    setNoDelay(noDelay?: boolean): this
+    /** Configure before connect; post-connect changes explicitly reject. */
+    setKeepAlive(enable?: boolean, initialDelay?: number): this
+    destroySoon(): this
+    address(): AddressInfo | Record<string, never>
+    readonly connecting: boolean
+    readonly pending: boolean
+    readonly bytesRead: number
+    readonly bytesWritten: number
+    readonly bufferSize: number
+    readonly timeout: number
+    readonly readableLength: number
+    readonly writableLength: number
+    readonly readableEnded: boolean
+    readonly writableEnded: boolean
+    readonly writableFinished: boolean
+    readonly destroyed: boolean
+    readonly localAddress: string | undefined
+    readonly localPort: number | undefined
+    readonly localFamily: "IPv4" | "IPv6" | undefined
+    readonly remoteAddress: string | undefined
+    readonly remotePort: number | undefined
+    readonly remoteFamily: "IPv4" | "IPv6" | undefined
+    readonly readyState: "opening" | "open" | "readOnly" | "writeOnly" | "closed"
+    on(event: "close", listener: (hadError: boolean) => void): this
+    on(event: "lookup", listener: (error: Error | null, address: string | undefined, family: number | undefined, host: string) => void): this
+    on(event: "data", listener: (data: Buffer | string) => void): this
+    on(event: "error", listener: (error: Error & { code?: string; errno?: number; syscall?: string; address?: string; port?: number }) => void): this
+    on(event: string | symbol, listener: (...args: any[]) => void): this
+  }
+  function createConnection(options: TCPConnectOptions, listener?: () => void): Socket
+  function createConnection(port: number, host?: string, listener?: () => void): Socket
+  function createConnection(port: number, listener?: () => void): Socket
+  function connect(options: TCPConnectOptions, listener?: () => void): Socket
+  function connect(port: number, host?: string, listener?: () => void): Socket
+  function connect(port: number, listener?: () => void): Socket
+  function isIP(input: unknown): 0 | 4 | 6
+  function isIPv4(input: unknown): boolean
+  function isIPv6(input: unknown): boolean
+  interface ServerOpts extends SocketOptions { pauseOnConnect?: boolean }
+  interface ListenOptions {
+    port: number
+    /** Numeric IPv4/IPv6; omitted binds the dual-stack wildcard. */
+    host?: string
+    /** 1...128, default 128. */
+    backlog?: number
+  }
+  class Server extends EventEmitter {
+    constructor(options?: ServerOpts, connectionListener?: (socket: Socket) => void)
+    constructor(connectionListener?: (socket: Socket) => void)
+    listen(options: ListenOptions, callback?: () => void): this
+    listen(port: number, callback?: () => void): this
+    listen(port: number, host: string, callback?: () => void): this
+    listen(port: number, host: string, backlog: number, callback?: () => void): this
+    /** Stops accepting, then waits for accepted sockets to close. */
+    close(callback?: (error?: Error) => void): this
+    address(): AddressInfo | null
+    getConnections(callback: (error: Error | null, count: number) => void): this
+    readonly listening: boolean
+    /** 0...32 or Infinity; the native context also has a shared 32-socket limit. */
+    maxConnections: number
+    on(event: "connection", listener: (socket: Socket) => void): this
+    on(event: "listening" | "close", listener: () => void): this
+    on(event: "error", listener: (error: Error & {code?: string; errno?: number; syscall?: string}) => void): this
+    on(event: string | symbol, listener: (...args: any[]) => void): this
+  }
+  function createServer(options?: ServerOpts, connectionListener?: (socket: Socket) => void): Server
+  function createServer(connectionListener?: (socket: Socket) => void): Server
+}
+declare module "node:net" { export * from "net" }
+
+declare module "tls" {
+  import {Socket,TCPConnectOptions} from "net"
+  interface ConnectionOptions extends TCPConnectOptions {
+    servername?: string
+    ca?: string | Uint8Array | (string | Uint8Array)[]
+    ALPNProtocols?: string[]
+    minVersion?: "TLSv1.2" | "TLSv1.3"
+    maxVersion?: "TLSv1.2" | "TLSv1.3"
+    rejectUnauthorized?: true
+  }
+  interface CipherNameAndProtocol {name: string; standardName: string; version: string}
+  interface PeerCertificate {raw?: Buffer; fingerprint256?: string}
+  class TLSSocket extends Socket {
+    private constructor()
+    readonly encrypted: true
+    readonly authorized: boolean
+    readonly authorizationError: string | null | undefined
+    readonly alpnProtocol: string | false
+    readonly servername: string | false
+    getProtocol(): string | null
+    getCipher(): CipherNameAndProtocol | null
+    getPeerCertificate(detailed?: false): PeerCertificate
+    on(event: "secureConnect", listener: () => void): this
+    on(event: string | symbol, listener: (...args: any[]) => void): this
+    once(event: "secureConnect", listener: () => void): this
+    once(event: string | symbol, listener: (...args: any[]) => void): this
+  }
+  function connect(options: ConnectionOptions, listener?: () => void): TLSSocket
+  function connect(port: number, host: string, options: Omit<ConnectionOptions,"port"|"host">, listener?: () => void): TLSSocket
+  function connect(port: number, host: string, listener?: () => void): TLSSocket
+  function connect(port: number, options: Omit<ConnectionOptions,"port"|"host">, listener?: () => void): TLSSocket
+  function connect(port: number, listener?: () => void): TLSSocket
+  const DEFAULT_MIN_VERSION: "TLSv1.2"
+  const DEFAULT_MAX_VERSION: "TLSv1.3"
+}
+declare module "node:tls" {export * from "tls"}

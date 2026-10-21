@@ -322,8 +322,8 @@ function App(props: { initialLog: string }) {
           header={<Text>协议配置</Text>}
           footer={
             <Text>
-              域名已从 libapp.so 取出（ServiceDomain.qapp，生产/测试各一个），默认就是生产。
-              还剩 appId / appSecret / AES 密钥需要你补。
+              appId / 两个签名盐 / AES 密钥都已从 Encryption.dart 里解出来并预填。
+              端点也已修正为 member/sms/sendSecurityCode。若仍报错，把日志里的返回体发我。
             </Text>
           }
         >
@@ -343,10 +343,16 @@ function App(props: { initialLog: string }) {
             onChanged={v => persistCfg({ ...cfg, appId: v })}
           />
           <TextField
-            title="appSecret"
+            title="业务盐 appSecret"
             value={cfg.appSecret}
             onChanged={v => persistCfg({ ...cfg, appSecret: v })}
-            prompt="签名盐值"
+            prompt="&key=..."
+          />
+          <TextField
+            title="header 盐"
+            value={cfg.headerSecret}
+            onChanged={v => persistCfg({ ...cfg, headerSecret: v })}
+            prompt="&appsecret=..."
           />
           <TextField
             title="AES 密钥(hex)"
@@ -360,9 +366,9 @@ function App(props: { initialLog: string }) {
             onChanged={v => persistCfg({ ...cfg, encryptBody: v })}
           />
           <Toggle
-            title="使用 MD5 签名"
-            value={cfg.signMode === "md5"}
-            onChanged={v => persistCfg({ ...cfg, signMode: v ? "md5" : "none" })}
+            title="发送 header 签名"
+            value={cfg.signMode === "header"}
+            onChanged={v => persistCfg({ ...cfg, signMode: v ? "header" : "none" })}
           />
         </Section>
 

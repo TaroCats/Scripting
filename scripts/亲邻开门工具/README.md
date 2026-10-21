@@ -99,3 +99,56 @@
 4. 「门禁」录入 `doorControlId`（列表接口未确认，`doorcontrol/v2/sort` 只是排序）
 5. 想用蓝牙：抓一次原 App 的 BLE 通信拿到 serviceUUID / writeCharUUID / 写入字节，填进「蓝牙」区
 6. 点「开门」→ 先远程，失败自动转蓝牙；每一步都会写日志
+
+---
+
+## 附：一轮协议逆向修正（2026-10-22）
+
+线上报 `HTTP 404`（获取验证码），追查后修正如下。
+
+### 1. 端点写错了（404 的直接原因）
+
+`sendValidCode` 之前是照函数名 `interfaceSendValidCode` 猜的
+`app/api/app/v1/sendValidCode`。反查该函数体（`Interface.dart` @ `0xbb07c0`），
+真实路径是：
+
+```
+member/sms/sendSecurityCode
+```
+
+同族还有换绑手机号用的 `member/sms/sendSecurityCodeForChangePhone`。
+
+### 2. 顺带把签名算法挖出来了
+
+来自 `qinlin/utils/Encryption.dart`，各步骤的字面量可直接对上：
+
+| 步骤 | 内容 |
+|---|---|
+| `fixedParameter` | 补 `version` / `timestamp` / `nonce` / `token` / `sessionId` |
+| `onAsciiSort` | 参数 ASCII 排序，`k=v` 用 `&` 连接，**尾部追加 `&key=qiAnlPinP`** |
+| `md5Encrypt` | 对上面的串取 MD5 → 业务 `sign` |
+| `getHeaderSign` | header map `{appid: "gbDjIZQSOpCMX49P", nonce, timestamp, version: "v2"}`，排序后 **追加 `&appsecret=OKFoQ9MmNXQtcyXROo4PnaFkfDPTHuDg`** 再 MD5 |
+| `aesEncryptParams` | 参数 AES-128-ECB，密钥 **`91FC5A0CA0856C01A913CD77F21066AC`** |
+
+**时间戳是微秒**（`DateTime.microsecondsSinceEpoch`），之前用毫秒是错的。
+`nonce` 由 `randomNumber4()` 生成，即 4 位随机数字。
+
+这些都已在 `core/protocol.ts` 里作为默认值预填，设置页可覆盖。
+
+### 3. 还没确认的两点
+
+- 业务 `sign` 与 header `sign` 是否互相包含（现在两者独立计算）
+- AES 密文放 body 字段还是 header（现在放 `payload` 字段 + `AesHeader` header，默认关闭）
+
+### 4. 意外收获：BLE 帧格式线索
+
+`Encryption::onEncrypt` 里出现 `FA34DD0001`、`55AA5A5AA5`、`exclusiveOR`、`resultKey`、
+`fixTime: ` 这些常量 —— 明显是设备帧头 + XOR 混淆，不是 HTTP 加密。
+下次抓 BLE 时可以用 `FA34DD0001` 作为特征去定位写入载荷。
+
+### 5. 如果还报 404
+
+端点已修正，剩下的可能是 **domain 映射**：原 App 有 `qapp`/`mobileapi`/`mallapi`/`qlp`
+四个域，`member/*` 这类接口带 `domainLevel` 参数（此接口里是数值常量），
+很可能是 `mobileapi` 而不是 `qapp`。静态分析拿不到域名的具体赋值（`ServiceDomain.build`
+从配置读），所以：把 `baseURL` 换成对应子域再试，或者把返回体发我。

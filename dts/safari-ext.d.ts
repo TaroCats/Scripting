@@ -157,6 +157,9 @@ declare global {
     sameSite?: "no_restriction" | "lax" | "strict" | "unspecified"
     session?: boolean
     expirationDate?: number
+    /** Uses the originating tab's Safari profile/private Cookie store when omitted.
+     * An explicit ID selects that store; unavailable or ambiguous automatic selection rejects.
+     */
     storeId?: string
   }
 
@@ -271,7 +274,16 @@ declare global {
     activate(tabId: number): Promise<void>
   }
 
+  /** Content-world only. Requires @grant Scripting.Translation. */
+  interface ScriptingTranslationApi {
+    /** iOS/macOS 26+. No UI/downloads; source and installed languages are required. */
+    translateInstalled(options: { text: string; source: string; target?: string }): Promise<string>
+    /** iOS/macOS 26+. Preserves order. At most 64 texts and 256 KiB per request. */
+    translateInstalledBatch(options: { texts: string[]; source: string; target?: string }): Promise<string[]>
+  }
+
   interface ScriptingApi {
+    readonly Translation: ScriptingTranslationApi
     readonly FileManager: ScriptingFileManagerApi
     readonly tabs: ScriptingTabsApi
   }
