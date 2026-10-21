@@ -4,14 +4,19 @@
  * 平台能力来自本地文档：bluetooth/{central_manager,peripheral,service,characteristic}。
  * 这些类型是宿主注入的全局对象（文档示例未写 import），因此这里直接引用全局名。
  *
- * 与远程开门的差别：协议细节仍然未知，必须由用户/抓包提供——
- *   - serviceUUID / writeCharUUID：原 App 里没有硬编码字面量，由服务端下发
- *   - 写入载荷：是明文指令还是加密块，静态分析未确认
- * 所以本模块只负责「扫描 → 连接 → 发现 → 写入 → 等回执」这套确定的流程，
- * 具体 UUID 与字节由配置决定。
+ * 协议细节（`Encryption.dart` 的 `onEncrypt` / `onHandleResult` 反汇编还原，**不是**服务端下发）：
+ *   - Service UUID 判定值 "FFF0"、Characteristic "FFF1"（16-bit 短格式）
+ *   - 明文 = 4 组「字段 + padLeft(2,'0') 的 DateTime 日期分量」+ 帧尾 "55AA5A5AA5"
+ *   - 用 **3DES** 加密（flutter_3des_plugin::encrypt，不是 AES）
+ *   - 再拼帧头 "FA34DD0001" + 密文 + "30" + exclusiveOR(补零至 32)，
+ *     按 "0x??" 两位转成 List<int> 写入
+ *   - 密钥串以 "FC26A" 开头（randomNumberWithCount 生成）
+ * 中间 4 个业务字段的语义（doorControlId 如何编码）仍需逐条对照拼接处。
  */
+import { encrypt3DesHex } from "./tripledes"
+
 export type BleConfig = {
-  /** 目标服务 UUID，如 "180D" 或 "0000fee0-0000-1000-8000-00805f9b34fb" */
+  /** 目标服务 UUID，如 "0000fff0-0000-1000-8000-00805f9b34fb" 或短格式 "FFF0" */
   serviceUUID: string
   /** 写入特征 UUID */
   writeCharUUID: string
@@ -26,12 +31,29 @@ export type BleConfig = {
 }
 
 export const DEFAULT_BLE: BleConfig = {
-  serviceUUID: "",
-  writeCharUUID: "",
+  serviceUUID: "0000fff0-0000-1000-8000-00805f9b34fb",
+  writeCharUUID: "0000fff1-0000-1000-8000-00805f9b34fb",
   notifyCharUUID: "",
   matchName: "",
   timeoutMs: 12000,
   writeType: "withResponse",
+}
+
+/**
+ * UUID 比较，容忍短/长格式与大小写差异：
+ * CoreBluetooth 返回完整 UUID（0000fff0-0000-1000-8000-00805f9b34fb），
+ * 协议里写的是 16-bit 短格式（FFF0）。
+ */
+export function sameUuid(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^0-9a-f]/g, "")
+      .replace(/^0000/, "")
+      .replace(/00805f9b34fb$/, "")
+  const na = norm(a)
+  const nb = norm(b)
+  return !!na && na === nb
 }
 
 export type BleStep =
@@ -80,6 +102,45 @@ export function buildPayload(
   return data
 }
 
+/* ────────────── 3DES 加密帧（复刻 onEncrypt / flutter_3des_plugin） ────────────── */
+
+/** 帧常量 —— 全部来自 Encryption.dart 的 onEncrypt 字面量 */
+export const FRAME = {
+  /** 密文前缀 */
+  header: "FA34DD0001",
+  /** 明文尾 */
+  tail: "55AA5A5AA5",
+  /** 密文后缀前的固定串 */
+  mid: "30",
+  /** exclusiveOR 补零的目标长度（hex 字符数） */
+  xorPadLen: 32,
+} as const
+
+/**
+ * 用 3DES 加密一段 hex 明文，返回 `FA34DD0001 + 密文 + 30 + xor(补零到 32)` 的 hex 串。
+ *
+ * 对应原 App 的 `Flutter3desPlugin.encrypt(key, data)` + onEncrypt 的最终拼接。
+ *
+ * @param keyHex  32 位 hex 密钥（内部会按 K1||K2||K1 扩展成 24 字节）
+ * @param dataHex 明文 hex（只取前 16 位 = 8 字节，与原 C 代码一致）
+ * @param xorHex  exclusiveOR 混淆值；留空则用全零补到 32 位
+ */
+export function buildEncryptedFrame(
+  keyHex: string,
+  dataHex: string,
+  xorHex = ""
+): Data {
+  const ct = encrypt3DesHex(keyHex, dataHex)
+  const xor = (xorHex || "0".repeat(FRAME.xorPadLen)).toLowerCase()
+  const padded = xor.length >= FRAME.xorPadLen
+    ? xor.slice(0, FRAME.xorPadLen)
+    : xor + "0".repeat(FRAME.xorPadLen - xor.length)
+  const frame = FRAME.header + ct + FRAME.mid + padded
+  const data = Data.fromHexString(frame)
+  if (!data) throw new Error("帧构造失败：" + frame.slice(0, 40))
+  return data
+}
+
 export async function bleOpenDoor(
   cfg: BleConfig,
   payload: Data,
@@ -121,14 +182,14 @@ export async function bleOpenDoor(
   await withTimeout(matched.discoverServices(), cfg.timeoutMs, "发现服务")
 
   const service = (matched.services ?? []).find(
-    (s: any) => String(s.uuid).toLowerCase() === cfg.serviceUUID.toLowerCase()
+    (s: any) => sameUuid(String(s.uuid), cfg.serviceUUID)
   )
   if (!service) throw new Error(`未找到服务 ${cfg.serviceUUID}`)
 
   await withTimeout(matched.discoverCharacteristics(service), cfg.timeoutMs, "发现特征值")
 
   const writeChar = (service.characteristics ?? []).find(
-    (c: any) => String(c.uuid).toLowerCase() === cfg.writeCharUUID.toLowerCase()
+    (c: any) => sameUuid(String(c.uuid), cfg.writeCharUUID)
   )
   if (!writeChar) throw new Error(`未找到写入特征 ${cfg.writeCharUUID}`)
 
@@ -136,7 +197,7 @@ export async function bleOpenDoor(
   let ack = ""
   if (cfg.notifyCharUUID) {
     const notifyChar = (service.characteristics ?? []).find(
-      (c: any) => String(c.uuid).toLowerCase() === cfg.notifyCharUUID!.toLowerCase()
+      (c: any) => sameUuid(String(c.uuid), cfg.notifyCharUUID!)
     )
     if (notifyChar) {
       await matched.subscribe(notifyChar, (data: Data) => {

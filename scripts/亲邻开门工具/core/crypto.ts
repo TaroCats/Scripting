@@ -26,9 +26,21 @@ export function randomNumber4(): string {
   return String(Math.floor(Math.random() * 9000) + 1000)
 }
 
-/** 微秒时间戳 —— 原 App 用 DateTime.microsecondsSinceEpoch，不是毫秒 */
+/**
+ * 毫秒时间戳 —— 修正版。
+ *
+ * 原始汇编（Encryption::getHeaderSign @0xb16520）是：
+ *   DateTime._getCurrentMicros()  → x1
+ *   r0 = 1000 ; x4 = x1 / 1000    ← 又除了一次 1000
+ * 所以最终写进 header 的 timestamp 是 **毫秒**。之前误判成微秒，已修正。
+ */
+export function timestampMillis(): string {
+  return String(Date.now())
+}
+
+/** 保留旧名，内部改为毫秒，避免调用方遗漏 */
 export function timestampMicros(): string {
-  return String(Date.now() * 1000)
+  return timestampMillis()
 }
 
 function asciiJoin(params: Record<string, string>, skip: string[]): string {
