@@ -86,7 +86,8 @@
 | BLE 全流程（mock central manager）  | scan→connect→discover→write，写入字节 `a10bff` 与模板一致 ✅ |
 | 远程失败 → 自动转蓝牙（mock）             | `via=ble`，写入 `a10b` ✅                             |
 | 远程成功 / 远程失败 / 401 三分支          | 分别返回 remote / none / 抛 SessionExpiredError ✅      |
-| esbuild 编译 `index.tsx` + 全部 TS | 零错误 ✅                                             |
+| esbuild 编译 `index.tsx` + 全部 TS | 零错误 ✅ |
+| **tsc 严格类型检查**（对着 App 同步的 `dts/*.d.ts`） | exit=0，0 错误 ✅ |
 
 **未验证**：真机渲染、真实接口连通（缺 baseURL/密钥）、真机 BLE（缺 UUID/载荷）。
 

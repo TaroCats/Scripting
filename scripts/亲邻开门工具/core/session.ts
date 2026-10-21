@@ -6,7 +6,6 @@
  * - 蓝牙开关门依赖本地缓存的 sessionId，过期即强制登出
  *   （原 App：blue_key_tools.dart 「蓝牙开门，本地缓存的sessionId过期强制退出登录」）
  */
-import { Keychain, Storage } from "scripting"
 import { K } from "./protocol"
 
 export type Session = {

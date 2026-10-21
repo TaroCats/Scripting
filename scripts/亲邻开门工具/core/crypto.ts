@@ -5,7 +5,6 @@
  * - AES-128-ECB/PKCS5：./aes.ts（宿主只提供 AES-GCM，不提供 ECB）
  * - Base64：Data.fromUint8Array(...).toBase64String()（官方 API）
  */
-import { Crypto, Data } from "scripting"
 import { aes128EcbEncryptBytes, hexToBytes, utf8Bytes } from "./aes"
 import type { ApiConfig } from "./protocol"
 

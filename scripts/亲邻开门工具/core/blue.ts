@@ -10,11 +10,6 @@
  * 所以本模块只负责「扫描 → 连接 → 发现 → 写入 → 等回执」这套确定的流程，
  * 具体 UUID 与字节由配置决定。
  */
-import { Data } from "scripting"
-
-// 宿主注入的全局对象（文档示例均未写 import）
-declare const BluetoothCentralManager: any
-
 export type BleConfig = {
   /** 目标服务 UUID，如 "180D" 或 "0000fee0-0000-1000-8000-00805f9b34fb" */
   serviceUUID: string

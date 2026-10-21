@@ -7,14 +7,13 @@ import {
   Script,
   Section,
   Spacer,
-  Storage,
   Text,
   TextField,
   Toggle,
   VStack,
   useState,
 } from "scripting"
-import { checkLogin, loginByCode, logout, sendValidCode, SessionExpiredError } from "./core/api" 
+import { checkLogin, loginByCode, logout, sendValidCode, SessionExpiredError } from "./core/api"
 import { openDoor } from "./core/opendoor"
 import {
   DEFAULT_BLE_SETTINGS,
