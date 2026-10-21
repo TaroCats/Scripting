@@ -144,7 +144,7 @@ function App(props: { initialLog: string }) {
   function say(line: string) {
     addLog(line)
     setToastMsg(line)
-    toastVisible.value = true
+    toastVisible.setValue(true)
   }
   /** 细节步骤：只记日志，不打扰用户 */
   function log(line: string) {
