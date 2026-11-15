@@ -3,8 +3,9 @@ name: Release Scripts
 # scripts/ 下有项目更新时自动：
 #   1. 识别被改动的脚本项目
 #   2. 递增该项目 script.json 的 version（默认 patch，可用提交信息里的 [minor] / [major] 覆盖）
-#   3. 打包出可安装的 <项目>.scripting 与 <项目>.zip
-#   4. 提交版本号变更并创建 Release（标签 <项目>-v<版本>，产物在 Release 附件中）
+#   3. 打包出 <slug>.scripting 与 <slug>.zip（slug 为 ASCII，见 .github/release.config.json）
+#   4. 提交版本号变更，并把产物覆盖上传到固定标签 <slug> 的 Release
+#      下载地址固定：https://github.com/<owner>/<repo>/releases/download/<slug>/<slug>.zip
 
 on:
   push:
@@ -122,23 +123,50 @@ jobs:
             [ -n "$project" ] || continue
             script_json="scripts/$project/script.json"
 
+            # slug 必须是 ASCII：Release 附件名会被 GitHub 规范化，中文名会变成 default.xxx
+            slug="$(node -e '
+              const fs = require("fs");
+              const project = process.argv.at(-1);
+              const config = fs.existsSync(".github/release.config.json")
+                ? JSON.parse(fs.readFileSync(".github/release.config.json", "utf8"))
+                : {};
+              const mapped = (config.projects || {})[project];
+              const fallback = /^[a-z0-9][a-z0-9._-]*$/.test(project) ? project : "";
+              const slug = mapped || fallback;
+              if (!slug) {
+                console.error(`「${project}」缺少 slug，请在 .github/release.config.json 的 projects 中补充`);
+                process.exit(1);
+              }
+              if (!/^[a-z0-9][a-z0-9._-]*$/.test(slug)) {
+                console.error(`「${project}」的 slug 只能包含小写字母、数字、点、下划线和连字符：${slug}`);
+                process.exit(1);
+              }
+              process.stdout.write(slug);
+            ' "$project")"
+
             current="$(node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv.at(-1),"utf8"));process.stdout.write(String(j.version??""))' "$script_json")"
             next="$(node -e 'const cur=process.argv.at(-2)||"";const type=process.argv.at(-1);const m=/^(\d+)\.(\d+)\.(\d+)/.exec(cur);let major=0,minor=0,patch=0;if(m){major=+m[1];minor=+m[2];patch=+m[3]}if(type==="major"){major+=1;minor=0;patch=0}else if(type==="minor"){minor+=1;patch=0}else{patch+=1}process.stdout.write(`${major}.${minor}.${patch}`)' "$current" "$bump")"
             node -e 'const fs=require("fs");const file=process.argv.at(-2);const next=process.argv.at(-1);let source=fs.readFileSync(file,"utf8");const pattern=/("version"\s*:\s*")[^"]*(")/;if(pattern.test(source)){source=source.replace(pattern,`$1${next}$2`)}else{source=source.replace(/^\{/,`{\n  "version": "${next}",`)}fs.writeFileSync(file,source)' "$script_json" "$next"
 
-            base="dist/$project"
+            base="dist/$slug"
             rm -rf "$base"
             mkdir -p "$base"
             # .scripting 与 .zip 内容一致：项目根目录下的文件直接位于压缩包根层
             (
               cd "scripts/$project"
-              zip -r -X -q "$GITHUB_WORKSPACE/$base/$project.scripting" . -x '.DS_Store' '*/.DS_Store' '__MACOSX/*'
+              zip -r -X -q "$GITHUB_WORKSPACE/$base/$slug.scripting" . -x '.DS_Store' '*/.DS_Store' '__MACOSX/*'
             )
-            cp "$base/$project.scripting" "$base/$project.zip"
+            cp "$base/$slug.scripting" "$base/$slug.zip"
 
-            printf '%s\t%s\n' "$project" "$next" >> "$versions_file"
-            echo "已打包 dist/${project}/${project}.scripting（${current} -> ${next}）"
+            printf '%s\t%s\t%s\n' "$project" "$slug" "$next" >> "$versions_file"
+            echo "已打包 dist/${slug}/${slug}.scripting（${project} ${current} -> ${next}）"
           done < "$RUNNER_TEMP/projects.txt"
+
+          duplicates="$(cut -f2 "$versions_file" | sort | uniq -d)"
+          if [ -n "$duplicates" ]; then
+            echo "slug 重复：$duplicates" >&2
+            exit 1
+          fi
 
       - name: 提交版本号变更
         if: steps.detect.outputs.count != '0'
@@ -163,31 +191,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          while IFS=$'\t' read -r project version; do
+          while IFS=$'\t' read -r project slug version; do
             [ -n "$project" ] || continue
-            tag="$project-v$version"
-            base="dist/$project"
+            # 固定标签：每次覆盖同一 Release 的附件，下载地址长期不变
+            tag="$slug"
+            base="dist/$slug"
             notes="$base/notes.md"
 
-            zip_url="$(node -e 'process.stdout.write(encodeURI(process.argv.at(-1)))' "https://github.com/$REPO/releases/download/$tag/$project.zip")"
             {
-              echo "## $project v$version"
+              echo "## ${project} v${version}"
               echo
-              echo "- 安装：把 \`$project.scripting\` 传到 iPhone，轻点文件即可由 Scripting 导入"
-              echo "- 远程更新 ZIP：$zip_url"
-              echo
-              echo "构建自 \`${AFTER_SHA:0:7}\`。"
+              echo "- 安装：下载 \`${slug}.scripting\` 到 iPhone，轻点文件即可由 Scripting 导入"
+              echo "- 远程脚本来源（固定地址，可直接填到脚本的「远程来源」）："
+              echo "  \`https://github.com/${REPO}/releases/download/${tag}/${slug}.zip\`"
+              echo "- 当前版本：\`${version}\`"
+              echo "- 构建自 \`${AFTER_SHA:0:7}\`"
             } > "$notes"
 
             if gh release view "$tag" >/dev/null 2>&1; then
-              gh release upload "$tag" "$base/$project.scripting" "$base/$project.zip" --clobber
-              gh release edit "$tag" --notes-file "$notes"
+              gh release upload "$tag" "$base/$slug.scripting" "$base/$slug.zip" --clobber
+              gh release edit "$tag" --title "${project} v${version}" --notes-file "$notes"
             else
-              gh release create "$tag" "$base/$project.scripting" "$base/$project.zip" \
-                --title "$project v$version" \
+              gh release create "$tag" "$base/$slug.scripting" "$base/$slug.zip" \
+                --title "${project} v${version}" \
                 --notes-file "$notes" \
                 --latest=false
             fi
 
-            echo "- $project v$version → https://github.com/$REPO/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ${project} v${version} → https://github.com/${REPO}/releases/download/${tag}/${slug}.zip" >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/versions.tsv"
