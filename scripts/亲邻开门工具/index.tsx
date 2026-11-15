@@ -17,6 +17,8 @@ import {
   Text,
   TextField,
   VStack,
+  Widget,
+  type WidgetFamily,
   ZStack,
   useObservable,
   useState,
@@ -333,6 +335,15 @@ function App(props: { initialLog: string }) {
     }
   }
 
+  /** 应用内近似预览（真实布局、裁剪仍需主屏幕验证） */
+  async function onPreviewWidget(family: WidgetFamily) {
+    try {
+      await Widget.preview({ family })
+    } catch (e) {
+      say(`预览失败：${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
   async function onOpen() {
     if (busy) return
     if (!selectedDoor) { say("请先选择门禁"); return }
@@ -613,6 +624,25 @@ function App(props: { initialLog: string }) {
             >
               <Button title="校验会话" action={onCheckLogin} />
               <Button title="登出" role="destructive" action={onLogout} />
+            </Section>
+
+            <Section
+              header={<SectionTitle icon="square.grid.2x2" title="小组件预览" />}
+              footer={
+                <Text font="caption" foregroundStyle="tertiaryLabel">
+                  应用内预览只是近似效果，实际尺寸、裁剪与点击请以主屏幕上添加的小组件为准。
+                </Text>
+              }
+            >
+              <Menu title="选择尺寸预览" systemImage="eye">
+                <Button title="小尺寸" action={() => onPreviewWidget("systemSmall")} />
+                <Button title="中尺寸" action={() => onPreviewWidget("systemMedium")} />
+                <Button title="大尺寸" action={() => onPreviewWidget("systemLarge")} />
+                <Button title="超大尺寸" action={() => onPreviewWidget("systemExtraLarge")} />
+                <Button title="锁屏矩形" action={() => onPreviewWidget("accessoryRectangular")} />
+                <Button title="锁屏圆形" action={() => onPreviewWidget("accessoryCircular")} />
+                <Button title="锁屏单行" action={() => onPreviewWidget("accessoryInline")} />
+              </Menu>
             </Section>
           </List>
         </NavigationStack>
