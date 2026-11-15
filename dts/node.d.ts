@@ -102,6 +102,8 @@ interface BufferConstructor {
 // ---------------------------------------------------------------------------
 
 declare namespace NodeJS {
+  type UncaughtExceptionMonitorListener = (this: Process, error: unknown, origin: "uncaughtException") => void
+
   interface Process {
     readonly platform: "darwin" | "ios" | string
     readonly arch: string
@@ -116,8 +118,19 @@ declare namespace NodeJS {
     nextTick(callback: (...args: any[]) => void, ...args: any[]): void
     hrtime: { (time?: [number, number]): [number, number]; bigint(): bigint }
     exit(code?: number): void
+    /** Observe a fatal exception in an App script before it exits. */
+    on(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
     on(event: string, listener: (...args: any[]) => void): Process
+    once(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
     once(event: string, listener: (...args: any[]) => void): Process
+    addListener(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
+    prependListener(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
+    prependOnceListener(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
+    off(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
+    removeListener(event: "uncaughtExceptionMonitor", listener: UncaughtExceptionMonitorListener): Process
+    removeAllListeners(event?: "uncaughtExceptionMonitor"): Process
+    listeners(event: "uncaughtExceptionMonitor"): UncaughtExceptionMonitorListener[]
+    listenerCount(event: "uncaughtExceptionMonitor"): number
     emit(event: string, ...args: any[]): boolean
   }
 
@@ -148,6 +161,16 @@ declare const global: typeof globalThis
 
 declare function setImmediate(callback: (...args: any[]) => void, ...args: any[]): NodeJS.Immediate
 declare function clearImmediate(immediate: NodeJS.Immediate | number | undefined): void
+
+declare module "process" {
+  const process: NodeJS.Process
+  export = process
+}
+
+declare module "node:process" {
+  import process = require("process")
+  export = process
+}
 
 // Web globals (standard Web/WHATWG APIs available at runtime).
 declare class TextEncoder {

@@ -1462,6 +1462,26 @@ type ColorWithGradientOrOpacity = {
     gradient?: never;
     opacity?: never;
 };
+/**
+ * A color style with an HDR exposure adjustment or content headroom.
+ * In app views on iOS 26 and later, exposure is applied before explicit headroom.
+ * On earlier systems the base color and any opacity or standard gradient are used.
+ */
+type HDRColorStyle = {
+    color: Color;
+    /** Multiplies the style's opacity. */
+    opacity?: number;
+    /** Uses the standard gradient for the resulting color. */
+    gradient?: true;
+    /** Exposure adjustment in stops. Each positive stop doubles the linear-light value. */
+    exposureAdjust?: number | undefined;
+    /** Content headroom as a linear ratio of at least 1. Use null to clear the annotation. */
+    headroom?: number | null | undefined;
+} & ({
+    exposureAdjust: number;
+} | {
+    headroom: number | null;
+});
 
 type GradientStop$1 = {
     color: Color;
@@ -1558,7 +1578,7 @@ type MeshGradient = {
     smoothsColors?: boolean;
 };
 
-type ShapeStyle = Material | Color | Gradient | LinearGradient | RadialGradient | AngularGradient | MeshGradient | ColorWithGradientOrOpacity;
+type ShapeStyle = Material | Color | Gradient | LinearGradient | RadialGradient | AngularGradient | MeshGradient | ColorWithGradientOrOpacity | HDRColorStyle;
 /**
  * The DynamicShapeStyle type allows you to define two distinct styles for a shape—one for light mode and another for dark mode. The system automatically applies the appropriate style based on the current color scheme (light or dark) of the user’s device.
  */
@@ -1891,6 +1911,8 @@ type ViewStyleProps = {
      * Sets the style for menus within this view.
      */
     menuStyle?: MenuStyle;
+    /** iOS 16.4+. disabled keeps a menu open after an action; enabled dismisses it. */
+    menuActionDismissBehavior?: 'automatic' | 'enabled' | 'disabled';
     /**
      * The style to apply to this tab view.
      */
@@ -2845,6 +2867,8 @@ type DefaultToolbarItemProps = {
      * Controls the visibility of the glass background effect on items in the toolbar. In certain contexts, such as the navigation bar on iOS and the window toolbar on macOS, toolbar items will be given a glass background effect that is shared with other items in the same logical grouping.
      */
     sharedBackgroundVisibility?: Visibility;
+    /** iOS 27.1+. Placement preference when the toolbar becomes vertical. */
+    axisBehavior?: 'automatic' | 'horizontalOnly' | 'verticalPreferred';
     /** Preferred visibility as space shrinks. @available iOS 27.0+ */
     visibilityPriority?: 'automatic' | 'low' | 'high';
     /** Removes the item's content margins. @available iOS 27.0+ */
@@ -3892,7 +3916,20 @@ type ModalPresentationViewProps = {
     presentationSizing?: PresentationSizing;
 };
 
+type ColorEffectOptions = {
+    shader: Shader;
+    isEnabled?: boolean;
+};
+type SamplingEffectOptions = ColorEffectOptions & {
+    maxSampleOffset: Size;
+};
 type TransformAndEffectProps = {
+    /** Applies a SwiftUI shader to the color of each pixel. */
+    colorEffect?: ColorEffectOptions;
+    /** Applies a SwiftUI shader that samples the rasterized view. */
+    layerEffect?: SamplingEffectOptions;
+    /** Applies a SwiftUI shader that changes the sampled coordinates. */
+    distortionEffect?: SamplingEffectOptions;
     /**
      * Override the default accent color for this view with a given styling. Unlike an app’s accent color, which can be overridden by user preference, tint is always respected and should be used as a way to provide additional meaning to the control.
      */
@@ -4261,6 +4298,11 @@ type ListViewProps = {
      * Configures the content margin for a provided placement.
      */
     contentMargins?: EdgeInsets | number | {
+        /** iOS 27.1+. Use system container margins; ignored on earlier systems. */
+        guide: 'container';
+        edges?: EdgeSet;
+        alignment?: Alignment;
+    } | {
         /**
          * The edges to add the margins to.
          */
@@ -4840,6 +4882,8 @@ type LiveActivityProps = {
 
 type EnvironmentsProps = {
     environments?: {
+        /** iOS 27.1+. Relative stacking order of overlay arrangement content. */
+        overlayArrangementZIndex?: number;
         /**
          * Overrides the color scheme for descendant views. Omit to inherit.
          * Use preferredColorScheme to change the entire presentation instead.
@@ -5277,7 +5321,80 @@ type AccessibilityProps = {
     accessibilityElement?: boolean | AccessibilityChildBehavior;
 };
 
-type CommonViewProps = DialogProps & GesturesProps & FrameSizeProps & ForeAndBackgroundProps & PaddingAndBorderProps & ViewVisibilityProps & ImageViewProps & ViewStyleProps & TextFieldViewProps & TextViewProps & ShapeViewProps & ChartViewProps & ScrollProps & ToolbarsProps & SafeAreaProps & WidgetProps & ExtensionProps & ViewAppearProps & GridViewProps & ModalPresentationViewProps & TransformAndEffectProps & NavigationProps & ListViewProps & EditActionsProps & SymbolProps & TransitionProps & SearchableProps & ViewAnimationProps & LiveActivityProps & EnvironmentsProps & GlassProps & ScreenshotProps & PiPProps & DragDropProps & KeyboardShortcutProps & AccessibilityProps & {
+type CameraCaptureEvent = {
+    phase: "began" | "ended" | "cancelled";
+    kind: "primary" | "secondary";
+};
+type CameraCaptureProps = {
+    /**
+     * Handles physical capture buttons for this visible camera page (iOS 18.0+).
+     * Requires an active camera session and foreground main-app execution. It is
+     * disabled when the page leaves the screen or the scene becomes inactive.
+     * Keep a touch capture button bound to the same action. Do not also attach an
+     * AVCaptureEventInteraction to the same page. Secondary does not mean half-press.
+     */
+    onCameraCaptureEvent?: {
+        isEnabled?: boolean;
+        primaryAction: (event: CameraCaptureEvent) => void | Promise<void>;
+        /** Defaults to primaryAction. */
+        secondaryAction?: (event: CameraCaptureEvent) => void | Promise<void>;
+    };
+};
+
+/** A hinge snapshot. Angle is expressed in degrees and radians. iOS 27.1+. */
+type DeviceHingeContext = {
+    hinge: {
+        status: 'closed' | 'partiallyOpen' | 'fullyOpen' | 'unknown';
+        angle: {
+            degrees: number;
+            radians: number;
+        };
+    } | null;
+};
+type HingeChangeAction = (oldContext: DeviceHingeContext, newContext: DeviceHingeContext) => void;
+type FoldableProps = {
+    /** iOS 27.1+. Earlier systems ignore the preference. */
+    toolbarVerticalBehavior?: 'automatic' | 'disabled';
+    /** iOS 27.1+. Chooses which content to preserve when a vertical toolbar is compressed. */
+    toolbarVerticalCompressionBehavior?: 'automatic' | 'prefersTabBar' | 'prefersToolbarItems';
+    /** iOS 27.1+. Reports hinge context changes; hinge is null when unavailable. */
+    onHingeChange?: HingeChangeAction | {
+        isEnabled?: boolean;
+        action: HingeChangeAction;
+    };
+    /** iOS 27.1+. Configures descendant ArrangementView containers. */
+    arrangementViewStyle?: 'automatic' | 'split' | 'overlay' | {
+        style: 'split' | 'overlay';
+        axes?: AxisSet;
+    };
+    /** iOS 27.1+. Set on a primary/secondary view of a split ArrangementView. */
+    splitArrangementLayoutRatio?: number | {
+        minHorizontal?: number;
+        idealHorizontal?: number;
+        maxHorizontal?: number;
+        minVertical?: number;
+        idealVertical?: number;
+        maxVertical?: number;
+    };
+    /** iOS 27.1+. Size constraints in points on a split arrangement child. */
+    splitArrangementLayoutSize?: {
+        minWidth?: number;
+        idealWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        idealHeight?: number;
+        maxHeight?: number;
+    };
+    /** iOS 27.1+. true fixes both axes; false resets both; object defaults each axis to true. */
+    splitArrangementFixedLayoutSize?: boolean | {
+        horizontal?: boolean;
+        vertical?: boolean;
+    };
+    /** iOS 27.1+. Edge preference on an overlay arrangement child. automatic clears the preference. */
+    overlayArrangementEdge?: 'automatic' | 'top' | 'bottom' | 'leading' | 'trailing';
+};
+
+type CommonViewProps = CameraCaptureProps & FoldableProps & DialogProps & GesturesProps & FrameSizeProps & ForeAndBackgroundProps & PaddingAndBorderProps & ViewVisibilityProps & ImageViewProps & ViewStyleProps & TextFieldViewProps & TextViewProps & ShapeViewProps & ChartViewProps & ScrollProps & ToolbarsProps & SafeAreaProps & WidgetProps & ExtensionProps & ViewAppearProps & GridViewProps & ModalPresentationViewProps & TransformAndEffectProps & NavigationProps & ListViewProps & EditActionsProps & SymbolProps & TransitionProps & SearchableProps & ViewAnimationProps & LiveActivityProps & EnvironmentsProps & GlassProps & ScreenshotProps & PiPProps & DragDropProps & KeyboardShortcutProps & AccessibilityProps & {
     disabled?: boolean;
     /**
      * Sets whether this view mirrors its contents based on the layout direction.
@@ -5388,6 +5505,15 @@ type CommonViewProps = DialogProps & GesturesProps & FrameSizeProps & ForeAndBac
 
 declare function modifiers(): ViewModifiers;
 declare class ViewModifiers {
+    toolbarVerticalBehavior(value: CommonViewProps["toolbarVerticalBehavior"]): this;
+    toolbarVerticalCompressionBehavior(value: CommonViewProps["toolbarVerticalCompressionBehavior"]): this;
+    onHingeChange(value: CommonViewProps["onHingeChange"]): this;
+    arrangementViewStyle(value: CommonViewProps["arrangementViewStyle"]): this;
+    splitArrangementLayoutRatio(value: CommonViewProps["splitArrangementLayoutRatio"]): this;
+    splitArrangementLayoutSize(value: CommonViewProps["splitArrangementLayoutSize"]): this;
+    splitArrangementFixedLayoutSize(value: CommonViewProps["splitArrangementFixedLayoutSize"]): this;
+    overlayArrangementEdge(value: CommonViewProps["overlayArrangementEdge"]): this;
+    menuActionDismissBehavior(value: CommonViewProps["menuActionDismissBehavior"]): this;
     dismissalConfirmationDialog(value: CommonViewProps["dismissalConfirmationDialog"]): this;
     copyable(value: CommonViewProps["copyable"]): this;
     cuttable(value: CommonViewProps["cuttable"]): this;
@@ -5500,6 +5626,7 @@ declare class ViewModifiers {
     submitScope(value?: CommonViewProps["submitScope"]): this;
     submitLabel(value: CommonViewProps["submitLabel"]): this;
     onAppear(value: CommonViewProps["onAppear"]): this;
+    onCameraCaptureEvent(value: CommonViewProps["onCameraCaptureEvent"]): this;
     onDisappear(value: CommonViewProps["onDisappear"]): this;
     onTapGesture(value: CommonViewProps["onTapGesture"]): this;
     onLongPressGesture(value: CommonViewProps["onLongPressGesture"]): this;
@@ -5579,6 +5706,9 @@ declare class ViewModifiers {
     contrast(value: CommonViewProps["contrast"]): this;
     saturation(value: CommonViewProps["saturation"]): this;
     grayscale(value: CommonViewProps["grayscale"]): this;
+    colorEffect(value: CommonViewProps["colorEffect"]): this;
+    layerEffect(value: CommonViewProps["layerEffect"]): this;
+    distortionEffect(value: CommonViewProps["distortionEffect"]): this;
     luminanceToAlpha(value: CommonViewProps["luminanceToAlpha"]): this;
     colorMultiply(value: CommonViewProps["colorMultiply"]): this;
     blendMode(value: CommonViewProps["blendMode"]): this;
@@ -7194,6 +7324,10 @@ declare const Editor: FunctionComponent<EditorProps>;
 declare const EmptyView: FunctionComponent<{}>;
 
 type EnvironmentValues = {
+    /** iOS 27.1+. Null when no vertical toolbar is present or on earlier systems. */
+    toolbarVerticalEdge: 'leading' | 'trailing' | null;
+    /** iOS 27.1+. Earlier systems return 0 when requested. */
+    overlayArrangementZIndex: number;
     colorScheme: ColorScheme;
     colorSchemeContrast: ColorSchemeContrast;
     displayScale: number;
@@ -7357,7 +7491,28 @@ type GeometryCoordinateSpace = "local" | "global" | "scrollView" | Readonly<{
 }> | Readonly<{
     scrollViewAxis: "horizontal" | "vertical";
 }>;
+type ReservedRegionKind = 'occlusion' | 'division';
+type ReservedRegionQueryOptions = {
+    includeInactive?: boolean;
+    layoutDirectionBehavior?: LayoutDirectionBehavior;
+};
+type ReservedRegionQuery = ReservedRegionQueryOptions & {
+    kind: ReservedRegionKind;
+};
+type ReservedRegion = {
+    readonly kind: ReservedRegionKind;
+    readonly frame: Readonly<Rect>;
+    readonly margins: Readonly<{
+        top: number;
+        bottom: number;
+        leading: number;
+        trailing: number;
+    }>;
+    readonly isActive: boolean;
+};
 interface GeometryProxy {
+    /** iOS 27.1+. Snapshot query; non-default queries must be declared in reservedRegionQueries. Earlier systems return []. */
+    reservedRegions(kind: ReservedRegionKind, options?: ReservedRegionQueryOptions): readonly ReservedRegion[];
     /**
      * Returns a frame snapshot in points for this layout build (iOS 17.0+).
      * local is always available. Declare other spaces in GeometryReader.coordinateSpaces.
@@ -7390,6 +7545,8 @@ interface GeometryProxy {
     } | null;
 }
 type GeometryReaderProps = {
+    /** Additional queries to snapshot. Active occlusion and division queries with mirrors behavior are always included. */
+    reservedRegionQueries?: readonly ReservedRegionQuery[];
     /** Additional spaces to measure. Defaults to local only; position changes may rebuild children. */
     coordinateSpaces?: readonly GeometryCoordinateSpace[];
     children: (proxy: GeometryProxy) => VirtualNode;
@@ -7509,6 +7666,13 @@ type GroupProps = {
  *
  */
 declare const Group: FunctionComponent<GroupProps>;
+
+type ArrangementViewProps = {
+    primary: VirtualNode;
+    secondary: VirtualNode;
+};
+/** iOS 27.1+. Arranges primary/secondary content adaptively. Earlier systems show both in a VStack. */
+declare const ArrangementView: FunctionComponent<ArrangementViewProps>;
 
 type GroupBoxProps = {
     children: (VirtualNode | boolean | undefined | null | (VirtualNode | undefined | null | boolean)[])[] | VirtualNode | null | boolean | undefined;
@@ -7934,6 +8098,20 @@ type LivePhotoViewProps = {
     livePhoto: Observable<LivePhoto | null>;
 };
 declare const LivePhotoView: FunctionComponent<LivePhotoViewProps>;
+
+type LiveTextViewProps = CommonViewProps & {
+    image: UIImage;
+    /** Recognition languages in priority order. Omit or pass an empty list for the system default. */
+    locales?: readonly string[];
+    /** Defaults to text selection. Choose textAndDataDetectors for system actions on links, numbers, and codes. */
+    interaction?: 'textSelection' | 'textAndDataDetectors';
+    /** Reports selected text. An empty string means the selection on the current image cleared. */
+    onSelectionChange?: (text: string) => void;
+    /** Reports a stable error code when Live Text cannot be enabled. The image remains visible. */
+    onError?: (code: string) => void;
+};
+/** Displays an aspect-fit image with native Live Text in a foreground app script. */
+declare const LiveTextView: FunctionComponent<LiveTextViewProps>;
 
 type ListProps = {
     selection?: Observable<string | null> | Observable<string[]>;
@@ -9609,6 +9787,8 @@ type ToolbarItemProps = {
      * Controls the visibility of the glass background effect on items in the toolbar. In certain contexts, such as the navigation bar on iOS and the window toolbar on macOS, toolbar items will be given a glass background effect that is shared with other items in the same logical grouping.
      */
     sharedBackgroundVisibility?: Visibility;
+    /** iOS 27.1+. Placement preference when the toolbar becomes vertical. */
+    axisBehavior?: 'automatic' | 'horizontalOnly' | 'verticalPreferred';
     /** Preferred visibility as space shrinks. @available iOS 27.0+ */
     visibilityPriority?: 'automatic' | 'low' | 'high';
     /** Removes the item's content margins. @available iOS 27.0+ */
@@ -9626,6 +9806,8 @@ type ToolbarItemGroupProps = {
      * Controls the visibility of the glass background effect on items in the toolbar. In certain contexts, such as the navigation bar on iOS and the window toolbar on macOS, toolbar items will be given a glass background effect that is shared with other items in the same logical grouping.
      */
     sharedBackgroundVisibility?: Visibility;
+    /** iOS 27.1+. Placement preference when the toolbar becomes vertical. */
+    axisBehavior?: 'automatic' | 'horizontalOnly' | 'verticalPreferred';
     /** Preferred visibility as space shrinks. @available iOS 27.0+ */
     visibilityPriority?: 'automatic' | 'low' | 'high';
     /** Removes the item's content margins. @available iOS 27.0+ */
@@ -9654,6 +9836,8 @@ type ToolbarSpacerProps = {
      * Controls the visibility of the glass background effect on items in the toolbar. In certain contexts, such as the navigation bar on iOS and the window toolbar on macOS, toolbar items will be given a glass background effect that is shared with other items in the same logical grouping.
      */
     sharedBackgroundVisibility?: Visibility;
+    /** iOS 27.1+. Placement preference when the toolbar becomes vertical. */
+    axisBehavior?: 'automatic' | 'horizontalOnly' | 'verticalPreferred';
     /** Preferred visibility as space shrinks. @available iOS 27.0+ */
     visibilityPriority?: 'automatic' | 'low' | 'high';
     /** Removes the item's content margins. @available iOS 27.0+ */
@@ -9837,6 +10021,91 @@ type MapReaderProps = {
 };
 /** Reads the native projection of the first contained Map. iOS 17+. Import from "scripting". */
 declare const MapReader: FunctionComponent<MapReaderProps>;
+
+type AirPlayRoutePickerProps = {
+    /** Sort video-capable receivers first. Defaults to false. Main App only. */
+    prioritizesVideoDevices?: boolean;
+    tintColor?: Color | {
+        light: Color;
+        dark: Color;
+    };
+    activeTintColor?: Color | {
+        light: Color;
+        dark: Color;
+    };
+    /** The system route menu is about to open. */
+    onWillBeginPresentingRoutes?: () => void;
+    /** The menu closed; this does not indicate connection or playback success. */
+    onDidEndPresentingRoutes?: () => void;
+};
+/** A native output-selection button. Users choose destinations in the system menu. */
+declare const AirPlayRoutePicker: FunctionComponent<AirPlayRoutePickerProps>;
+
+type AudioUnitViewProps = {
+    /** The native editor returned by an audio unit's requestView(). Main App only. */
+    controller: AVAudioUnitViewController;
+};
+/** Embeds an audio unit's native editor. One controller can be mounted once at a time. */
+declare const AudioUnitView: FunctionComponent<AudioUnitViewProps>;
+
+type ExternalDisplayContentProps = {
+    /** One external-only root. Keep controls and equivalent status on the device. */
+    children: VirtualNode;
+    /** Defaults to true. False suspends output while retaining ownership. Unmount to release. */
+    enabled?: boolean;
+    /** Changes only. The system decides when a connected display can present content. */
+    onStateChanged?: (state: "waiting" | "presenting" | "suspended" | "disposed") => void;
+    /** Reports a busy external display or unavailable native host. */
+    onError?: (message: string) => void;
+};
+/** Main App only. Places a noninteractive JSX subtree on a connected display.
+ * Does not connect AirPlay or render a second local copy. Unmounting releases output.
+ * Only one image presentation or ExternalDisplayContent can own output at a time.
+ */
+declare const ExternalDisplayContent: FunctionComponent<ExternalDisplayContentProps>;
+
+type SampleBufferViewProps = {
+    /** A video renderer from this script. A renderer supports one mounted view. */
+    renderer: AVSampleBufferDisplayLayer;
+    videoGravity?: 'resizeAspect' | 'resizeAspectFill' | 'resize';
+};
+/** Displays timestamped video samples. Main App only, iOS 17+. */
+declare const SampleBufferView: FunctionComponent<SampleBufferViewProps>;
+
+type VideoPlaybackViewProps = {
+    controller: VideoPlaybackController;
+    /** Opt-in native tap, seek, volume/brightness, long-press and pinch gestures. */
+    gestures?: boolean;
+    videoGravity?: 'resizeAspect' | 'resizeAspectFill' | 'resize';
+    rotation?: number;
+    mirrored?: boolean;
+    /** Zoom from 1 to 8. Content outside the viewport is cropped. */
+    zoom?: number;
+};
+/** Controls-free native video output. A native controller supports one mounted surface. */
+declare const VideoPlaybackView: FunctionComponent<VideoPlaybackViewProps>;
+
+type VideoPlaybackPlayerProps = VideoPlaybackViewProps & CommonViewProps & {
+    title?: string;
+    queue?: VideoPlaybackQueue;
+    language?: 'en' | 'zh';
+    onError?: (error: unknown) => void;
+    /** Seconds until playing controls hide. Defaults to 3; zero keeps them visible. */
+    autoHideDelay?: number;
+    showFullscreenButton?: boolean;
+    onFullscreenChange?: (fullscreen: boolean) => void;
+    /** Additional views beside the title and at the end of the bottom toolbar. */
+    topTrailing?: VirtualNode;
+    bottomTrailing?: VirtualNode;
+};
+/** Video output with optional, replaceable script UI. The caller owns the controller and audio session. */
+declare function VideoPlaybackPlayer({ controller, queue, title, language, onError, autoHideDelay, showFullscreenButton, onFullscreenChange, topTrailing, bottomTrailing, gestures, videoGravity, rotation, mirrored, zoom, ...viewProps }: VideoPlaybackPlayerProps): JSX.Element;
+
+type RealityViewProps = {
+    renderer: RealityKit.Renderer;
+};
+/** Displays a RealityKit scene in the foreground App. */
+declare const RealityView: FunctionComponent<RealityViewProps>;
 
 type UnderlyingSource<R> = {
     start?: (controller: ReadableStreamDefaultController<R>) => void | Promise<void>;
@@ -10075,6 +10344,29 @@ declare function gradient(type: "linear", gradient: LinearGradient): LinearGradi
 declare function gradient(type: "radial", gradient: RadialGradient): RadialGradient;
 declare function gradient(type: "angular", gradient: AngularGradient): AngularGradient;
 declare function gradient(type: "mesh", gradient: MeshGradient): MeshGradient;
+
+type AgentResponseState = Readonly<{
+    status: "idle" | "pending" | "sending" | "sent" | "failed" | "unavailable";
+    value?: string;
+    error?: Readonly<{
+        code: string;
+        message: string;
+    }>;
+}>;
+type AgentResponse = Readonly<{
+    /** Accept text from a user action. Format structured data or file paths as text.
+     * Observe responseState for delivery.
+     * A queued reply can be edited or cancelled in chat, resetting the state to idle.
+     * Rejects when unavailable, already submitted, or the owning instance has expired.
+     */
+    response(text: string): Promise<void>;
+    responseState: AgentResponseState;
+}>;
+/** Access the current Agent card without changing the component's business props.
+ * Call in a function component, then use response from a button or other user action.
+ * Normal scripts and other unbound views return responseState.status === "unavailable".
+ */
+declare function useAgentResponse(): AgentResponse;
 
 /**
  * @internal
@@ -10731,6 +11023,204 @@ declare namespace ImageRenderer {
     }): Promise<Data>;
 }
 
+/** Bounded JSON Schema subset shared by the sender SDK and service. Unknown keywords fail closed. */
+type RemoteStateSchema = {
+    type?: 'null' | 'boolean' | 'number' | 'integer' | 'string' | 'array' | 'object';
+    enum?: (null | boolean | number | string)[];
+    properties?: Record<string, RemoteStateSchema>;
+    required?: string[];
+    additionalProperties?: boolean;
+    items?: RemoteStateSchema;
+    minItems?: number;
+    maxItems?: number;
+    minLength?: number;
+    maxLength?: number;
+    minimum?: number;
+    maximum?: number;
+};
+
+type RemoteUpdateLimits = {
+    widgetStateBytes: number;
+    activityPayloadBytes: number;
+    maxBatch: number;
+    dailyWrites: number;
+    operationDefaultTTLSeconds: number;
+    operationMaxTTLSeconds: number;
+    nativeCredentialTTLSeconds: number;
+    readerCredentialTTLSeconds: number;
+    idempotencyRetention: string;
+    templateBytes: number;
+    templateVersionsPerScript: number;
+    templateStorageBytesPerScript: number;
+};
+type RemoteCapabilities = {
+    protocolVersion: number;
+    proActive: boolean;
+    widgetPushSupported: boolean;
+    activityPushSupported: boolean;
+    activityRemoteStartSupported: boolean;
+    limits: RemoteUpdateLimits;
+};
+type RemoteJSON = null | boolean | number | string | RemoteJSON[] | {
+    [key: string]: RemoteJSON;
+};
+type RemoteOperation = {
+    id: string;
+    status: 'queued' | 'dispatching' | 'accepted' | 'failed' | 'unknown' | 'superseded' | 'cancelled' | 'expired';
+    pendingReason?: string;
+    errorCode?: string;
+    supersededBy?: string;
+    apnsId?: string;
+};
+type RemoteBatchResult = {
+    index: number;
+    ok: true;
+    receipt: RemoteUpdateReceipt;
+} | {
+    index: number;
+    ok: false;
+    errorCode: string;
+};
+type RemoteUpdateReceipt = {
+    targetId: string;
+    revision: number;
+    stateCommitted: boolean;
+    launchRequestId?: string;
+    operation: RemoteOperation;
+};
+type RemoteTarget = {
+    status: 'ready';
+    targetId: string;
+} | {
+    status: 'pending';
+    targetId?: string;
+} | {
+    status: 'disabled';
+    targetId?: string;
+    reason?: string;
+} | {
+    status: 'notConfigured';
+};
+type RemoteTargetDetails = RemoteTarget & {
+    targetId: string;
+    kind: 'widget' | 'start' | 'activity';
+    activityId?: string;
+    businessKey?: string;
+    businessGeneration?: string;
+    templateVersion?: string;
+    lifecycle?: string;
+    parameter?: string;
+};
+type RemoteActivityTargetQuery = {
+    businessKey?: string;
+    businessGeneration?: string;
+    lifecycle?: 'active' | 'end_requested' | 'ended';
+};
+type RemoteSnapshot<T = RemoteJSON> = {
+    targetId: string;
+    hasState: boolean;
+    state: T | null;
+    revision: number;
+    isStale?: boolean;
+};
+type RemoteWidgetSelector = {
+    parameter: string;
+};
+type Address = {
+    targetId: string;
+    selector?: never;
+} | {
+    selector: RemoteWidgetSelector;
+    targetId?: never;
+};
+type RemoteStateUpdate<T = RemoteJSON> = Address & {
+    state: T;
+    expectedRevision: number;
+    idempotencyKey: string;
+    sourceVersion?: number;
+    expiresAt?: Date;
+};
+type RemoteActivityStart<T = RemoteJSON> = {
+    startTargetId: string;
+    templateVersion: string;
+    businessKey?: string;
+    businessGeneration?: string;
+    state: T;
+    alert: {
+        title: string;
+        body: string;
+    };
+    idempotencyKey: string;
+    expiresAt?: Date;
+};
+type RemoteActivityUpdate<T = RemoteJSON> = {
+    targetId: string;
+    state: T;
+    expectedRevision: number;
+    idempotencyKey: string;
+    sourceVersion?: number;
+    staleAt?: Date;
+    relevanceScore?: number;
+    priority?: 'normal' | 'high';
+    alert?: {
+        title: string;
+        body: string;
+    };
+    expiresAt?: Date;
+};
+type RemoteActivityEnd<T = RemoteJSON> = {
+    targetId: string;
+    idempotencyKey: string;
+    dismissAt?: Date;
+    expiresAt?: Date;
+} & ({
+    state: T;
+    expectedRevision: number;
+} | {
+    state?: never;
+    expectedRevision?: number;
+});
+type RemoteStartPreparation<T = RemoteJSON> = {
+    sampleState?: T;
+    resources?: string[];
+    schema?: RemoteStateSchema;
+};
+type RemoteStartTarget = {
+    startTargetId: string;
+    templateVersion: string;
+    status: 'ready' | 'pending';
+};
+/** Send state changes to explicitly authorized widget and Live Activity targets. */
+declare namespace RemotePush {
+    function getCapabilities(): Promise<RemoteCapabilities>;
+    function getOperation(operationId: string): Promise<RemoteUpdateReceipt>;
+    namespace widgets {
+        function updateMany<T>(items: readonly RemoteStateUpdate<T>[]): Promise<RemoteBatchResult[]>;
+        function update<T>(options: RemoteStateUpdate<T>): Promise<RemoteUpdateReceipt>;
+        function reload(options: Address & {
+            idempotencyKey: string;
+            expiresAt?: Date;
+        }): Promise<RemoteUpdateReceipt>;
+    }
+    namespace liveActivities {
+        function updateMany<T>(items: readonly RemoteActivityUpdate<T>[]): Promise<RemoteBatchResult[]>;
+        function endMany<T>(items: readonly RemoteActivityEnd<T>[]): Promise<RemoteBatchResult[]>;
+        function start<T>(options: RemoteActivityStart<T>): Promise<RemoteUpdateReceipt>;
+        function update<T>(options: RemoteActivityUpdate<T>): Promise<RemoteUpdateReceipt>;
+        function end<T>(options: RemoteActivityEnd<T>): Promise<RemoteUpdateReceipt>;
+        function getSnapshot<T = RemoteJSON>(targetId: string): Promise<RemoteSnapshot<T>>;
+        function listTargets(options?: RemoteActivityTargetQuery): Promise<RemoteTargetDetails[]>;
+    }
+}
+/** Read-only helpers inside widget.tsx; configuration and authorization happen in the app. */
+declare namespace RemoteWidgetUpdates {
+    function enable(): Promise<RemoteTarget>;
+    function getTarget(options?: RemoteWidgetSelector): Promise<RemoteTarget>;
+    function getState<T = RemoteJSON>(): RemoteSnapshot<T> | null;
+    function getSnapshot<T = RemoteJSON>(options: RemoteWidgetSelector): Promise<RemoteSnapshot<T>>;
+    function listTargets(): Promise<RemoteTargetDetails[]>;
+}
+
 /**
  * The state of a Live Activity in its life cycle.
  *
@@ -10777,6 +11267,12 @@ type LiveActivityUIProps = {
      */
     content: VirtualNode;
     /**
+     * Optional compact layout for Apple Watch Smart Stack (watchOS 11+, paired with iOS 18+)
+     * and other surfaces that use the small activity family, such as CarPlay.
+     * Defaults to content when omitted.
+     */
+    small?: VirtualNode;
+    /**
      * The view for the compact leading presentation of the Live Activity.
      */
     compactLeading: VirtualNode;
@@ -10803,6 +11299,11 @@ interface LiveActivityUIBuilder<T> {
     (contentState: T): VirtualNode;
 }
 type LiveActivityOptions = {
+    remoteUpdates?: boolean;
+    businessKey?: string;
+    businessGeneration?: string;
+    idempotencyKey?: string;
+    resources?: string[];
     /**
      * The date(timestamp) or Date object when the system considers the Live Activity to be out of date.
      * When time reaches the configured stale date, the system considers the
@@ -10822,6 +11323,9 @@ type LiveActivityOptions = {
     relevanceScore?: number;
 };
 type LiveActivityUpdateOptions = LiveActivityOptions & {
+    /** Required when updating an activity managed by remote updates. Read its current snapshot first. */
+    expectedRevision?: number;
+    sourceVersion?: number;
     /**
      * The alert configuration you use to configure how the system notifies a person about the updated content of the Live Activity.
      */
@@ -10866,6 +11370,8 @@ declare function LiveActivityUIExpandedBottom(props: LiveActivityUIExpandedViewP
  * Display your Script’s data in the Dynamic Island and on the Lock Screen and offer quick interactions.
  */
 declare class LiveActivity<T> {
+    /** Resolve an explicitly prepared asset during remote Live Activity rendering. */
+    static resourcePath(relative: string): string;
     private static _builderMap;
     static register<T>(name: string, builder: LiveActivityUIBuilder<T>): () => LiveActivity<T>;
     private static build;
@@ -10874,6 +11380,8 @@ declare class LiveActivity<T> {
     private _updateListenerId?;
     private _activityId?;
     private _started;
+    private _remoteStartRequestId?;
+    private _remoteManaged;
     /**
      * The activity ID, you should access this property after `start` executed successfully.
      */
@@ -10889,6 +11397,15 @@ declare class LiveActivity<T> {
      * @returns A boolean value that indicates whether the action was successfull.
      */
     start(contentState: T, options?: LiveActivityOptions): Promise<boolean>;
+    /** Prepare an installed renderer without starting an activity. */
+    prepareRemoteStart(options?: RemoteStartPreparation<T>): Promise<RemoteStartTarget>;
+    get remoteUpdates(): {
+        getTarget: () => Promise<RemoteTarget>;
+        getSnapshot: () => Promise<RemoteSnapshot<T>>;
+        waitUntilReady: (options?: {
+            timeoutMs?: number;
+        }) => Promise<RemoteTarget>;
+    };
     /**
      * Updates the dynamic content of the Live Activity and alerts a person about the Live Activity update.
      * @param contentState The updated dynamic contentState for the Live Activity, it must be JSON serializable.
@@ -10902,7 +11419,7 @@ declare class LiveActivity<T> {
      * @param options The options object to end the live activity.
      * @returns A boolean value that indicates whether the action was successfull.
      */
-    end(contentState: T, options?: LiveActivityEndOptions): Promise<boolean>;
+    end(contentState?: T, options?: LiveActivityEndOptions): Promise<boolean>;
     /**
      * Get the current state of the Live Activity in its life cycle.
      */
@@ -11203,6 +11720,8 @@ declare namespace Notification {
  * Modal presentation styles available when presenting view controllers.
  */
 type ModalPresentationStyle = 'automatic' | 'currentContext' | 'formSheet' | 'fullScreen' | 'overCurrentContext' | 'overFullScreen' | 'pageSheet';
+/** Action for a left-edge rightward swipe on a full-screen modal. */
+type NavigationSwipeBackBehavior = 'disabled' | 'dismiss' | 'minimize';
 declare namespace Navigation {
     /**
      * Presents a view controller modally. The promise will be fulfilled after the view controller dismissed.
@@ -11210,6 +11729,24 @@ declare namespace Navigation {
     function present<T = any>(options: VirtualNode | {
         element: VirtualNode;
         modalPresentationStyle?: ModalPresentationStyle;
+        /**
+         * Left-edge rightward swipe behavior for fullScreen / overFullScreen.
+         * Defaults to disabled; other presentation styles ignore this option.
+         * Inner navigation goes back first. interactiveDismissDisabled blocks it.
+         *
+         * dismiss closes this page and resolves present with undefined.
+         * minimize hides the script and retains this page; present stays pending
+         * until the page is actually dismissed. Only the first presented page in
+         * an environment supporting Script.supportsMinimization() can minimize.
+         * Otherwise the minimize gesture is disabled, never changed to dismiss.
+         * This option is independent of Script.enableMinimize(), which controls
+         * system sheet swipes. Cancelling the swipe performs neither action.
+         *
+         * VoiceOver escape uses the same action at the page root. Also provide an
+         * accessible Close / Minimize button. Programmatic useDismiss still closes
+         * the page, and Script.exit still terminates the script.
+         */
+        swipeBackBehavior?: NavigationSwipeBackBehavior;
     }): Promise<T>;
     function useDismiss(): (result?: any) => void;
 }
@@ -11775,6 +12312,41 @@ type CancelTokenHook = {
  */
 declare function useCancelToken(): CancelTokenHook;
 
+type ScriptEnvironment = "bluetooth" | "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "alarm_live_activity" | "translation_ui_provider" | "home_screen" | "camera_control";
+
+/** A photo or video copied into the main app after native camera capture. */
+type CameraControlAsset = {
+    id: string;
+    type: "photo" | "video";
+    /** A local path. Files remain available after the script exits until explicitly deleted. */
+    filePath: string;
+    /** The captured file's Uniform Type Identifier, such as public.jpeg or com.apple.quicktime-movie. */
+    typeIdentifier: string;
+    /** Capture time as milliseconds since the Unix epoch. */
+    capturedAt: number;
+    /** Encoded pixel dimensions, when known; these do not imply display orientation. */
+    width?: number;
+    height?: number;
+    /** Video duration in seconds, when known. */
+    duration?: number;
+};
+type CameraControlParameter = {
+    /** Stable across delivery retries. Use this to avoid repeating external effects. */
+    captureId: string;
+    assets: CameraControlAsset[];
+};
+/** The immediate caller captured by the host when a script invocation is admitted. */
+type ScriptCaller = {
+    readonly name: string;
+    readonly env: string;
+};
+type ScriptInvocationSource = "scriptRun" | "scriptSessionCall" | "scriptSessionRequest" | "other";
+/** A frozen event snapshot. Names are not permanent identities or authorization tokens. */
+type ScriptInvocation = {
+    readonly id: string;
+    readonly source: ScriptInvocationSource;
+    readonly caller: ScriptCaller | null;
+};
 type ScriptDeveloper = {
     name: string;
     email: string | null;
@@ -11800,10 +12372,10 @@ type ScriptMetadata = {
 };
 /**
  * Identifiers for the device capabilities that can be granted to a script or skill
- * on a per-script basis (see `Script.requestAccess`). These are gated only when the
- * "Require Per-Script Permission" setting is enabled.
+ * on a per-script basis (see `Script.requestAccess`). These follow their API-specific access rules.
+ * VPN management methods do not request script permission.
  */
-type ScriptingApi = "calendar" | "reminders" | "alarms" | "contacts" | "location" | "homeKit" | "photos" | "health" | "clipboard" | "fileSystem" | "localDevVPN" | "vpn";
+type ScriptingApi = "calendar" | "reminders" | "alarms" | "contacts" | "location" | "homeKit" | "photos" | "health" | "clipboard" | "fileSystem" | "screenCapture" | "audioEngine" | "localDevVPN" | "vpn";
 /**
  * Access information about the script, and provides convenient methods to control the scripts.
  *
@@ -11824,8 +12396,17 @@ declare namespace Script {
      *  - `"alarm_live_activity"`: The script is rendering an AlarmKit live activity, "alarm_live_activity.tsx" is the entry point.
      *  - `"translation_ui_provider"`: The script is running in the translation UI provider extension, "translation_ui_provider.tsx" is the entry point.
      *  - `"home_screen"`: The script is rendering the Home tab, "home_screen_default_ui.tsx" is the entry point.
+     *  - `"camera_control"`: The script runs "index.tsx" in the main app from the camera entry. It has the same API scope as "index" and "home_screen", subject to normal system and permission requirements.
      */
-    const env: "bluetooth" | "index" | "widget" | "intent" | "app_intents" | "notification" | "assistant_tool" | "keyboard" | "control_widget" | "live_activity" | "alarm_live_activity" | "translation_ui_provider" | "home_screen";
+    const env: ScriptEnvironment;
+    /**
+     * Photos and videos handed to this invocation from Scripting's native capture
+     * extension. Null for ordinary launches and camera launches without handed-off
+     * content. A later delivery to a running camera script arrives in `onResume`.
+     * Manage saved captures in More → Default Scripts. Delivery does not imply
+     * that your script successfully completed processing the files.
+     */
+    const cameraControlParameter: CameraControlParameter | null;
     /**
      * Name of the current script.
      */
@@ -11871,6 +12452,10 @@ declare namespace Script {
      * because URL query strings cannot carry typed values.
      */
     const queryParameters: Record<string, any>;
+    /** Initial launch source only. Later resumes have event.invocation; service handlers use request.caller.
+     * Direct/external launches have source "other" and caller null. Python caller identity may be unknown.
+     */
+    const invocation: ScriptInvocation;
     /**
      * Creates a URL scheme for opening the Scripting's documentation page.
      * @param title The title of the documentation page, if not specified, it will open the documentation homepage.
@@ -11994,6 +12579,8 @@ declare namespace Script {
      * **Caution**: Make sure to call `Script.exit()` in the script to avoid memory leaks.
      *
      * @param options
+     * JavaScript targets start in a new instance. Users can allow this launch, save an allow or block decision for this caller and target, or run without script permissions.
+     * An allowed launch can use the target's allowed script permissions and request undecided permissions. A blocked call rejects with code SCRIPT_INVOCATION_BLOCKED.
      * @param options.name Name of the script
      * @param options.queryParameters Params passed to the script, you can access by `Script.queryParameters`.
      * @param options.singleMode If `true`, only one instance of the script can be run at the same time, so other script instances will be terminated. Defaults to `false`.
@@ -12071,10 +12658,18 @@ declare namespace Script {
      */
     function onMinimize(callback: () => void): () => void;
     /**
+     * Observes an uncaught JavaScript exception reported by the runtime in an ordinary App script.
+     * The callback receives the original thrown value synchronously before the script exits.
+     * @returns A function that removes the listener.
+     */
+    function onError(callback: (error: unknown) => void): () => void;
+    /**
      * The event details of the resume event.
      * The details include the parameters passed to the script when it was resumed, you can determine whether the script was run by a shortcut action or share sheet and so on.
      */
     type ResumeEventDetails = {
+        /** This resume event's source. Does not replace Script.invocation. */
+        readonly invocation: ScriptInvocation;
         /**
          * Whether the script was resumed from the minimized state.
          */
@@ -12095,6 +12690,8 @@ declare namespace Script {
          * The notification info passed to the script when it was resumed by tapping on a notification.
          */
         notificationInfo: NotificationInfo | null;
+        /** A new camera capture batch, or null when this resume has no captured content. */
+        cameraControlParameter: CameraControlParameter | null;
     };
     /**
      * Listen to the resume event.
@@ -12114,7 +12711,7 @@ declare namespace Script {
      * Listen to Home tab events.
      *
      * Only meaningful for a script rendered on the Home tab, that is, a script whose
-     * `home_screen_default_ui.tsx` is selected in Settings. Registering in any other
+     * `home_screen_default_ui.tsx` is selected in More → Default Scripts. Registering in any other
      * environment is harmless, but the callback is never called.
      *
      * The callback is not called for the initial appearance: the top-level code of
@@ -12137,9 +12734,9 @@ declare namespace Script {
      */
     function onHomeTabEvent(callback: (event: HomeTabEvent) => void): () => void;
     /**
-     * Determine whether user has full feature access.
+     * Determine whether user has full access to the Scripting PRO features.
      *
-     * @returns `true` if the user has full feature access, otherwise `false`.
+     * @returns `true` if the user has full access to the Scripting PRO features, otherwise `false`.
      */
     function hasFullAccess(): boolean;
     /**
@@ -12156,7 +12753,8 @@ declare namespace Script {
      * - The prompt lets the user set each capability individually, or use "Allow All" / "Deny All".
      * - The resolved value is the set of requested capabilities that end up granted.
      *
-     * API-specific access requirements are checked when the corresponding API is called.
+     * This does NOT perform a Scripting PRO check. Capabilities that require PRO (such as
+     * `alarms`, `health`, `homeKit`) are still enforced when the corresponding API is called.
      *
      * @param apis The capabilities to request. Must be a non-empty array; the promise rejects
      *   if it is empty or contains an unknown identifier.
@@ -12213,6 +12811,7 @@ type WidgetRelevance = {
  * This interface provides some operations for Widget.
  */
 declare namespace Widget {
+    const remoteUpdates: typeof RemoteWidgetUpdates;
     /** Number of configured system shortcuts. Zero in previews and on systems before iOS 27. */
     const shortcutCount: number;
     /**
@@ -12290,7 +12889,7 @@ declare namespace Widget {
      */
     function present(node: VirtualNode, reloadPolicy?: WidgetReloadPolicy): void;
     /**
-     * Previews the widget with the specified parameters. This method allows you to preview how the widget will look with different parameters. You should only call this method in the `index.tsx` context, it's not available in other environments like `widget.tsx` or `intent.tsx`.
+     * Previews the widget with the specified parameters. This method allows you to preview how the widget will look with different parameters. Call this method in the main Scripting App (Script.env is "index", "home_screen", or "camera_control"). It is not available in widget or intent extension environments.
      * @param options The options for previewing the widget.
      * @param options.family The family of the widget to preview. Defaults to `systemSmall`.
      * @param options.parameters The parameters for the widget preview.
@@ -12345,6 +12944,12 @@ declare namespace Widget {
 
 declare const Device: typeof globalThis.Device;
 
+declare const VideoPlaybackQueue$1: typeof globalThis.VideoPlaybackQueue;
+type VideoPlaybackQueue$1 = InstanceType<typeof VideoPlaybackQueue$1>;
+
+type VideoPlaybackQueueItem = InstanceType<typeof VideoPlaybackQueue$1>['items'][number];
+type VideoPlaybackHistoryEntry = ReturnType<VideoPlaybackQueue$1['exportHistory']>[number];
+
 declare global {
     namespace JSX {
         interface Element extends VirtualNode {
@@ -12357,4 +12962,4 @@ declare global {
     }
 }
 
-export { type AVLayerVideoGravity, AVPlayerView, type AVPlayerViewProps, AbortController, AbortEvent, type AbortEventListener, AbortSignal, type AccessibilityAction, type AccessibilityChildBehavior, type AccessibilityHeadingLevel, type AccessibilityRotor, type AccessibilityRotorEntry, type AccessibilityRotorTarget, type AccessibilityTrait, AccessoryWidgetBackground, type AdaptableTabBarPlacement, AlarmLiveActivity, type AlarmLiveActivityAction, type AlarmLiveActivityCountdownState, type AlarmLiveActivityMode, type AlarmLiveActivityPausedState, type AlarmLiveActivityPresentation, type AlarmLiveActivityPresentationButton, type AlarmLiveActivitySchedule, type AlarmLiveActivityState, type AlarmLiveActivityUIBuilder, type Alignment, type Angle, type AngleValue, type AngularGradient, AnimatedFrames, type AnimatedFramesProps, AnimatedGif, type AnimatedGifProps, AnimatedImage, type AnimatedImageProps, Annotation, type AnnotationOverflowResolution, type AnnotationOverflowResolutionStrategy, type AnnotationPosition, type AnnotationProps, AppEventListenerManager, AppEvents, type AppIntent, type AppIntentFactory, AppIntentManager, type AppIntentPerform, AppIntentProtocol, AreaChart, AreaPlot, type AreaPlotProps, AreaStackChart, type Axis, type AxisGridLineConfig, type AxisLabelFormat, type AxisMarkOrientation, type AxisMarkPosition, type AxisMarkPreset, type AxisMarkValues, type AxisMarksConfig, type AxisSet, type AxisTickConfig, type AxisValueLabelCollisionResolution, type AxisValueLabelConfig, type BadgeProminence, Bar1DChart, BarChart, type BarChartProps, BarGanttChart, type BarGanttChartProps, BarStackChart, type BlendMode, Blob, Button, type ButtonBorderShape, type ButtonProps, type ButtonRole, type ButtonStyle, type CalendarComponent, CancelError, type CancelEventListener, CancelToken, type CancelTokenHook, Canvas, CanvasGradient, type CanvasImageSource, CanvasPattern, type CanvasProps, CanvasRenderingContext, type CanvasSize, Capsule, CaptureVideoPreviewView, type CaptureVideoPreviewViewProps, Chart, type ChartAxisScaleType, type ChartDateRangeSelection, ChartGesture, type ChartGestureProps, type ChartInterpolationMethod, type ChartMarkProps, type ChartMarkStackingMethod, type ChartNumberRangeSelection, type ChartNumberSelection, ChartOverlay, type ChartOverlayProps, ChartPlotProxy, ChartPlotStyle, type ChartPlotStyleProps, type ChartProxy, type ChartRangeSelection, type ChartScrollPosition, type ChartScrollTargetBehavior, type ChartSelection, type ChartStringRangeSelection, type ChartStringSelection, type ChartSymbolShape, Circle, type ClockHandRotationEffectPeriod, type ClosedRange, type Color, ColorPicker, type ColorPickerProps, type ColorRenderingMode, type ColorScheme, type ColorSchemeContrast, type ColorStringHSL, type ColorStringHSLA, type ColorStringHex, type ColorStringRGB, type ColorStringRGBA, type ColorWithGradientOrOpacity, type CommonViewProps, type ComponentCallback, type ComponentEffect, type ComponentEffectEvent, type ComponentMemo, type ComponentProps, ConcentricRectangle, type ConcentricRectangleProps, type ConcentricRectangleShape, type Consumer, type ConsumerProps, type ContentAvailableViewProps, type ContentAvailableViewWithLabelProps, type ContentAvailableViewWithTitleProps, type ContentMarginPlacement, type ContentMode, type ContentShapeKinds, type ContentTransition, ContentUnavailableView, type Context, ControlGroup, type ControlGroupProps, type ControlGroupStyle, type ControlSize, ControlWidget, ControlWidgetButton, type ControlWidgetButtonProps, type ControlWidgetLabel, ControlWidgetToggle, type ControlWidgetToggleProps, type Cookie, CustomShape, type CustomShapeProps, DateIntervalLabel, type DateIntervalLabelProps, DateLabel, type DateLabelProps, DatePicker, type DatePickerComponents, type DatePickerProps, type DatePickerStyle, DateRangeLabel, type DateRangeLabelProps, DefaultToolbarItem, type DefaultToolbarItemProps, Device, DirectoryBrowserView, type DirectoryBrowserViewProps, DisclosureGroup, type DisclosureGroupProps, type DiscreteSymbolEffect, type Dispatch, Divider, DonutChart, DragGesture, type DragGestureDetails, type DragGestureOptions, type DurationInMilliseconds, type DynamicImageSource, type DynamicShapeStyle, type DynamicTypeSize, type Edge, type EdgeCornerStyle, type EdgeInsets, type EdgeSet, type EdgeSetOption, EditButton, Editor, type EditorProps, type EffectDestructor, type EffectSetup, Ellipse, EmptyView, type EnvironmentValues, EnvironmentValuesReader, type EnvironmentValuesReaderProps, type FileImageProps, FlowLayout, type FlowLayoutProps, type Font, type FontDesign, type FontWeight, type FontWidth, ForEach, type ForEachComponent, type ForEachDeprecatedProps, type ForEachProps, Form, type FormBinaryData, FormData, type FormProps, type FormStyle, type FunctionComponent, Gauge, type GaugeProps, type GaugeStyle, type GeometryCoordinateSpace, type GeometryProxy, GeometryReader, type GeometryReaderProps, type Gesture, GestureInfo, type GestureInputKind, type GestureInputKinds, GlassEffectContainer, type GlassEffectContainerProps, type GlobalCompositeOperation, type Gradient, type GradientStop$1 as GradientStop, Grid, type GridItem, type GridProps, GridRow, type GridRowProps, type GridSize, Group, GroupBox, type GroupBoxProps, type GroupProps, HStack, type HStackProps, Headers, type HeadersInit, HeatMapChart, type HorizontalAlignment, type HorizontalEdge, type HorizontalEdgeSet, type HoverEffect, type IdProps, Image, type ImageInterpolation, type ImageProps, type ImageRenderOptions, ImageRenderer, type ImageRenderingBehaviorProps, type ImageRenderingMode, type ImageResizable, type ImageResizingMode, type ImageScale, type IndexViewStyle, Intent, IntentAttributedTextValue, IntentFileURLValue, IntentFileValue, IntentImageValue, IntentJsonValue, IntentRequestConfirmationValue, IntentSnippetIntentValue, IntentTextValue, IntentURLValue, IntentValue, IntentViewValue, type InternalWidgetRender, type KeyboardType, type KeywordPoint, type KeywordsColor, Label, type LabelProps, type LabelStyle, LabeledContent, type LabeledContentProps, type LayoutDirection, type LayoutDirectionBehavior, LazyHGrid, type LazyHGridProps, LazyHStack, type LazyHStackProps, LazyVGrid, type LazyVGridProps, LazyVStack, type LazyVStackProps, LineCategoryChart, LineChart, LinePlot, type LinePlotFunctionProps, type LinePlotParametricProps, type LineStylePattern, type LinearGradient, Link, type LinkProps, List, type ListProps, type ListSectionSpacing, type ListStyle, LiveActivity, type LiveActivityActivitiesEnabledListener, type LiveActivityActivityUpdateListener, type LiveActivityDetail, type LiveActivityDynamicIslandMargins, type LiveActivityDynamicIslandMode, type LiveActivityEndOptions, type LiveActivityOptions, type LiveActivityState, LiveActivityUI, type LiveActivityUIBuilder, LiveActivityUIExpandedBottom, LiveActivityUIExpandedCenter, LiveActivityUIExpandedLeading, LiveActivityUIExpandedTrailing, type LiveActivityUIExpandedViewProps, type LiveActivityUIProps, type LiveActivityUpdateOptions, LivePhotoView, type LivePhotoViewProps, LongPressGesture, type LongPressGestureOptions, LookAroundPreview, type LookAroundPreviewProps, MagnifyGesture, type MagnifyGestureValue, Map, type MapAnnotationLabelVisibility, MapCircle, type MapCircleProps, MapCompass, type MapCoordinate, type MapCoordinateSpace, MapPitchToggle, type MapPointOfInterestCategory, type MapPointsOfInterestSpec, MapPolygon, type MapPolygonProps, MapPolyline, type MapPolylineProps, type MapProps, type MapProxy, MapReader, type MapReaderProps, type MapRegion, MapScaleView, type MapSelectionAccessoryStyle, type MapSelectionValue, type MapStrokeStyle, type MapStyleSpec, MapUserLocationButton, type MarkDimension, Markdown, type MarkdownProps, Marker, type MarkerByCoordinateProps, type MarkerByItemProps, type MarkerProps, type MatchedGeometryProperties, type Material, Menu, type MenuProps, type MenuStyle, type MeshGradient, type ModalPresentation, type ModalPresentationStyle, MultiColumnsPicker, type MultiColumnsPickerProps, MultiPicker, type MutableRefObject, NamespaceReader, type NamespaceReaderProps, Navigation, type NavigationBarTitleDisplayMode, NavigationDestination, type NavigationDestinationProps, NavigationLink, type NavigationLinkProps, NavigationSplitView, type NavigationSplitViewColumn, type NavigationSplitViewProps, type NavigationSplitViewStyle, type NavigationSplitViewVisibility, NavigationStack, type NavigationStackProps, type NetworkImageProps, type NormalProgressViewProps, Notification, type NotificationAction, type NotificationInfo, type NotificationInterruptionLevel, type NotificationRequest, type PIPStatus, type ParagraphStyle, Path, Path2D, type PathAffineTransform, PathShape, type PathShapeProps, type PathShapeValue, Picker, type PickerProps, type PickerStyle, type PickerValue, PieChart, type PinnedScrollViews, type Point, Point1DChart, PointCategoryChart, PointChart, type PopoverPresentation, type PresentationAdaptation, type PresentationBackgroundInteraction, type PresentationContentInteraction, type PresentationDetent, type PresentationSizing, ProgressView, type ProgressViewProps, type ProgressViewStyle, type Prominence, type Provider, type ProviderProps, QRImage, type QRImageProps, type RadialGradient, RangeAreaChart, ReadableStream, ReadableStreamDefaultController, ReadableStreamDefaultReader, type Rect, RectAreaChart, RectChart, type RectCornerRadii, type RectWithCornerRadii, type RectWithCornerRadius, type RectWithCornerSize, Rectangle, type RedirectRequest, type Reducer, type ReducerAction, type ReducerState, type RefObject, type RenderNode, ReorderableForEach, type ReorderableForEachComponent, type ReorderableForEachProps, Request, type RequestInit, Response, type ResponseInit, RotateGesture, type RotateGestureValue, type RoundedCornerStyle, RoundedRectangle, type RoundedRectangleProps, RuleChart, RuleLineForLabelChart, RuleLineForValueChart, SVG, type SVGCodeSourceProps, type SVGFilePathSourceProps, type SVGProps, type SVGURLSourceProps, type SafeAreaRegions, type ScenePhase, ScreenshotMaker, Script, type ScriptDeveloper, type ScriptMetadata, type ScriptingApi, type ScriptingDeviceInfo, type ScrollBounceBehavior, type ScrollDismissesKeyboardMode, type ScrollGeometry, type ScrollGeometryChangeOptions, type ScrollGeometryValues, type ScrollPhase, type ScrollPhaseChangeContext, type ScrollScrollIndicatorVisibility, type ScrollTargetBehavior, ScrollView, type ScrollViewProps, type ScrollViewProxy, ScrollViewReader, type ScrollViewReaderProps, type ScrollVisibilityChangeOptions, type SearchFieldPlacement, type SearchSuggestionsPlacementSet, Section, type SectionProps, SecureField, type SecureFieldProps, type SensoryFeedback, type SetStateAction, type Shape, type ShapeProps, type ShapeStyle, type ShortcutFileURLParameter, type ShortcutJsonParameter, type ShortcutParameter, type ShortcutTextParameter, type Size, Slider, type SliderProps, type SliderWithLabelProps, type SliderWithRangeValueLabelsProps, type SliderWithTicksProps, Spacer, type StateInitializer, Stepper, type StepperProps, type StrokeStyle, type StyledText, type SubmitTriggers, type SwingAnimation, type SymbolEffect, type SymbolEffectOptions, type SymbolRenderingMode, type SymbolVariants, type SystemImageProps, Tab, type TabCustomizationBehavior, type TabPlacement, type TabProps, type TabRole, TabSection, type TabSectionProps, TabView, type TabViewProps, type TabViewStyle, TapGesture, type TapGestureOptions, Text, type TextAlignment, type TextContentType, TextField, type TextFieldProps, type TextFieldStyle, type TextInputAutocapitalization, TextMetrics, type TextProps, TimelineCanvas, type TimelineCanvasDrawSize, type TimelineCanvasProps, type TimelineCanvasSchedule, TimerIntervalLabel, type TimerIntervalLabelProps, type TimerIntervalProgressViewProps, Toggle, type ToggleProps, type ToggleStyle, type ToolBarProps, Toolbar, type ToolbarDefaultItemKind, ToolbarItem, ToolbarItemGroup, type ToolbarItemGroupProps, type ToolbarItemPlacement, type ToolbarItemProps, type ToolbarPlacement, ToolbarSpacer, type ToolbarSpacerProps, type ToolbarSpacerSizing, type ToolbarTitleDisplayMode, type TouchGestureEvent, type TouchGestureProps, TransformStream, TransformStreamDefaultController, type Transformer, type TriggerSymbolEffect, type TruncationMode, type UIImageProps, type UnderlineStyle, type UnderlyingSink, type UnderlyingSource, UnevenRoundedRectangle, type UnevenRoundedRectangleProps, type UserInterfaceSizeClass, VStack, type VStackProps, type VerticalAlignment, type VerticalEdge, type VerticalEdgeSet, VideoPlayer, type VideoPlayerProps, VideoRecorderPreviewView, type VideoRecorderPreviewViewProps, ViewModifiers, type VirtualNode, type Visibility, WebView, type WebViewProps, Widget, type WidgetAccentedRenderingMode, type WidgetDisplaySize, type WidgetFamily, type WidgetRelevance, type WidgetReloadPolicy, type WidgetRenderingMode, WritableStream, WritableStreamDefaultController, WritableStreamDefaultWriter, ZStack, type ZStackProps, createContext, fetch, gradient, modifiers, useCallback, useCancelToken, useColorScheme, useContext, useEffect, useEffectEvent, useKeyboardVisible, useMemo, useObservable, useReducer, useRef, useSelector, useState };
+export { type AVLayerVideoGravity, AVPlayerView, type AVPlayerViewProps, AbortController, AbortEvent, type AbortEventListener, AbortSignal, type AccessibilityAction, type AccessibilityChildBehavior, type AccessibilityHeadingLevel, type AccessibilityRotor, type AccessibilityRotorEntry, type AccessibilityRotorTarget, type AccessibilityTrait, AccessoryWidgetBackground, type AdaptableTabBarPlacement, type AgentResponse, type AgentResponseState, AirPlayRoutePicker, type AirPlayRoutePickerProps, AlarmLiveActivity, type AlarmLiveActivityAction, type AlarmLiveActivityCountdownState, type AlarmLiveActivityMode, type AlarmLiveActivityPausedState, type AlarmLiveActivityPresentation, type AlarmLiveActivityPresentationButton, type AlarmLiveActivitySchedule, type AlarmLiveActivityState, type AlarmLiveActivityUIBuilder, type Alignment, type Angle, type AngleValue, type AngularGradient, AnimatedFrames, type AnimatedFramesProps, AnimatedGif, type AnimatedGifProps, AnimatedImage, type AnimatedImageProps, Annotation, type AnnotationOverflowResolution, type AnnotationOverflowResolutionStrategy, type AnnotationPosition, type AnnotationProps, AppEventListenerManager, AppEvents, type AppIntent, type AppIntentFactory, AppIntentManager, type AppIntentPerform, AppIntentProtocol, AreaChart, AreaPlot, type AreaPlotProps, AreaStackChart, ArrangementView, type ArrangementViewProps, AudioUnitView, type AudioUnitViewProps, type Axis, type AxisGridLineConfig, type AxisLabelFormat, type AxisMarkOrientation, type AxisMarkPosition, type AxisMarkPreset, type AxisMarkValues, type AxisMarksConfig, type AxisSet, type AxisTickConfig, type AxisValueLabelCollisionResolution, type AxisValueLabelConfig, type BadgeProminence, Bar1DChart, BarChart, type BarChartProps, BarGanttChart, type BarGanttChartProps, BarStackChart, type BlendMode, Blob, Button, type ButtonBorderShape, type ButtonProps, type ButtonRole, type ButtonStyle, type CalendarComponent, type CameraCaptureEvent, type CameraCaptureProps, type CameraControlAsset, type CameraControlParameter, CancelError, type CancelEventListener, CancelToken, type CancelTokenHook, Canvas, CanvasGradient, type CanvasImageSource, CanvasPattern, type CanvasProps, CanvasRenderingContext, type CanvasSize, Capsule, CaptureVideoPreviewView, type CaptureVideoPreviewViewProps, Chart, type ChartAxisScaleType, type ChartDateRangeSelection, ChartGesture, type ChartGestureProps, type ChartInterpolationMethod, type ChartMarkProps, type ChartMarkStackingMethod, type ChartNumberRangeSelection, type ChartNumberSelection, ChartOverlay, type ChartOverlayProps, ChartPlotProxy, ChartPlotStyle, type ChartPlotStyleProps, type ChartProxy, type ChartRangeSelection, type ChartScrollPosition, type ChartScrollTargetBehavior, type ChartSelection, type ChartStringRangeSelection, type ChartStringSelection, type ChartSymbolShape, Circle, type ClockHandRotationEffectPeriod, type ClosedRange, type Color, ColorPicker, type ColorPickerProps, type ColorRenderingMode, type ColorScheme, type ColorSchemeContrast, type ColorStringHSL, type ColorStringHSLA, type ColorStringHex, type ColorStringRGB, type ColorStringRGBA, type ColorWithGradientOrOpacity, type CommonViewProps, type ComponentCallback, type ComponentEffect, type ComponentEffectEvent, type ComponentMemo, type ComponentProps, ConcentricRectangle, type ConcentricRectangleProps, type ConcentricRectangleShape, type Consumer, type ConsumerProps, type ContentAvailableViewProps, type ContentAvailableViewWithLabelProps, type ContentAvailableViewWithTitleProps, type ContentMarginPlacement, type ContentMode, type ContentShapeKinds, type ContentTransition, ContentUnavailableView, type Context, ControlGroup, type ControlGroupProps, type ControlGroupStyle, type ControlSize, ControlWidget, ControlWidgetButton, type ControlWidgetButtonProps, type ControlWidgetLabel, ControlWidgetToggle, type ControlWidgetToggleProps, type Cookie, CustomShape, type CustomShapeProps, DateIntervalLabel, type DateIntervalLabelProps, DateLabel, type DateLabelProps, DatePicker, type DatePickerComponents, type DatePickerProps, type DatePickerStyle, DateRangeLabel, type DateRangeLabelProps, DefaultToolbarItem, type DefaultToolbarItemProps, Device, type DeviceHingeContext, DirectoryBrowserView, type DirectoryBrowserViewProps, DisclosureGroup, type DisclosureGroupProps, type DiscreteSymbolEffect, type Dispatch, Divider, DonutChart, DragGesture, type DragGestureDetails, type DragGestureOptions, type DurationInMilliseconds, type DynamicImageSource, type DynamicShapeStyle, type DynamicTypeSize, type Edge, type EdgeCornerStyle, type EdgeInsets, type EdgeSet, type EdgeSetOption, EditButton, Editor, type EditorProps, type EffectDestructor, type EffectSetup, Ellipse, EmptyView, type EnvironmentValues, EnvironmentValuesReader, type EnvironmentValuesReaderProps, ExternalDisplayContent, type ExternalDisplayContentProps, type FileImageProps, FlowLayout, type FlowLayoutProps, type FoldableProps, type Font, type FontDesign, type FontWeight, type FontWidth, ForEach, type ForEachComponent, type ForEachDeprecatedProps, type ForEachProps, Form, type FormBinaryData, FormData, type FormProps, type FormStyle, type FunctionComponent, Gauge, type GaugeProps, type GaugeStyle, type GeometryCoordinateSpace, type GeometryProxy, GeometryReader, type GeometryReaderProps, type Gesture, GestureInfo, type GestureInputKind, type GestureInputKinds, GlassEffectContainer, type GlassEffectContainerProps, type GlobalCompositeOperation, type Gradient, type GradientStop$1 as GradientStop, Grid, type GridItem, type GridProps, GridRow, type GridRowProps, type GridSize, Group, GroupBox, type GroupBoxProps, type GroupProps, type HDRColorStyle, HStack, type HStackProps, Headers, type HeadersInit, HeatMapChart, type HingeChangeAction, type HorizontalAlignment, type HorizontalEdge, type HorizontalEdgeSet, type HoverEffect, type IdProps, Image, type ImageInterpolation, type ImageProps, type ImageRenderOptions, ImageRenderer, type ImageRenderingBehaviorProps, type ImageRenderingMode, type ImageResizable, type ImageResizingMode, type ImageScale, type IndexViewStyle, Intent, IntentAttributedTextValue, IntentFileURLValue, IntentFileValue, IntentImageValue, IntentJsonValue, IntentRequestConfirmationValue, IntentSnippetIntentValue, IntentTextValue, IntentURLValue, IntentValue, IntentViewValue, type InternalWidgetRender, type KeyboardType, type KeywordPoint, type KeywordsColor, Label, type LabelProps, type LabelStyle, LabeledContent, type LabeledContentProps, type LayoutDirection, type LayoutDirectionBehavior, LazyHGrid, type LazyHGridProps, LazyHStack, type LazyHStackProps, LazyVGrid, type LazyVGridProps, LazyVStack, type LazyVStackProps, LineCategoryChart, LineChart, LinePlot, type LinePlotFunctionProps, type LinePlotParametricProps, type LineStylePattern, type LinearGradient, Link, type LinkProps, List, type ListProps, type ListSectionSpacing, type ListStyle, LiveActivity, type LiveActivityActivitiesEnabledListener, type LiveActivityActivityUpdateListener, type LiveActivityDetail, type LiveActivityDynamicIslandMargins, type LiveActivityDynamicIslandMode, type LiveActivityEndOptions, type LiveActivityOptions, type LiveActivityState, LiveActivityUI, type LiveActivityUIBuilder, LiveActivityUIExpandedBottom, LiveActivityUIExpandedCenter, LiveActivityUIExpandedLeading, LiveActivityUIExpandedTrailing, type LiveActivityUIExpandedViewProps, type LiveActivityUIProps, type LiveActivityUpdateOptions, LivePhotoView, type LivePhotoViewProps, LiveTextView, type LiveTextViewProps, LongPressGesture, type LongPressGestureOptions, LookAroundPreview, type LookAroundPreviewProps, MagnifyGesture, type MagnifyGestureValue, Map, type MapAnnotationLabelVisibility, MapCircle, type MapCircleProps, MapCompass, type MapCoordinate, type MapCoordinateSpace, MapPitchToggle, type MapPointOfInterestCategory, type MapPointsOfInterestSpec, MapPolygon, type MapPolygonProps, MapPolyline, type MapPolylineProps, type MapProps, type MapProxy, MapReader, type MapReaderProps, type MapRegion, MapScaleView, type MapSelectionAccessoryStyle, type MapSelectionValue, type MapStrokeStyle, type MapStyleSpec, MapUserLocationButton, type MarkDimension, Markdown, type MarkdownProps, Marker, type MarkerByCoordinateProps, type MarkerByItemProps, type MarkerProps, type MatchedGeometryProperties, type Material, Menu, type MenuProps, type MenuStyle, type MeshGradient, type ModalPresentation, type ModalPresentationStyle, MultiColumnsPicker, type MultiColumnsPickerProps, MultiPicker, type MutableRefObject, NamespaceReader, type NamespaceReaderProps, Navigation, type NavigationBarTitleDisplayMode, NavigationDestination, type NavigationDestinationProps, NavigationLink, type NavigationLinkProps, NavigationSplitView, type NavigationSplitViewColumn, type NavigationSplitViewProps, type NavigationSplitViewStyle, type NavigationSplitViewVisibility, NavigationStack, type NavigationStackProps, type NavigationSwipeBackBehavior, type NetworkImageProps, type NormalProgressViewProps, Notification, type NotificationAction, type NotificationInfo, type NotificationInterruptionLevel, type NotificationRequest, type PIPStatus, type ParagraphStyle, Path, Path2D, type PathAffineTransform, PathShape, type PathShapeProps, type PathShapeValue, Picker, type PickerProps, type PickerStyle, type PickerValue, PieChart, type PinnedScrollViews, type Point, Point1DChart, PointCategoryChart, PointChart, type PopoverPresentation, type PresentationAdaptation, type PresentationBackgroundInteraction, type PresentationContentInteraction, type PresentationDetent, type PresentationSizing, ProgressView, type ProgressViewProps, type ProgressViewStyle, type Prominence, type Provider, type ProviderProps, QRImage, type QRImageProps, type RadialGradient, RangeAreaChart, ReadableStream, ReadableStreamDefaultController, ReadableStreamDefaultReader, RealityView, type RealityViewProps, type Rect, RectAreaChart, RectChart, type RectCornerRadii, type RectWithCornerRadii, type RectWithCornerRadius, type RectWithCornerSize, Rectangle, type RedirectRequest, type Reducer, type ReducerAction, type ReducerState, type RefObject, type RemoteActivityEnd, type RemoteActivityStart, type RemoteActivityTargetQuery, type RemoteActivityUpdate, type RemoteBatchResult, type RemoteCapabilities, type RemoteJSON, type RemoteOperation, RemotePush, type RemoteSnapshot, type RemoteStartPreparation, type RemoteStartTarget, type RemoteStateSchema, type RemoteStateUpdate, type RemoteTarget, type RemoteTargetDetails, type RemoteUpdateLimits, type RemoteUpdateReceipt, type RemoteWidgetSelector, type RenderNode, ReorderableForEach, type ReorderableForEachComponent, type ReorderableForEachProps, Request, type RequestInit, type ReservedRegion, type ReservedRegionKind, type ReservedRegionQuery, type ReservedRegionQueryOptions, Response, type ResponseInit, RotateGesture, type RotateGestureValue, type RoundedCornerStyle, RoundedRectangle, type RoundedRectangleProps, RuleChart, RuleLineForLabelChart, RuleLineForValueChart, SVG, type SVGCodeSourceProps, type SVGFilePathSourceProps, type SVGProps, type SVGURLSourceProps, type SafeAreaRegions, SampleBufferView, type SampleBufferViewProps, type ScenePhase, ScreenshotMaker, Script, type ScriptCaller, type ScriptDeveloper, type ScriptEnvironment, type ScriptInvocation, type ScriptInvocationSource, type ScriptMetadata, type ScriptingApi, type ScriptingDeviceInfo, type ScrollBounceBehavior, type ScrollDismissesKeyboardMode, type ScrollGeometry, type ScrollGeometryChangeOptions, type ScrollGeometryValues, type ScrollPhase, type ScrollPhaseChangeContext, type ScrollScrollIndicatorVisibility, type ScrollTargetBehavior, ScrollView, type ScrollViewProps, type ScrollViewProxy, ScrollViewReader, type ScrollViewReaderProps, type ScrollVisibilityChangeOptions, type SearchFieldPlacement, type SearchSuggestionsPlacementSet, Section, type SectionProps, SecureField, type SecureFieldProps, type SensoryFeedback, type SetStateAction, type Shape, type ShapeProps, type ShapeStyle, type ShortcutFileURLParameter, type ShortcutJsonParameter, type ShortcutParameter, type ShortcutTextParameter, type Size, Slider, type SliderProps, type SliderWithLabelProps, type SliderWithRangeValueLabelsProps, type SliderWithTicksProps, Spacer, type StateInitializer, Stepper, type StepperProps, type StrokeStyle, type StyledText, type SubmitTriggers, type SwingAnimation, type SymbolEffect, type SymbolEffectOptions, type SymbolRenderingMode, type SymbolVariants, type SystemImageProps, Tab, type TabCustomizationBehavior, type TabPlacement, type TabProps, type TabRole, TabSection, type TabSectionProps, TabView, type TabViewProps, type TabViewStyle, TapGesture, type TapGestureOptions, Text, type TextAlignment, type TextContentType, TextField, type TextFieldProps, type TextFieldStyle, type TextInputAutocapitalization, TextMetrics, type TextProps, TimelineCanvas, type TimelineCanvasDrawSize, type TimelineCanvasProps, type TimelineCanvasSchedule, TimerIntervalLabel, type TimerIntervalLabelProps, type TimerIntervalProgressViewProps, Toggle, type ToggleProps, type ToggleStyle, type ToolBarProps, Toolbar, type ToolbarDefaultItemKind, ToolbarItem, ToolbarItemGroup, type ToolbarItemGroupProps, type ToolbarItemPlacement, type ToolbarItemProps, type ToolbarPlacement, ToolbarSpacer, type ToolbarSpacerProps, type ToolbarSpacerSizing, type ToolbarTitleDisplayMode, type TouchGestureEvent, type TouchGestureProps, TransformStream, TransformStreamDefaultController, type Transformer, type TriggerSymbolEffect, type TruncationMode, type UIImageProps, type UnderlineStyle, type UnderlyingSink, type UnderlyingSource, UnevenRoundedRectangle, type UnevenRoundedRectangleProps, type UserInterfaceSizeClass, VStack, type VStackProps, type VerticalAlignment, type VerticalEdge, type VerticalEdgeSet, type VideoPlaybackHistoryEntry, VideoPlaybackPlayer, type VideoPlaybackPlayerProps, VideoPlaybackQueue$1 as VideoPlaybackQueue, type VideoPlaybackQueueItem, VideoPlaybackView, type VideoPlaybackViewProps, VideoPlayer, type VideoPlayerProps, VideoRecorderPreviewView, type VideoRecorderPreviewViewProps, ViewModifiers, type VirtualNode, type Visibility, WebView, type WebViewProps, Widget, type WidgetAccentedRenderingMode, type WidgetDisplaySize, type WidgetFamily, type WidgetRelevance, type WidgetReloadPolicy, type WidgetRenderingMode, WritableStream, WritableStreamDefaultController, WritableStreamDefaultWriter, ZStack, type ZStackProps, createContext, fetch, gradient, modifiers, useAgentResponse, useCallback, useCancelToken, useColorScheme, useContext, useEffect, useEffectEvent, useKeyboardVisible, useMemo, useObservable, useReducer, useRef, useSelector, useState };

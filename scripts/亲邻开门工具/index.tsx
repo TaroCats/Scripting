@@ -447,7 +447,7 @@ function App(props: { initialLog: string }) {
                   <ZStack>
                     <Circle
                       frame={{ width: 156, height: 156 }}
-                      glassEffect={UIGlass.regular().tint("rgba(135,206,235,1)")}
+                      glassEffect={UIGlass.regular().interactive().tint("rgba(92,143,188,0.85)")}
                     />
                     <Image
                       systemName={busy ? "hourglass" : "key.fill"}

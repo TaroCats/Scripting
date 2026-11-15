@@ -1,6 +1,1165 @@
 import { Color, ColorScheme, Size, VirtualNode, KeyboardType, Edge, Point, KeywordPoint, Visibility, ReadableStream, FunctionComponent, AppIntent, AppIntentProtocol, Cookie, MapCoordinate, MapRegion, MapPointsOfInterestSpec, MapStyleSpec } from "scripting"
 
+declare const vpnResourceRefBrand: unique symbol
+
 declare global {
+
+  type VideoPlaybackState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'seeking' | 'ended' | 'failed' | 'disposed'
+  interface VideoPlaybackQueueItem {
+    id: string
+    source: string
+    title?: string
+    options?: VideoPlaybackOpenOptions
+  }
+
+  interface VideoPlaybackHistoryEntry {
+    id: string
+    position: number
+    duration: number | null
+    completed: boolean
+  }
+
+  /** Script-owned playlist and resume history. Persist exportHistory() with your preferred storage. */
+  interface VideoPlaybackQueue {
+    readonly controller: VideoPlaybackController
+    readonly items: VideoPlaybackQueueItem[]
+    readonly index: number
+    readonly current: Readonly<VideoPlaybackQueueItem> | undefined
+    cache?: VideoPlaybackCacheStore
+    autoAdvance: boolean
+    repeat: 'none' | 'all' | 'one'
+    onError?: (error: unknown) => void
+    onChange?: () => void
+    replace(items: readonly VideoPlaybackQueueItem[]): Promise<void>
+    select(index: number, options?: { autoplay?: boolean; resume?: boolean }): Promise<void>
+    next(): Promise<boolean>
+    previous(): Promise<boolean>
+    preloadNext(): Promise<boolean>
+    exportHistory(): VideoPlaybackHistoryEntry[]
+    importHistory(entries: readonly VideoPlaybackHistoryEntry[]): void
+    dispose(): void
+  }
+
+  var VideoPlaybackQueue: { new (controller: VideoPlaybackController, items?: readonly VideoPlaybackQueueItem[]): VideoPlaybackQueue }
+
+  interface VideoPlaybackTrack {
+    readonly id: string
+    readonly kind: 'video' | 'audio' | 'subtitle' | 'other'
+    readonly codec?: string
+    readonly name?: string
+    readonly language?: string | null
+    readonly selected?: boolean
+    readonly width?: number
+    readonly height?: number
+    readonly channels?: number
+    readonly sampleRate?: number
+    readonly bitRate?: number
+    readonly frameRate?: number | null
+    readonly bitDepth?: number | null
+    readonly profile?: number
+    readonly colorPrimaries?: number
+    readonly transferFunction?: number
+    readonly startTime?: number
+    readonly endTime?: number
+    readonly dolbyVision?: { profile: number; level: number; rpuPresent: boolean; enhancementLayerPresent: boolean; baseLayerPresent: boolean }
+    readonly spatialFormat?: 'eac3JOC' | 'trueHDAtmos' | 'dtsX'
+  }
+  interface VideoPlaybackSnapshot {
+    readonly videoSuspended?: boolean
+    readonly state: VideoPlaybackState
+    readonly position: number
+    readonly duration: number | null
+    readonly bufferedUntil: number
+    readonly rate: number
+    readonly volume: number
+    readonly muted: boolean
+    readonly cached?: boolean
+    readonly cacheKey?: string
+    readonly backend: 'native' | 'system' | 'remux'
+    readonly error: string | null
+  }
+  type VideoToneMappingOptions = { mode: 'system' } | { mode: 'reinhard'; exposureEV?: number; whitePoint?: number }
+  interface VideoPlaybackInfo {
+    readonly videoSuspended?: boolean
+    /** True after supported TrueHD objects have been decoded and rendered into the PCM output bed. */
+    readonly objectAudioDecoded?: boolean
+    /** True after a supported DTS:X standard presentation has emitted actual decoded height channels. */
+    readonly heightAudioDecoded?: boolean
+    readonly outputSpatialLayout?: '7.1.4'
+    readonly cached?: boolean
+    readonly cacheKey?: string
+    readonly backend: 'native' | 'system' | 'remux'
+    readonly duration?: number | null
+    readonly tracks: readonly VideoPlaybackTrack[]
+    /** Actual PCM channel count; source channels remain available on tracks. */
+    readonly decodedAudioChannels?: number | null
+    /** Remux may convert an incompatible source audio track; tracks still describe the source. */
+    readonly audioTranscoded?: boolean
+    readonly preservesCompressedAudio?: boolean
+    readonly outputAudioCodec?: string | null
+    readonly outputAudioChannels?: number
+    readonly outputAudioSampleRate?: number
+    readonly toneMappingMode?: 'system' | 'reinhard'
+    readonly toneMappingApplied?: boolean
+    readonly toneMappingExposureEV?: number
+    readonly toneMappingWhitePoint?: number
+    readonly hdrOutput?: 'sdr' | 'pq' | 'hlg' | 'linearBT2020'
+    readonly dolbyVisionDualLayer?: boolean
+    readonly dolbyVisionReconstructed?: boolean
+    readonly dolbyVisionProfile?: number
+    readonly dolbyVisionLayers?: 'combined' | 'separate'
+    readonly dolbyVisionEnhancement?: 'mel' | 'fel'
+    readonly preservesDolbyVisionBitstream?: boolean
+    readonly baseLayerHardwareAccelerated?: boolean
+    readonly enhancementLayerHardwareAccelerated?: boolean
+    /** Reports forwarded dynamic metadata, not display certification. */
+    readonly hdr10PlusMetadata?: boolean
+    readonly spatialAudio?: boolean | null
+    readonly videoDecoder?: string
+    readonly audioDecoder?: string
+    readonly hardwareAccelerated?: boolean
+    readonly container?: string
+    readonly chapters?: readonly { index: number; start: number; end: number; title: string }[]
+    readonly metadata?: Readonly<Record<string, string>>
+  }
+  interface VideoPictureInPictureState {
+    readonly supported: boolean
+    readonly possible: boolean
+    readonly active: boolean
+  }
+  interface VideoPlaybackEvents {
+    backgroundAudio: { enabled: boolean; videoSuspended: boolean }
+    backgroundAudioError: { message: string }
+    pictureInPicture: VideoPictureInPictureState
+    pictureInPictureError: { message: string }
+    pictureInPictureRestoreRequested: Record<string, never>
+    ready: VideoPlaybackSnapshot
+    state: VideoPlaybackSnapshot
+    progress: VideoPlaybackSnapshot
+    ended: VideoPlaybackSnapshot
+    seeked: VideoPlaybackSnapshot
+    error: Partial<VideoPlaybackSnapshot> & { message: string }
+    tracks: { tracks: readonly VideoPlaybackTrack[] }
+    overlayError: { message: string }
+    interaction: { kind: 'zoom' | 'brightness' | 'error'; value?: number; message?: string }
+  }
+  interface VideoPlaybackCapabilities {
+    readonly native: { readonly available: boolean; readonly reason: string; readonly release: string; readonly dualLayerDolbyAvailable?: boolean }
+    readonly system: boolean
+    readonly nativeForegroundOnly: boolean
+    readonly nativeAudioOutput: 'stereoOrMultichannelPCM'
+    readonly nativeToneMapping?: readonly ('system' | 'reinhard')[]
+    readonly nativeObjectAudioFormats?: readonly 'trueHDAtmos'[]
+    readonly nativeHeightAudioFormats?: readonly 'dtsXStandard'[]
+    readonly nativeSpatialOutputLayouts?: readonly '7.1.4'[]
+    readonly nativeHDR: true
+    readonly nativeHDRFormats: readonly string[]
+    readonly currentFrameBackends: readonly ('native' | 'system' | 'remux')[]
+    readonly systemHDR: 'mediaAndOutputDependent'
+    readonly persistentFileCache?: boolean
+    readonly persistentHLSCache?: boolean
+    readonly persistentDASHCache?: boolean
+    readonly nativePictureInPicture: boolean
+    readonly nativeBackgroundPlayback: 'pictureInPictureOnly' | 'audioOrPictureInPicture'
+    readonly nativeBackgroundAudio?: boolean
+    readonly rawFrameCallbacks: false
+  }
+  interface VideoPlaybackOpenOptions {
+    /** Auto uses native playback for ordinary media/headers, system playback for plain HLS, and system or remux output for supported HDR media. Declared Profile7 sources use native reconstruction. */
+    backend?: 'auto' | 'native' | 'system' | 'remux'
+    /** Native video decoding preference. System/remux backends require auto. Unsupported hardware requests fail explicitly. */
+    decoder?: 'auto' | 'hardware' | 'software'
+    /** Native PCM output. Stereo is default; multichannel preserves supported layouts up to eight channels. Spatial requires explicit native playback and supported 48 kHz TrueHD Atmos objects in Matroska/MKV or DTS:X standard heights, rendered into 7.1.4 PCM, without bitstream passthrough. */
+    audioOutput?: 'stereo' | 'multichannel' | 'spatial'
+    /** Custom headers use native/remux playback. Explicit system playback rejects headers. */
+    headers?: Record<string, string>
+  }
+  /** Main App playback controller, iOS/iPadOS 17+. Dispose it when its owning page closes. */
+  class VideoPlaybackController {
+    constructor()
+    readonly state: VideoPlaybackState
+    readonly position: number
+    readonly duration: number | null
+    playbackRate: number
+    volume: number
+    muted: boolean
+    /** Default false. Configure SharedAudioSession for playback. Native suspends video in the background and restores it on return; system playback is best effort. */
+    backgroundAudioEnabled: boolean
+    readonly mediaInfo: VideoPlaybackInfo
+    open(source: string | VideoPlaybackCachedSource, options?: VideoPlaybackOpenOptions): Promise<VideoPlaybackInfo>
+    play(): Promise<void>
+    pause(): void
+    seek(seconds: number): Promise<number>
+    stop(): Promise<void>
+    dispose(): Promise<void>
+    /** Native video only. Reinhard outputs SDR; exposureEV -8..8 and whitePoint 0.25..256 default to 0/16. New sources reset to system. */
+    setToneMapping(options: VideoToneMappingOptions): Promise<void>
+    getTracks(): Promise<readonly VideoPlaybackTrack[]>
+    selectAudioTrack(id: string): Promise<void>
+    selectSubtitleTrack(id: string | null): Promise<void>
+    /** Available for native output on iOS/iPadOS 17.4+. Null until an actual frame is displayed. */
+    copyCurrentFrame(): VideoFrame | null
+    /** Independently decode the first frame covering or following this media time. */
+    extractFrame(seconds: number): Promise<VideoFrame>
+    /** Video image without subtitles, danmaku or controls. */
+    snapshot(): Promise<UIImage>
+    subtitlesEnabled: boolean
+    /** Positive delay displays cues later. Range: -86400 to 86400 seconds. */
+    subtitleDelay: number
+    /** SRT and bounded WebVTT styles/regions/positioning; ASS/SSA preserve authored styles. Unsupported CSS/markup rejects. */
+    loadSubtitles(text: string, format: 'srt' | 'vtt' | 'ass' | 'ssa'): Promise<void>
+    /** Local SRT, VTT, ASS, SSA, SUP/PGS or VobSub .idx; .idx requires its sibling .sub file. */
+    loadSubtitleFile(path: string, trackIndex?: number): Promise<void>
+    clearSubtitles(): void
+    /** Explicit font/color/position override text subtitles and ordinary ASS/SSA dialogue. Positioned ASS signs retain authored layout. assFontScale applies to ASS/SSA. */
+    setSubtitleStyle(options: { fontFamily?: string; fontSize?: number; color?: string; position?: 'top' | 'center' | 'bottom'; assFontScale?: number }): void
+    danmakuEnabled: boolean
+    danmakuOpacity: number
+    /** UTF-8 JSON comment arrays or Bilibili-compatible / dandanplay XML, up to 8 MiB. Unsupported XML modes are reported and skipped. */
+    loadDanmakuText(text: string, format: 'json' | 'xml'): Promise<VideoDanmakuImportReport>
+    /** Local UTF-8 file. Omitted format is inferred from .json or .xml. */
+    loadDanmakuFile(path: string, format?: 'json' | 'xml'): Promise<VideoDanmakuImportReport>
+    /** Open video and mount its VideoPlaybackView first. Resolves when the system activates Picture in Picture. */
+    startPictureInPicture(): Promise<void>
+    stopPictureInPicture(): void
+    getPictureInPictureState(): VideoPictureInPictureState
+    loadDanmaku(comments: readonly VideoDanmakuComment[]): Promise<void>
+    /** Load a configured danmu_api service atomically; segmented mode fetches all bounded segments first. */
+    loadDanmakuFromAPI(configuration: VideoDanmuAPIConfiguration, source: VideoDanmuAPISource, options?: { segmented?: boolean }): Promise<VideoDanmuAPIReport>
+    injectDanmaku(comments: readonly VideoDanmakuComment[]): Promise<void>
+    clearDanmaku(): void
+    setDanmakuStyle(options: { speed?: number; area?: number; blockedWords?: readonly string[]; blockedAuthors?: readonly string[] }): void
+    /** Accessible text alternative. Returns up to 64 active, unblocked comments. */
+    getActiveDanmaku(): readonly Pick<VideoDanmakuComment, 'id' | 'time' | 'text' | 'author'>[]
+    getCapabilities(): VideoPlaybackCapabilities
+    on<E extends keyof VideoPlaybackEvents>(event: E, callback: (value: VideoPlaybackEvents[E]) => void): () => void
+  }
+
+  interface VideoDanmakuImportReport {
+    readonly format: 'json' | 'bilibiliXML' | 'dandanXML'
+    readonly loaded: number
+    readonly skipped: number
+    readonly unsupportedModes: readonly string[]
+  }
+  interface VideoDanmakuKeyframe {
+    /** Seconds relative to the comment. First frame is 0; last frame is 0.1–20. */
+    readonly at: number
+    /** Normalized viewport coordinates for the text center, 0–1. */
+    readonly x: number
+    readonly y: number
+    readonly opacity?: number
+    /** Degrees, -3600–3600. */
+    readonly rotation?: number
+    /** 0.25–4. */
+    readonly scale?: number
+  }
+  interface VideoDanmakuComment {
+    id?: string
+    time: number
+    text: string
+    mode?: 'scroll' | 'reverse' | 'top' | 'bottom' | 'animated'
+    /** Required only for animated mode: 2–32 strictly ordered, linearly interpolated keyframes. */
+    animation?: readonly VideoDanmakuKeyframe[]
+    /** #RRGGBB, defaults to white. */
+    color?: string
+    fontSize?: number
+    author?: string
+  }
+  interface VideoFrame {
+    readonly width: number
+    readonly height: number
+    readonly pixelFormat: string
+    readonly planeCount: number
+    /** Null when the renderer cannot report the displayed frame's exact timestamp. */
+    readonly presentationTime: number | null
+    readonly disposed: boolean
+    copyPlane(index: number): { data: Data; width: number; height: number; bytesPerRow: number } | null
+    /** Default ordinary image; hdr preserves highlight values in a half-float extended-linear BT.2020 image. */
+    toImage(options?: { dynamicRange?: 'sdr' | 'hdr' }): UIImage | null
+    dispose(): void
+  }
+  interface VideoPlaybackCacheOptions {
+    /** Private persistent cache name within this script. Defaults to "default". */
+    identifier?: string
+    /** Default 1 GiB; range 1 MiB to 32 GiB. Limits are fixed for an identifier. */
+    maximumBytes?: number
+    /** Default min(512 MiB, maximumBytes); positive and no larger than maximumBytes. */
+    maximumEntryBytes?: number
+  }
+  interface VideoPlaybackCachedSource {
+    readonly key: string
+    readonly bytes: number
+    readonly disposed: boolean
+    /** Release this handle. An opened player retains its own lease until stop/dispose/source replacement. */
+    dispose(): Promise<void>
+  }
+  interface VideoPlaybackCacheEntry {
+    readonly key: string
+    readonly bytes: number
+    /** Unix seconds. */
+    readonly createdAt: number
+    readonly lastAccess: number
+  }
+  interface VideoDanmuAPIConfiguration {
+    /** Deployment root, including an optional deployment/token path prefix. */
+    readonly baseURL: string
+    readonly headers?: Record<string, string>
+  }
+  type VideoDanmuAPISource = { readonly episodeId: string | number; readonly url?: never } | { readonly url: string; readonly episodeId?: never }
+  interface VideoDanmuAPIReport {
+    readonly loaded: number
+    readonly skipped: number
+    readonly unsupportedModes: readonly number[]
+    readonly segments: number
+    readonly videoDuration: number | null
+  }
+  interface VideoDanmuAPIEpisode { readonly episodeId: string; readonly episodeTitle: string }
+  interface VideoDanmuAPIItem {
+    readonly animeId: string
+    readonly animeTitle: string
+    readonly imageUrl?: string
+    readonly type?: string
+    readonly typeDescription?: string
+    readonly source?: string
+    readonly episodes?: readonly VideoDanmuAPIEpisode[]
+  }
+  interface VideoDanmuAPIMatch extends VideoDanmuAPIItem, VideoDanmuAPIEpisode {}
+  interface VideoDanmuAPIBatch extends VideoDanmuAPIReport { readonly comments: readonly VideoDanmakuComment[] }
+  namespace DanmuAPI {
+    function search(configuration: VideoDanmuAPIConfiguration, keyword: string): Promise<readonly VideoDanmuAPIItem[]>
+    function match(configuration: VideoDanmuAPIConfiguration, fileName: string): Promise<readonly VideoDanmuAPIMatch[]>
+    function searchEpisodes(configuration: VideoDanmuAPIConfiguration, input: { anime: string; episode?: string }): Promise<readonly VideoDanmuAPIItem[]>
+    function getBangumi(configuration: VideoDanmuAPIConfiguration, animeId: string | number): Promise<VideoDanmuAPIItem>
+    function getComments(configuration: VideoDanmuAPIConfiguration, source: VideoDanmuAPISource, options?: { segmented?: boolean }): Promise<VideoDanmuAPIBatch>
+  }
+  interface VideoPlaybackCacheStatus {
+    readonly bytes: number
+    readonly reservedBytes: number
+    readonly pendingBytes: number
+    readonly entries: number
+    readonly activeLeases: number
+    readonly preparing: number
+    readonly maximumBytes: number
+    readonly maximumEntryBytes: number
+    /** Running HLS/DASH preparations; segment progress is aggregated across both. */
+    readonly hlsPreparing?: number
+    readonly dashPreparing?: number
+    readonly downloadedSegments?: number
+    readonly totalSegments?: number
+  }
+  interface VideoPlaybackCacheStore {
+    readonly disposed: boolean
+    /** Download a complete HTTP(S) media file. Streaming manifests are rejected. */
+    prepare(source: string, options?: { headers?: Record<string, string> }): Promise<VideoPlaybackCachedSource>
+    /** Save complete unencrypted, self-contained TS/fMP4 HLS VOD. Selects the highest eligible master variant within maximumBitRate (bits/s). */
+    prepareHLS(source: string, options?: { headers?: Record<string, string>; maximumBitRate?: number }): Promise<VideoPlaybackCachedSource>
+    /** Offline HLS lookup. URL, headers and maximumBitRate must match prepareHLS. Never downloads. */
+    resolveHLS(source: string, options?: { headers?: Record<string, string>; maximumBitRate?: number }): Promise<VideoPlaybackCachedSource | null>
+    /** Save clear single-Period static fMP4 DASH as MP4. Selects fixed video within maximumBitRate (bits/s) and optional supported audio. */
+    prepareDASH(source: string, options?: { headers?: Record<string, string>; maximumBitRate?: number }): Promise<VideoPlaybackCachedSource>
+    /** Offline DASH lookup. URL, headers and maximumBitRate must match prepareDASH. Never downloads. */
+    resolveDASH(source: string, options?: { headers?: Record<string, string>; maximumBitRate?: number }): Promise<VideoPlaybackCachedSource | null>
+    /** Offline lookup; null on a miss. Headers must match the original request. Never downloads. */
+    resolve(source: string, options?: { headers?: Record<string, string> }): Promise<VideoPlaybackCachedSource | null>
+    getStatus(): Promise<VideoPlaybackCacheStatus>
+    getEntries(): Promise<readonly VideoPlaybackCacheEntry[]>
+    /** False while a player/handle leases the entry or its preparation is active. */
+    remove(key: string): Promise<boolean>
+    /** Remove unleased completed files and return their count. */
+    clear(): Promise<number>
+    /** Cancel this manager's pending operations. */
+    cancel(): void
+    /** Cancel pending operations and release its handles, preserving complete files and opened players. */
+    dispose(): Promise<void>
+  }
+  namespace VideoPlaybackCache {
+    /** Open this saved script's private media file cache. Matching identifiers require matching limits. */
+    function open(options?: VideoPlaybackCacheOptions): Promise<VideoPlaybackCacheStore>
+  }
+
+  namespace MediaProbe {
+    /** Inspect tracks/chapters/metadata without opening playback decoders. */
+    function inspect(source: string): Promise<VideoPlaybackInfo>
+  }
+
+  /** An owned native audio/video sample. Dispose each sample after enqueue settles. */
+  interface MediaSample {
+    readonly mediaType: 'audio' | 'video'
+    readonly presentationTime: MediaTime
+    readonly decodeTime: MediaTime
+    readonly duration: MediaTime
+    readonly sampleCount: number
+    /** A drain/empty-edit marker with no media payload; timing may be nonnumeric. Preserve its position in the stream. */
+    readonly isMarker: boolean
+    readonly disposed: boolean
+    dispose(): void
+  }
+  type MediaDecoderPreference = 'auto' | 'system' | 'software'
+  interface MediaReaderInfo {
+    readonly codec: string
+    readonly decoded: boolean
+    readonly decoderBackend: 'passthrough' | 'system' | 'dav1d'
+    /** null means the selected system decoder cannot report actual hardware use. */
+    readonly hardwareAccelerated: boolean | null
+    readonly width?: number
+    readonly height?: number
+    readonly bitDepth?: number
+    readonly pixelFormat?: 'BGRA' | 'NV12' | 'P010'
+  }
+  interface MediaReaderCapabilities {
+    readonly av1: { readonly hardwareDecodeSupported: boolean; readonly softwareDecodeAvailable: boolean }
+  }
+  /** Serialized raw sample reader. Main App, iOS 17+. */
+  class MediaSampleReader {
+    private constructor()
+    /** decoded defaults to true; false preserves original compressed packets. */
+    static create(asset: AVAsset, mediaType: 'audio' | 'video', options?: { decoded?: boolean; trackIndex?: number; decoder?: MediaDecoderPreference }): Promise<MediaSampleReader>
+    /** Capability hints do not guarantee that a file is supported or plays in real time. */
+    static getCapabilities(): Promise<MediaReaderCapabilities>
+    /** Selects the backend and retains initial samples for the next read. Idempotent. */
+    prepare(): Promise<MediaReaderInfo>
+    /** null until preparation or the first read completes. */
+    readonly info: MediaReaderInfo | null
+    /** null only at successful end of stream. Only one read may be pending. */
+    copyNextSampleBuffer(): Promise<MediaSample | null>
+    dispose(): void
+  }
+  interface SampleBufferRenderer {
+    readonly id: string
+    readonly mediaType: 'audio' | 'video'
+    readonly status: 'unknown' | 'rendering' | 'failed' | 'disposed'
+    readonly error: string | null
+    /** Resolves when accepted by the native queue, not when presented. Maximum 8 pending samples, 64 MiB; 30-second timeout. */
+    enqueue(sample: MediaSample): Promise<void>
+    /** Cancels pending submissions and clears native queued data. */
+    flush(): Promise<void>
+    dispose(): void
+  }
+  /** Video rendering on a synchronizer clock; mount with SampleBufferView. */
+  class AVSampleBufferDisplayLayer implements SampleBufferRenderer {
+    constructor()
+    readonly id: string
+    readonly mediaType: 'video'
+    readonly status: SampleBufferRenderer['status']
+    readonly error: string | null
+    readonly requiresFlushToResumeDecoding: boolean
+    enqueue(sample: MediaSample): Promise<void>
+    /** Queues a snapshot of BGRA8 or 8-bit NV12 pixels at a media presentation time. */
+    enqueuePixelBuffer(pixelBuffer: PixelBuffer, presentationTime: MediaTime, duration?: MediaTime): Promise<void>
+    flush(): Promise<void>
+    dispose(): void
+  }
+  /** Audio rendering on a synchronizer clock; uses the shared audio session. */
+  class AVSampleBufferAudioRenderer implements SampleBufferRenderer {
+    constructor()
+    readonly id: string
+    readonly mediaType: 'audio'
+    readonly status: SampleBufferRenderer['status']
+    readonly error: string | null
+    volume: number
+    muted: boolean
+    enqueue(sample: MediaSample): Promise<void>
+    flush(): Promise<void>
+    dispose(): void
+  }
+  /** One shared audio/video timeline. Attach renderers before enqueueing. */
+  class AVSampleBufferRenderSynchronizer {
+    constructor()
+    readonly rate: number
+    readonly currentTime: MediaTime
+    /** rate 0 pauses; finite positive rates play. Invalid media time preserves the current timeline. Optional hostTime anchors both numeric times. */
+    setRate(rate: number, time: MediaTime, hostTime?: MediaTime): void
+    addRenderer(renderer: AVSampleBufferDisplayLayer | AVSampleBufferAudioRenderer): void
+    /** Flushes before detaching. Detached renderers may be attached again. */
+    removeRenderer(renderer: AVSampleBufferDisplayLayer | AVSampleBufferAudioRenderer): Promise<void>
+    /** Stops the clock and disposes its attached renderers. */
+    dispose(): void
+  }
+
+  /** Audio graphs and native audio processing in main App scripts (iOS/iPadOS 17+). Individual options report system availability. */
+  namespace AVAudio {
+    type SampleType = 'float32' | 'float64' | 'int16' | 'int32'
+    type Samples = Float32Array | Float64Array | Int16Array | Int32Array
+    type SettingValue = string | number | boolean | Uint8Array | readonly SettingValue[] | { readonly [key: string]: SettingValue }
+    type Settings = Readonly<Record<string, SettingValue>>
+    type ErrorCode = 'invalidArgument' | 'permissionDenied' | 'ERR_PRO_REQUIRED' | 'notSupported' |
+      'wrongOwner' | 'disposed' | 'invalidated' | 'resourceBusy' | 'cancelled' | 'startFailed' |
+      'nativeError' | 'cleanupFailed' | 'queueOverflow' | 'formatMismatch' | 'needsRebuild'
+    interface Error extends globalThis.Error { code: ErrorCode; operation: string; nativeDomain?: string; nativeCode?: number; partialFilePath?: string }
+    interface Point3D { x: number; y: number; z: number }
+    interface VectorOrientation { forward: Point3D; up: Point3D }
+    interface AngularOrientation { yaw: number; pitch: number; roll: number }
+    interface ComponentDescription { type: number; subtype: number; manufacturer: number; flags?: number; flagsMask?: number }
+    interface Component extends ComponentDescription { name: string; manufacturerName: string; version: number; available: boolean; hasCustomView: boolean | null }
+    interface Parameter {
+      address: string; identifier: string; name: string; keyPath: string; minimum: number; maximum: number;
+      unit: number; unitName: string | null; flags: number; valueStrings: readonly string[] | null;
+      dependentParameters: readonly string[]
+    }
+    interface ParameterGroup { identifier: string; name: string; keyPath: string; children: readonly (ParameterGroup | Parameter)[] }
+    interface ParameterChange { address: string; value: number; hostTime: string; eventType: 'value' | 'touch' | 'release'; discontinuity: boolean }
+    interface ParameterEvent { address: string; value: number; sampleTime: number; rampDuration?: number }
+    interface EventStatistics { acceptedEvents: number; deliveredEvents: number; queuedEvents: number; droppedEvents: number; allocatedBytes: number; closed: boolean; failure: Error | null }
+  interface ParameterObserver { next(): Promise<readonly ParameterChange[] | null>; close(): Promise<void>; getStatistics(): Promise<EventStatistics> }
+    interface Preset { number: number; name: string }
+    interface Mixing {
+      volume?: number; pan?: number; position?: Point3D; renderingAlgorithm?: number; sourceMode?: number;
+      pointSourceInHeadMode?: number; obstruction?: number; occlusion?: number; reverbBlend?: number; rate?: number
+    }
+    interface MixingState extends Partial<Mixing> { supported: readonly (keyof Mixing)[] }
+    interface ConnectionPoint { node: AVAudioNode; bus: number }
+    interface StreamStatistics {
+      acceptedFrames: number; consumedFrames: number; queuedFrames: number; droppedFrames: number;
+      underflowFrames: number; insufficientRequests?: number; allocatedBytes: number; generation: number; ended: boolean; closed: boolean; failure: Error | null
+    }
+    interface ObservationOptions { maximumFrameCount?: number; slotCount?: number; overflow?: 'dropOldest' | 'latest' | 'error' }
+    interface ObservedPCM { buffer: AVAudioPCMBuffer; time: AVAudioTime | null; sequence: string; discontinuity: boolean; renderEpoch: number }
+    interface Observation { read(): Promise<ObservedPCM | null>; close(): Promise<void>; getStatistics(): Promise<StreamStatistics> }
+    interface PCMQueueOptions { format: AVAudioFormat; queueFrames?: number; maximumFrameCount?: number }
+    interface PCMQueue {
+      /** Returns accepted frames. Partial acceptance and a full queue are explicit. */
+      enqueue(buffer: AVAudioPCMBuffer): Promise<number>
+      end(): Promise<void>
+      drain(): Promise<void>
+      close(): Promise<void>
+      getStatistics(): Promise<StreamStatistics>
+    }
+    interface RenderResult { status: 'success' | 'insufficientDataFromInputNode' | 'cannotDoInCurrentContext' | 'error'; buffer: AVAudioPCMBuffer; sampleTime: number; renderEpoch: number }
+    interface ExportOptions {
+      filePath: string; settings: Settings; frameCount: number; tailFrames?: number; chunkFrames?: number;
+      overwrite?: boolean; partialFile?: 'remove' | 'keep'
+    }
+    interface ExportProgress { renderedFrames: number; totalFrames: number; writtenFrames: number }
+    interface ExportResult { filePath: string; frameCount: number; fileFormat: AVAudioFormat }
+    interface ExportTask { readonly finished: Promise<ExportResult>; getProgress(): Promise<ExportProgress>; cancel(): Promise<void> }
+    type PlaybackOutcome = { status: 'completed'; callbackType: AVAudioPlayerNode.CompletionType } |
+      { status: 'cancelled'; reason: 'stopped' | 'engineStopped' | 'reset' | 'replaced' | 'configurationChanged' | 'disposed' }
+    interface PlaybackTicket { readonly id: string; readonly finished: Promise<PlaybackOutcome>; getState(): Promise<'pending' | PlaybackOutcome> }
+    type SequencerEvent =
+      { type: 'note'; channel: number; note: number; velocity: number; duration: number } |
+      { type: 'controlChange'; channel: number; controller: number; value: number } |
+      { type: 'polyPressure'; channel: number; note: number; pressure: number } |
+      { type: 'programChange'; channel: number; program: number } |
+      { type: 'channelPressure'; channel: number; pressure: number } |
+      { type: 'pitchBend'; channel: number; value: number } |
+      { type: 'extendedNote'; note: number; velocity: number; instrumentID: number; groupID: number; duration: number } |
+      { type: 'sysex'; data: Uint8Array } |
+      { type: 'extendedTempo'; bpm: number } |
+      { type: 'meta'; metaType: number; data: Uint8Array } |
+      { type: 'parameter'; parameterID: number; scope: number; element: number; value: number } |
+      { type: 'preset'; scope: number; element: number; propertyListData: Uint8Array } |
+      { type: 'user'; data: Uint8Array }
+    interface TimedEvent { beat: number; event: SequencerEvent }
+  /** Native enumeration exposes metadata for opaque payload events. Full user data is delivered by observeUserEvents. */
+  type SequencerEventInfo = Exclude<SequencerEvent, { type: 'sysex' | 'meta' | 'user' }> |
+    { type: 'sysex'; sizeInBytes: number } | { type: 'meta'; metaType: number } | { type: 'user'; sizeInBytes: number }
+  interface EnumeratedEvent { beat: number; event: SequencerEventInfo }
+    interface TrackState {
+      lengthInBeats: number; lengthInSeconds: number; offsetTime: number; timeResolution: number;
+      muted: boolean; soloed: boolean; loopEnabled: boolean; loopStart: number; loopDuration: number; numberOfLoops: number;
+      destination: AVAudioUnit | null; usesAutomatedParameters: boolean
+    }
+  }
+
+  class AVAudioChannelLayout {
+    constructor(options: { tag: number } | { bitmap: number } | { descriptions: readonly { label: number; flags: number; coordinates: readonly [number, number, number] }[] })
+    readonly channelCount: number
+    /** A copied native AudioChannelLayout, including variable-length channel descriptions. */
+    copyData(): Uint8Array
+  }
+
+  class AVAudioFormat {
+    constructor(options: { sampleRate: number; channelCount?: number; channelLayout?: AVAudioChannelLayout; sampleType?: AVAudio.SampleType; interleaved?: boolean } | { settings: AVAudio.Settings })
+    readonly sampleRate: number
+    readonly channelCount: number
+    readonly sampleType: AVAudio.SampleType | null
+    readonly interleaved: boolean
+    readonly isStandard: boolean
+    readonly channelLayout: AVAudioChannelLayout | null
+    readonly settings: AVAudio.Settings
+    equals(other: AVAudioFormat): boolean
+    copyStreamDescription(): Uint8Array
+  }
+
+  class AVAudioTime {
+    constructor(options: { hostTime: string; sampleTime?: number; sampleRate?: number } | { sampleTime: number; sampleRate: number; hostTime?: string })
+    readonly hostTime: string | null
+    readonly sampleTime: number | null
+    readonly sampleRate: number
+    static hostTimeForSeconds(seconds: number): string
+    static secondsForHostTime(hostTime: string): number
+    extrapolate(anchor: AVAudioTime): AVAudioTime | null
+  }
+
+  class AVAudioPCMBuffer {
+    private constructor()
+    static allocate(format: AVAudioFormat, frameCapacity: number): Promise<AVAudioPCMBuffer>
+    /** Planar: one typed array per channel. Interleaved: one array of frame-major samples. */
+    static fromChannels(channels: readonly AVAudio.Samples[], format: AVAudioFormat): Promise<AVAudioPCMBuffer>
+    static fromInterleaved(samples: AVAudio.Samples, format: AVAudioFormat): Promise<AVAudioPCMBuffer>
+    readonly format: AVAudioFormat
+    readonly frameCapacity: number
+    readonly frameLength: number
+    setFrameLength(frames: number): Promise<void>
+    copyChannels(): Promise<readonly AVAudio.Samples[]>
+    copyInterleaved(): Promise<AVAudio.Samples>
+    copy(): Promise<AVAudioPCMBuffer>
+    dispose(): Promise<void>
+  }
+
+  class AVAudioCompressedBuffer {
+    private constructor()
+    static create(options: { format: AVAudioFormat; packetCapacity: number; maximumPacketSize: number; data?: Uint8Array; packetDescriptions?: readonly { startOffset: number; variableFramesInPacket: number; dataByteSize: number }[]; packetCount?: number }): Promise<AVAudioCompressedBuffer>
+    readonly format: AVAudioFormat
+    readonly packetCapacity: number
+    readonly packetCount: number
+    readonly byteCapacity: number
+    readonly byteLength: number
+    readonly maximumPacketSize: number
+    copyData(): Promise<Uint8Array>
+    getPacketDescriptions(): Promise<readonly { startOffset: number; variableFramesInPacket: number; dataByteSize: number }[]>
+    dispose(): Promise<void>
+  }
+
+  class AVAudioFile {
+    private constructor()
+    static openForReading(path: string, options?: { sampleType?: AVAudio.SampleType; interleaved?: boolean }): Promise<AVAudioFile>
+    static openForWriting(path: string, settings: AVAudio.Settings, options?: { sampleType?: AVAudio.SampleType; interleaved?: boolean; overwrite?: boolean }): Promise<AVAudioFile>
+    readonly processingFormat: AVAudioFormat
+    readonly fileFormat: AVAudioFormat
+    getState(): Promise<{ length: number; framePosition: number; mode: 'read' | 'write'; closed: boolean }>
+    read(frameCount: number): Promise<AVAudioPCMBuffer>
+    write(buffer: AVAudioPCMBuffer): Promise<void>
+    seek(framePosition: number): Promise<void>
+    close(): Promise<void>
+  }
+
+  namespace AVAudioConverter {
+    interface Configuration { bitRate?: number; bitRateStrategy?: string; sampleRateConverterQuality?: number; sampleRateConverterAlgorithm?: string; primeMethod?: 'pre' | 'normal' | 'none'; primeInfo?: { leadingFrames: number; trailingFrames: number }; magicCookie?: Uint8Array | null; audioSyncPacketFrequency?: number; contentSource?: number; dynamicRangeControlConfiguration?: number; channelMap?: readonly number[]; downmix?: boolean; dither?: boolean }
+    interface Input { buffer: AVAudioPCMBuffer | AVAudioCompressedBuffer; endOfStream?: boolean }
+    interface Result { status: 'haveData' | 'inputRanDry' | 'endOfStream' | 'error'; buffer: AVAudioPCMBuffer | AVAudioCompressedBuffer }
+  }
+  class AVAudioConverter {
+    private constructor()
+    static create(input: AVAudioFormat, output: AVAudioFormat, options?: AVAudioConverter.Configuration): Promise<AVAudioConverter>
+    readonly inputFormat: AVAudioFormat
+    readonly outputFormat: AVAudioFormat
+    getConfiguration(): Promise<AVAudioConverter.Configuration & { availableEncodeBitRates: readonly number[] | null; applicableEncodeBitRates: readonly number[] | null; availableEncodeSampleRates: readonly number[] | null; applicableEncodeSampleRates: readonly number[] | null; availableEncodeChannelLayoutTags: readonly number[] | null; maximumOutputPacketSize: number; primeInfo: { leadingFrames: number; trailingFrames: number } }>
+    configure(options: AVAudioConverter.Configuration): Promise<void>
+    /** A bounded conversion step; outputCapacity means PCM frames or compressed packets. Unrequested inputs remain queued for later calls. */
+    convert(inputs: readonly AVAudioConverter.Input[], outputCapacity: number): Promise<AVAudioConverter.Result>
+    reset(): Promise<void>
+    dispose(): Promise<void>
+  }
+
+  namespace AVAudioEngine {
+    type State = 'stopped' | 'prepared' | 'running' | 'paused' | 'interrupted' | 'needsRebuild' | 'disposed'
+    interface Snapshot { state: State; isRunning: boolean; graphRevision: number; renderEpoch: number; manualMode: 'offline' | 'realtime' | null; manualSampleTime: number | null; pendingOperations: number }
+    interface Capabilities { host: string; engine: boolean; deviceInput: boolean; deviceOutput: boolean; manualOffline: boolean; manualRealtime: boolean; audioUnitHosting: boolean; audioUnitUI: boolean; realtimeSafeNativeBlocks: boolean; limits: { channelBytes: number; channelObjects: number; pendingOperations: number; pendingTickets: number; streamBytes: number; copyBytes: number }; unavailableReasons: Readonly<Record<string, string>> }
+    interface Event { type: 'state' | 'configurationChanged' | 'interruption' | 'mediaServicesReset' | 'error'; state: Snapshot; error?: AVAudio.Error; shouldResume?: boolean }
+  }
+  class AVAudioEngine {
+    private constructor()
+    static capabilities(): Promise<AVAudioEngine.Capabilities>
+    static create(): Promise<AVAudioEngine>
+    getState(): Promise<AVAudioEngine.Snapshot>
+    getInputNode(): Promise<AVAudioInputNode>
+    getOutputNode(): Promise<AVAudioOutputNode>
+    getMainMixerNode(): Promise<AVAudioMixerNode>
+    getAttachedNodes(): Promise<readonly AVAudioNode[]>
+    attach(node: AVAudioNode): Promise<void>
+    detach(node: AVAudioNode): Promise<void>
+    connect(source: AVAudioNode, destination: AVAudioNode, options?: { fromBus?: number; toBus?: number; format?: AVAudioFormat | null }): Promise<void>
+    connectMany(source: AVAudioNode, destinations: readonly AVAudio.ConnectionPoint[], options?: { fromBus?: number; format?: AVAudioFormat | null }): Promise<void>
+    disconnectInput(node: AVAudioNode, bus?: number): Promise<void>
+    disconnectOutput(node: AVAudioNode, bus?: number): Promise<void>
+    getInputConnection(node: AVAudioNode, bus: number): Promise<AVAudio.ConnectionPoint | null>
+    getOutputConnections(node: AVAudioNode, bus: number): Promise<readonly AVAudio.ConnectionPoint[]>
+    prepare(): Promise<void>
+    start(): Promise<void>
+    pause(): Promise<void>
+    stop(): Promise<void>
+    reset(): Promise<void>
+    dispose(): Promise<void>
+    enableManualRendering(options: { mode: 'offline' | 'realtime'; format: AVAudioFormat; maximumFrameCount: number }): Promise<void>
+    disableManualRendering(): Promise<void>
+    renderOffline(frameCount: number): Promise<AVAudio.RenderResult>
+    getManualRenderer(): Promise<AVAudioManualRenderer>
+    setManualInput(options: AVAudio.PCMQueueOptions & { underflow?: 'silence' | 'insufficientData' }): Promise<AVAudioManualInput>
+    exportAudio(options: AVAudio.ExportOptions): Promise<AVAudio.ExportTask>
+    onEvent(listener: (event: AVAudioEngine.Event) => void): () => void
+    /** MIDI routes are separate from audio connections. */
+    connectMIDI(source: AVAudioNode, destinations: readonly AVAudioNode[], options?: { format?: AVAudioFormat }): Promise<void>
+    disconnectMIDI(source: AVAudioNode, destinations?: readonly AVAudioNode[]): Promise<void>
+  }
+
+  class AVAudioNode {
+    protected constructor()
+    readonly id: string
+    readonly kind: string
+    readonly builtin: boolean
+    getState(): Promise<{ attached: boolean; invalidated: boolean; inputBusCount: number; outputBusCount: number; latency: number; outputPresentationLatency: number }>
+    getInputFormat(bus: number): Promise<AVAudioFormat>
+    getOutputFormat(bus: number): Promise<AVAudioFormat>
+    getInputBusName(bus: number): Promise<string | null>
+    getOutputBusName(bus: number): Promise<string | null>
+    getLastRenderTime(): Promise<AVAudioTime | null>
+    getMixing(): Promise<AVAudio.MixingState>
+    setMixing(properties: AVAudio.Mixing): Promise<void>
+    installTap(options: AVAudio.ObservationOptions & { bus?: number; format?: AVAudioFormat }): Promise<AVAudio.Observation>
+    removeTap(bus?: number): Promise<void>
+    reset(): Promise<void>
+    dispose(): Promise<void>
+  }
+
+  namespace AVAudioPlayerNode {
+    type CompletionType = 'dataConsumed' | 'dataRendered' | 'dataPlayedBack'
+    interface ScheduleOptions { at?: AVAudioTime; completionType?: CompletionType; loops?: boolean; interrupts?: boolean; interruptsAtLoop?: boolean }
+  }
+  class AVAudioPlayerNode extends AVAudioNode {
+    static create(): Promise<AVAudioPlayerNode>
+    scheduleBuffer(buffer: AVAudioPCMBuffer, options?: AVAudioPlayerNode.ScheduleOptions): Promise<AVAudio.PlaybackTicket>
+    scheduleFile(file: AVAudioFile, options?: Pick<AVAudioPlayerNode.ScheduleOptions, 'at' | 'completionType'>): Promise<AVAudio.PlaybackTicket>
+    scheduleSegment(file: AVAudioFile, options: Pick<AVAudioPlayerNode.ScheduleOptions, 'at' | 'completionType'> & { startingFrame: number; frameCount: number }): Promise<AVAudio.PlaybackTicket>
+    prepare(frameCount: number): Promise<void>
+    play(at?: AVAudioTime): Promise<void>
+    pause(): Promise<void>
+    stop(): Promise<void>
+    isPlaying(): Promise<boolean>
+    getPlayerTime(nodeTime: AVAudioTime): Promise<AVAudioTime | null>
+    getNodeTime(playerTime: AVAudioTime): Promise<AVAudioTime | null>
+  }
+
+  class AVAudioMixerNode extends AVAudioNode { static create(): Promise<AVAudioMixerNode>; setOutputVolume(volume: number): Promise<void>; getOutputVolume(): Promise<number>; getNextAvailableInputBus(): Promise<number> }
+  namespace AVAudioInputNode {
+    interface VoiceProcessing { enabled?: boolean; bypassed?: boolean; automaticGainControl?: boolean; inputMuted?: boolean; ducking?: { advanced: boolean; level: 'default' | 'minimum' | 'medium' | 'maximum' } }
+  }
+  class AVAudioInputNode extends AVAudioNode {
+    getVoiceProcessing(): Promise<Required<AVAudioInputNode.VoiceProcessing>>
+    configureVoiceProcessing(configuration: AVAudioInputNode.VoiceProcessing): Promise<void>
+    setSpeechActivityHandler(handler: ((event: 'started' | 'ended') => void) | null): Promise<void>
+  }
+  class AVAudioOutputNode extends AVAudioNode { getVoiceProcessingEnabled(): Promise<boolean> }
+  class AVAudioSourceNode extends AVAudioNode implements AVAudio.PCMQueue {
+    static create(options: AVAudio.PCMQueueOptions): Promise<AVAudioSourceNode>
+    enqueue(buffer: AVAudioPCMBuffer): Promise<number>
+    end(): Promise<void>
+    drain(): Promise<void>
+    close(): Promise<void>
+    getStatistics(): Promise<AVAudio.StreamStatistics>
+  }
+  class AVAudioSinkNode extends AVAudioNode {
+    static create(options: AVAudio.ObservationOptions & { format: AVAudioFormat }): Promise<AVAudioSinkNode>
+    read(): Promise<AVAudio.ObservedPCM | null>
+    close(): Promise<void>
+    getStatistics(): Promise<AVAudio.StreamStatistics>
+  }
+  class AVAudioManualInput implements AVAudio.PCMQueue {
+    private constructor()
+    enqueue(buffer: AVAudioPCMBuffer): Promise<number>
+    end(): Promise<void>
+    drain(): Promise<void>
+    close(): Promise<void>
+    getStatistics(): Promise<AVAudio.StreamStatistics>
+  }
+  class AVAudioManualRenderer {
+    private constructor()
+    render(frameCount: number): Promise<AVAudio.RenderResult>
+    dispose(): Promise<void>
+  }
+
+  class AVAudioUnit extends AVAudioNode {
+    static findComponents(filter?: Partial<AVAudio.ComponentDescription>): Promise<readonly AVAudio.Component[]>
+    static instantiate(description: AVAudio.ComponentDescription, options?: { outOfProcess?: boolean }): Promise<AVAudioUnit>
+    getBypass(): Promise<boolean>
+    setBypass(bypass: boolean): Promise<void>
+    getComponent(): Promise<AVAudio.Component>
+    getParameterTree(): Promise<AVAudio.ParameterGroup | null>
+    getParameterValues(addresses?: readonly string[]): Promise<readonly { address: string; value: number }[]>
+    setParameterValues(values: readonly { address: string; value: number }[]): Promise<void>
+    getParameterString(address: string, value?: number): Promise<string>
+    getParameterValue(address: string, text: string): Promise<number>
+    scheduleParameterEvents(events: readonly AVAudio.ParameterEvent[]): Promise<void>
+    /** Collects plugin-emitted native automation value/touch/release events. Ordinary value assignment need not emit these events; read current values with getParameterValues. */
+    observeParameters(options?: { queueSize?: number }): Promise<AVAudio.ParameterObserver>
+    getFactoryPresets(): Promise<readonly AVAudio.Preset[]>
+    getUserPresets(): Promise<readonly AVAudio.Preset[]>
+    setCurrentPreset(preset: AVAudio.Preset): Promise<void>
+    getCurrentPreset(): Promise<AVAudio.Preset | null>
+    saveUserPreset(preset: AVAudio.Preset): Promise<void>
+    deleteUserPreset(number: number): Promise<void>
+    /** Binary property-list encoding preserves native Data and integer values. */
+    getStateData(options?: { forDocument?: boolean }): Promise<Uint8Array>
+    setStateData(data: Uint8Array, options?: { forDocument?: boolean }): Promise<void>
+    loadPreset(path: string): Promise<void>
+    getBusState(): Promise<{ inputs: readonly { name: string | null; format: AVAudioFormat; enabled: boolean; maximumChannelCount: number }[]; outputs: readonly { name: string | null; format: AVAudioFormat; enabled: boolean; maximumChannelCount: number }[]; latency: number; tailTime: number; renderingOffline: boolean; renderResourcesAllocated: boolean }>
+    requestView(): Promise<AVAudioUnitViewController | null>
+  }
+  class AVAudioUnitViewController { private constructor(); readonly id: string; dispose(): Promise<void> }
+
+  class AVAudioUnitEffect extends AVAudioUnit {
+    static createEffect(description: AVAudio.ComponentDescription): Promise<AVAudioUnitEffect>
+    setBypass(bypass: boolean): Promise<void>
+    getBypass(): Promise<boolean>
+  }
+  class AVAudioUnitGenerator extends AVAudioUnit {
+    static createGenerator(description: AVAudio.ComponentDescription): Promise<AVAudioUnitGenerator>
+    setBypass(bypass: boolean): Promise<void>
+    getBypass(): Promise<boolean>
+  }
+  class AVAudioUnitTimeEffect extends AVAudioUnit {
+    static createTimeEffect(description: AVAudio.ComponentDescription): Promise<AVAudioUnitTimeEffect>
+    setBypass(bypass: boolean): Promise<void>
+    getBypass(): Promise<boolean>
+  }
+
+  class AVAudioUnitEQ extends AVAudioUnitEffect {
+    static create(options?: { numberOfBands?: number }): Promise<AVAudioUnitEQ>
+    getEQ(): Promise<{ globalGain: number; bands: readonly AVAudioUnitEQ.Band[] }>
+    setGlobalGain(decibels: number): Promise<void>
+    configureBand(index: number, properties: Partial<AVAudioUnitEQ.Band>): Promise<void>
+  }
+  namespace AVAudioUnitEQ { interface Band { filterType: 'parametric' | 'lowPass' | 'highPass' | 'resonantLowPass' | 'resonantHighPass' | 'bandPass' | 'bandStop' | 'lowShelf' | 'highShelf' | 'resonantLowShelf' | 'resonantHighShelf'; frequency: number; bandwidth: number; gain: number; bypass: boolean } }
+  class AVAudioUnitReverb extends AVAudioUnitEffect { static create(): Promise<AVAudioUnitReverb>; loadFactoryPreset(preset: 'smallRoom' | 'mediumRoom' | 'largeRoom' | 'mediumHall' | 'largeHall' | 'plate' | 'mediumChamber' | 'largeChamber' | 'cathedral' | 'largeRoom2' | 'mediumHall2' | 'mediumHall3' | 'largeHall2'): Promise<void>; configure(properties: { wetDryMix?: number; bypass?: boolean }): Promise<void> }
+  class AVAudioUnitDelay extends AVAudioUnitEffect { static create(): Promise<AVAudioUnitDelay>; configure(properties: { delayTime?: number; feedback?: number; lowPassCutoff?: number; wetDryMix?: number; bypass?: boolean }): Promise<void> }
+  class AVAudioUnitDistortion extends AVAudioUnitEffect { static create(): Promise<AVAudioUnitDistortion>; loadFactoryPreset(preset: number): Promise<void>; configure(properties: { preGain?: number; wetDryMix?: number; bypass?: boolean }): Promise<void> }
+  class AVAudioUnitTimePitch extends AVAudioUnitTimeEffect { static create(): Promise<AVAudioUnitTimePitch>; configure(properties: { rate?: number; pitch?: number; overlap?: number; bypass?: boolean }): Promise<void> }
+  class AVAudioUnitVarispeed extends AVAudioUnitTimeEffect { static create(): Promise<AVAudioUnitVarispeed>; configure(properties: { rate?: number; bypass?: boolean }): Promise<void> }
+
+  class AVAudioUnitMIDIInstrument extends AVAudioUnit {
+    static create(description: AVAudio.ComponentDescription): Promise<AVAudioUnitMIDIInstrument>
+    startNote(note: number, velocity: number, channel?: number): Promise<void>
+    stopNote(note: number, channel?: number): Promise<void>
+    sendController(controller: number, value: number, channel?: number): Promise<void>
+    sendProgramChange(program: number, options?: { bankMSB?: number; bankLSB?: number; channel?: number }): Promise<void>
+    sendPitchBend(value: number, channel?: number): Promise<void>
+    sendPressure(value: number, options?: { note?: number; channel?: number }): Promise<void>
+    sendMIDIEvent(status: number, data1: number, data2?: number): Promise<void>
+    sendSysEx(data: Uint8Array): Promise<void>
+    sendUMP(words: Uint32Array): Promise<void>
+    scheduleMIDI(data: Uint8Array, options: { sampleTime: number; cable?: number }): Promise<void>
+    scheduleUMP(words: Uint32Array, options: { sampleTime: number; cable?: number }): Promise<void>
+    allNotesOff(channel?: number): Promise<void>
+  }
+  class AVAudioUnitSampler extends AVAudioUnitMIDIInstrument {
+    static create(): Promise<AVAudioUnitSampler>
+    loadSoundBank(path: string, options: { program: number; bankMSB: number; bankLSB: number }): Promise<void>
+    loadInstrument(path: string): Promise<void>
+    loadAudioFiles(paths: readonly string[]): Promise<void>
+  }
+
+  class AVAudioSequencer {
+    private constructor()
+    static create(engine?: AVAudioEngine): Promise<AVAudioSequencer>
+    load(path: string, options?: { preserveTracks?: boolean }): Promise<void>
+    loadData(data: Uint8Array, options?: { preserveTracks?: boolean }): Promise<void>
+    exportData(options?: { timeResolution?: number }): Promise<Uint8Array>
+    write(path: string, options?: { timeResolution?: number; overwrite?: boolean }): Promise<void>
+    getTracks(): Promise<readonly AVMusicTrack[]>
+    getTempoTrack(): Promise<AVMusicTrack>
+    getUserInfoData(): Promise<Uint8Array>
+    reverseEvents(): Promise<void>
+    observeUserEvents(options?: { queueSize?: number }): Promise<{ read(): Promise<readonly { track: AVMusicTrack; beat: number; data: Uint8Array; sequence: string; discontinuity: boolean }[] | null>; close(): Promise<void>; getStatistics(): Promise<AVAudio.EventStatistics> }>
+    createTrack(): Promise<AVMusicTrack>
+    removeTrack(track: AVMusicTrack): Promise<void>
+    getState(): Promise<{ isPlaying: boolean; currentPositionInBeats: number; currentPositionInSeconds: number; rate: number; hostTime: string }>
+    prepareToPlay(): Promise<void>
+    start(): Promise<void>
+    stop(): Promise<void>
+    setPosition(options: { beats: number } | { seconds: number }): Promise<void>
+    setRate(rate: number): Promise<void>
+    secondsForBeats(beats: number): Promise<number>
+    beatsForSeconds(seconds: number): Promise<number>
+    hostTimeForBeats(beats: number): Promise<string>
+    beatsForHostTime(hostTime: string): Promise<number>
+    dispose(): Promise<void>
+  }
+  class AVMusicTrack {
+    private constructor()
+    readonly id: string
+    getState(): Promise<AVAudio.TrackState>
+    configure(properties: Partial<Omit<AVAudio.TrackState, 'lengthInSeconds' | 'timeResolution'>>): Promise<void>
+    addEvents(events: readonly AVAudio.TimedEvent[]): Promise<void>
+    getEvents(range?: { startBeat: number; endBeat: number }): Promise<readonly AVAudio.EnumeratedEvent[]>
+    clear(range: { startBeat: number; endBeat: number }): Promise<void>
+    cut(range: { startBeat: number; endBeat: number }): Promise<void>
+    move(range: { startBeat: number; endBeat: number; byBeats: number }): Promise<void>
+    copyEvents(source: AVMusicTrack, options: { startBeat: number; endBeat: number; insertAtBeat: number; mode?: 'copy' | 'merge' }): Promise<void>
+  }
+
+  namespace AVAudioEnvironmentNode {
+    interface Configuration { listenerPosition?: AVAudio.Point3D; listenerVectorOrientation?: AVAudio.VectorOrientation; listenerAngularOrientation?: AVAudio.AngularOrientation; outputType?: number; outputVolume?: number; distanceAttenuation?: { model?: 'exponential' | 'inverse' | 'linear'; referenceDistance?: number; maximumDistance?: number; rolloffFactor?: number }; reverb?: { enabled?: boolean; level?: number; filter?: { frequency?: number; bandwidth?: number; gain?: number } } }
+  }
+  class AVAudioEnvironmentNode extends AVAudioNode {
+    static create(): Promise<AVAudioEnvironmentNode>
+    getConfiguration(): Promise<AVAudioEnvironmentNode.Configuration & { applicableRenderingAlgorithms: readonly number[]; nextAvailableInputBus: number }>
+    configure(properties: AVAudioEnvironmentNode.Configuration): Promise<void>
+    loadReverbPreset(preset: number): Promise<void>
+  }
+
+  /** iOS/iPadOS 27+ screen capture in a live main App script. The system picker authorizes shared content. */
+  namespace ScreenCapture {
+    const isSupported: boolean
+    const isAvailable: boolean
+    function getRecordingCapabilities(): ScreenCaptureRecordingCapabilities
+    function createSession(options?: ScreenCaptureOptions): Promise<ScreenCaptureSession>
+    function start(options?: ScreenCaptureOptions): Promise<ScreenCaptureSession>
+    function capture(options?: ScreenCaptureCaptureOptions): Promise<ScreenCaptureImageFrame>
+    function presentRecordingEditor(filePath: string): Promise<void>
+  }
+
+  type ScreenCaptureScope = "system" | "display" | "app"
+  type ScreenCaptureState = "ready" | "starting" | "running" | "stopping" | "stopped" | "failed"
+  type ScreenCaptureFrameStatus = "complete" | "idle" | "blank" | "suspended" | "started" | "stopped" | "unknown"
+
+  interface ScreenCaptureOptions {
+    scope?: ScreenCaptureScope
+    picker?: { showsMicrophoneControl?: boolean; showsCameraControl?: boolean }
+    configuration?: ScreenCaptureConfiguration
+    signal?: import("scripting").AbortSignal
+  }
+  interface ScreenCaptureConfiguration {
+    preset?: "hdrRecordingPreservedSDRHDR10"
+    width?: number
+    height?: number
+    capturesAudio?: boolean
+    sampleRate?: number
+    channelCount?: number
+    excludesCurrentProcessAudio?: boolean
+    captureDynamicRange?: "sdr" | "hdrCanonicalDisplay"
+  }
+  interface ScreenCaptureCaptureOptions extends ScreenCaptureOptions {
+    delayMs?: number
+    timeoutMs?: number
+    image?: ScreenCaptureImageOptions
+  }
+  interface ScreenCaptureReadOptions {
+    timeoutMs?: number
+    signal?: import("scripting").AbortSignal
+  }
+  interface ScreenCaptureImageOptions {
+    maxDimension?: number
+    dynamicRange?: "preserve" | "sdr"
+  }
+  interface ScreenCaptureSelection {
+    readonly requestedScope: ScreenCaptureScope
+    readonly style: "display" | "window" | "unknown"
+    readonly contentRect: ScreenCaptureRect
+    readonly pointPixelScale: number
+    readonly isMicrophoneEnabled: boolean
+    readonly isCameraEnabled: boolean
+  }
+  interface ScreenCaptureSession {
+    readonly id: string
+    readonly state: ScreenCaptureState
+    readonly isCapturing: boolean
+    readonly selection: ScreenCaptureSelection
+    readonly configuration: Readonly<ScreenCaptureConfiguration>
+    readonly timing: ScreenCaptureClockInfo
+    readonly activity: "unknown" | "active" | "inactive"
+    readonly closed: Promise<ScreenCaptureEnd>
+    onStateChanged: ((state: ScreenCaptureState) => void) | null
+    onFrameStatusChanged: ((status: ScreenCaptureFrameStatus) => void) | null
+    onActivityChanged: ((activity: "active" | "inactive") => void) | null
+    start(): Promise<void>
+    stop(): Promise<ScreenCaptureEnd>
+    nextFrame(options?: ScreenCaptureReadOptions & { image?: ScreenCaptureImageOptions }): Promise<ScreenCaptureImageFrame>
+    latestFrame(options?: { maxAgeMs?: number; image?: ScreenCaptureImageOptions }): Promise<ScreenCaptureImageFrame | null>
+    addVideoOutput(options?: ScreenCaptureVideoOutputOptions): Promise<ScreenCaptureVideoOutput>
+    addAudioOutput(options: ScreenCaptureAudioOutputOptions): Promise<ScreenCaptureAudioOutput>
+    addRecordingOutput(options: ScreenCaptureRecordingOptions): Promise<ScreenCaptureRecording>
+    addClipBufferingOutput(): Promise<ScreenCaptureClipBuffer>
+    addVideoEffectOutput(cameraDevice: AVCaptureDevice): Promise<ScreenCaptureVideoEffect>
+    getStatistics(): ScreenCaptureStatistics
+  }
+  interface ScreenCaptureVideoOutput {
+    readonly samples: AsyncIterable<ScreenCaptureVideoSample>
+    readonly closed: Promise<ScreenCaptureOutputEnd>
+    onError: ((error: ScreenCaptureError) => void) | null
+    getStatistics(): ScreenCaptureOutputStatistics
+    dispose(): Promise<void>
+  }
+  interface ScreenCaptureAudioOutput {
+    readonly source: "system" | "microphone"
+    readonly samples: AsyncIterable<ScreenCaptureAudioSample>
+    readonly closed: Promise<ScreenCaptureOutputEnd>
+    onError: ((error: ScreenCaptureError) => void) | null
+    getStatistics(): ScreenCaptureOutputStatistics
+    dispose(): Promise<void>
+  }
+  interface ScreenCaptureVideoOutputOptions {
+    maxFPS?: number
+    buffering?: ScreenCaptureBuffering
+  }
+  interface ScreenCaptureAudioOutputOptions {
+    source: "system" | "microphone"
+    buffering?: ScreenCaptureBuffering
+  }
+  interface ScreenCaptureBuffering {
+    capacity?: number
+    overflow?: "dropOldest" | "dropNewest" | "error"
+  }
+  interface ScreenCaptureRecordingCapabilities {
+    readonly videoCodecs: readonly string[]
+    readonly fileTypes: readonly string[]
+  }
+  interface ScreenCaptureRecordingOptions {
+    filePath: string
+    videoCodecType?: string
+    outputFileType?: string
+    mixesAudioWithMicrophone?: boolean
+    overwrite?: boolean
+  }
+  interface ScreenCaptureRecording {
+    readonly state: "prepared" | "recording" | "finishing" | "finished" | "failed"
+    readonly recordedDuration: number
+    readonly recordedFileSize: number
+    readonly finished: Promise<ScreenCaptureFileResult>
+    onStateChanged: ((state: ScreenCaptureRecording["state"]) => void) | null
+    stop(): Promise<ScreenCaptureFileResult>
+  }
+  interface ScreenCaptureFileResult { filePath: string; duration: number; fileSize: number }
+  interface ScreenCaptureClipBuffer {
+    readonly state: "starting" | "buffering" | "stopping" | "stopped" | "failed"
+    readonly maximumDuration: 15
+    onStateChanged: ((state: ScreenCaptureClipBuffer["state"]) => void) | null
+    onError: ((error: ScreenCaptureError) => void) | null
+    exportClip(options: { filePath: string; duration: number; overwrite?: boolean }): Promise<ScreenCaptureFileResult>
+    stop(): Promise<void>
+  }
+  interface ScreenCaptureVideoEffect {
+    readonly state: "prepared" | "starting" | "active" | "stopped" | "failed"
+    readonly cameraDevice: AVCaptureDevice
+    onStateChanged: ((state: ScreenCaptureVideoEffect["state"]) => void) | null
+    onError: ((error: ScreenCaptureError) => void) | null
+    setCameraDevice(device: AVCaptureDevice): Promise<void>
+    stop(): Promise<void>
+  }
+
+  interface ScreenCaptureRect { x: number; y: number; width: number; height: number }
+  interface ScreenCaptureTime {
+    value: bigint; timescale: number; epoch: bigint; flags: number
+    seconds: number | null
+  }
+  interface ScreenCaptureSampleTiming {
+    presentationTime: ScreenCaptureTime
+    decodeTime: ScreenCaptureTime
+    duration: ScreenCaptureTime
+    hostTimeSeconds: number | null
+  }
+  interface ScreenCaptureClockInfo {
+    readonly kind: "host" | "other" | "unavailable"
+    currentTime(): ScreenCaptureTime | null
+  }
+  interface ScreenCaptureVideoMetadata {
+    readonly status: ScreenCaptureFrameStatus
+    readonly displayTime: bigint | null
+    readonly scaleFactor: number | null
+    readonly contentScale: number | null
+    readonly contentRect: ScreenCaptureRect | null
+    readonly screenRect: ScreenCaptureRect | null
+    readonly videoOrientation: number | null
+  }
+  interface ScreenCaptureVideoFormat {
+    readonly width: number; readonly height: number
+    readonly pixelFormat: string
+    readonly pixelFormatCode: number
+    readonly planeCount: number
+    readonly bitDepth: number | null
+    readonly attachments: Readonly<Record<string, ScreenCaptureAttachmentValue>>
+  }
+  type ScreenCaptureAttachmentValue = null | boolean | number | string | bigint | Data
+    | readonly ScreenCaptureAttachmentValue[] | { readonly [key: string]: ScreenCaptureAttachmentValue }
+  interface ScreenCaptureVideoSample {
+    readonly sequence: number
+    readonly timing: ScreenCaptureSampleTiming
+    readonly metadata: ScreenCaptureVideoMetadata
+    readonly format: ScreenCaptureVideoFormat | null
+    readonly hasImage: boolean
+    readonly disposed: boolean
+    toImage(options?: ScreenCaptureImageOptions): Promise<UIImage>
+    /** Independently retains a complete native sample for timestamped playback. iOS 27+. */
+    toMediaSample(): MediaSample
+    copyPixelPlanes(): Promise<readonly ScreenCapturePixelPlane[]>
+    dispose(): void
+  }
+  interface ScreenCapturePixelPlane {
+    data: Data; width: number; height: number; bytesPerRow: number
+  }
+  interface ScreenCaptureAudioFormat {
+    sampleRate: number; formatID: string; formatFlags: number
+    bytesPerPacket: number; framesPerPacket: number; bytesPerFrame: number
+    channelsPerFrame: number; bitsPerChannel: number
+    channelLayout: Data | null
+  }
+  interface ScreenCaptureAudioSample {
+    readonly source: "system" | "microphone"
+    readonly sequence: number
+    readonly timing: ScreenCaptureSampleTiming
+    readonly format: ScreenCaptureAudioFormat
+    readonly sampleCount: number
+    readonly discontinuity: boolean | null
+    readonly disposed: boolean
+    copyAudioBuffers(): Promise<readonly { numberChannels: number; data: Data }[]>
+    dispose(): void
+  }
+  interface ScreenCaptureImageFrame {
+    readonly image: UIImage
+    readonly sequence: number
+    readonly timing: ScreenCaptureSampleTiming
+    readonly metadata: ScreenCaptureVideoMetadata
+    readonly sourceFormat: ScreenCaptureVideoFormat
+  }
+  interface ScreenCaptureEnd {
+    reason: "stopped" | "userStopped" | "systemStopped" | "aborted" | "ownerDisposed" | "failed"
+    error: ScreenCaptureError | null
+    recordings: readonly ScreenCaptureRecordingCompletion[]
+  }
+  interface ScreenCaptureRecordingCompletion {
+    result: ScreenCaptureFileResult | null
+    error: ScreenCaptureError | null
+  }
+  interface ScreenCaptureOutputEnd { reason: "disposed" | "sessionEnded" | "failed"; error: ScreenCaptureError | null }
+  interface ScreenCaptureError extends Error {
+    code: ScreenCaptureErrorCode
+    nativeDomain?: string; nativeCode?: number
+    cleanupError?: ScreenCaptureError
+  }
+  type ScreenCaptureErrorCode = "unsupportedOS" | "unsupportedContext" | "notForeground"
+    | "systemUnavailable" | "pickerBusy" | "invalidArgument" | "userCancelled" | "aborted"
+    | "scopeMismatch" | "notSupported" | "permissionDenied" | "invalidState"
+    | "consumerBusy" | "timeout" | "sessionEnded" | "startFailed" | "captureFailed"
+    | "stopFailed" | "outputFailed" | "bufferOverflow" | "fileExists" | "fileIO"
+    | "conversionUnsupported" | "resourceBusy" | "accessDenied"
+    | "ERR_PRO_REQUIRED" | "SCRIPT_API_ACCESS_DENIED" | "SCRIPT_PERMISSION_PERSISTENCE_FAILED" | "EACCES"
+  interface ScreenCaptureOutputStatistics {
+    receivedSamples: number; deliveredSamples: number; droppedSamples: number
+    queuedSamples: number; retainedSamples: number; retainedBytes: number | null
+  }
+  interface ScreenCaptureStatistics {
+    videoSamples: number; systemAudioSamples: number; microphoneSamples: number
+    outputs: readonly ScreenCaptureOutputStatistics[]
+    lastFrameStatus: ScreenCaptureFrameStatus | null
+  }
+
+  /** Internal native asset transform. Usage and lifecycle: dedicated AssetCrypto spec. */
+  namespace __AssetCrypto__ {
+    interface OpenOptions {
+      format: "tfLegacy"
+      dpInfo: Data
+      guid: Data
+      expectedByteCount: number
+    }
+    interface CloseOptions { abort?: boolean }
+    interface Session {
+      update(data: Data): Promise<Data>
+      close(options?: CloseOptions): Promise<Data>
+    }
+    type ErrorCode = "INVALID_CONFIGURATION" | "INVALID_STATE" | "INPUT_TOO_LARGE" | "LENGTH_MISMATCH" | "DECRYPTION_FAILED" | "BUSY" | "ERR_PRO_REQUIRED"
+    interface CryptoError extends Error { code: ErrorCode }
+    function openDecryptor(options: OpenOptions): Promise<Session>
+  }
+
 
   /** Foreground App-only VoiceOver announcements. No import is required. */
   namespace Accessibility {
@@ -33,7 +1192,7 @@ declare global {
     resolve(service: BonjourService, options?: {timeout?: number; includePeerToPeer?: boolean}): Promise<BonjourResolvedService>
   }
 
-  /** App-only global control of Scripting's VPN. No import is required. */
+  /** Global control of Scripting's VPN in the app and supported extensions. No import is required. */
   interface VPNState {
     status: "invalid" | "disconnected" | "connecting" | "connected" | "reasserting" | "disconnecting" | "unknown"
     active: boolean
@@ -60,8 +1219,10 @@ declare global {
     getState(): Promise<VPNLocalDevState>
     setEnabled(enabled: boolean, options?: {expectedState?: string}): Promise<VPNLocalDevState>
     /** Requires LocalDevVPN permission, a reachable reflected IPv4 address, and a pairing PSK. Uses the system route, including external VPNs; no Scripting VPN start is required. */
-    openRSDTunnel(options: {host: string; port: number; preSharedKey: Uint8Array | ArrayBuffer; identity?: string; mtu?: number; timeout?: number}): Promise<VPNRSDTunnel>
-    /** Cancels this context's pending opening and waits for native cleanup. Does not close an established tunnel. */
+    openRSDTunnel(options: {host: string; port: number; preSharedKey: Data | Uint8Array | ArrayBuffer; identity?: string; mtu?: number; timeout?: number}): Promise<VPNRSDTunnel>
+    /** Acquires an independent handle to the App's ready native tunnel, without pairing secrets. null when none is ready. */
+    attachRSDTunnel(): Promise<VPNRSDTunnel | null>
+    /** Cancels this context's pending open/attach and waits for native cleanup. Does not close an established tunnel. */
     cancelRSDTunnelOpening(): Promise<void>
   }
   interface VPNRSDDiagnostic {
@@ -87,29 +1248,184 @@ declare global {
     bufferedReceiveBytes: number
     bufferedWriteBytes: number
   }
+  interface VPNRSDService {
+    readonly name: string
+    readonly port: number
+    readonly usesRemoteXPC: boolean
+    readonly entitlement: string | null
+  }
   interface VPNRSDTunnel {
     getState(): Promise<VPNRSDState>
-    /** Opens bounded TCP to the negotiated private server IPv6 address. At most four connections. */
-    connect(options: {port: number}): Promise<VPNRSDConnection>
-    /** Waits for this tunnel's cleanup; a closed old handle cannot close its replacement. */
+    /** Opens an independent TCP stream. At most four connections across all handles sharing this native tunnel. */
+    connect(options: ({port: number; serviceName?: never} | {serviceName: string; port?: never}) & {timeout?: number}): Promise<VPNRSDConnection>
+    /** Cached per native tunnel. Explicit refresh replaces the cached directory. Deadline in ms, 1-300000; default 30000. */
+    listServices(options?: {refresh?: boolean; timeout?: number}): Promise<VPNRSDService[]>
+    /** Resolves an exact advertised name; does not connect or run a service-specific handshake. */
+    resolveService(options: {serviceName: string; timeout?: number}): Promise<VPNRSDService>
+    /** Closes this handle's connections to port, including opens already pending when the close is applied. */
+    closeConnections(options: {port: number}): Promise<void>
+    /** Closes this handle and its connections. Other handles remain active; the last release reclaims the native tunnel. */
     close(): Promise<void>
   }
   interface VPNRSDConnection {
     /** Reads 1–16384 bytes per call; null means peer EOF. Only one pending read. */
     read(maximum?: number): Promise<Uint8Array | null>
     /** Writes at most 16384 bytes per call. Only one pending write. */
-    write(bytes: Uint8Array | ArrayBuffer): Promise<void>
+    write(bytes: Data | Uint8Array | ArrayBuffer): Promise<void>
+    /** Native Data chunk, or null for peer EOF. Shares read's pending slot and 1-16384 byte limit. */
+    readData(maximum?: number): Promise<Data | null>
+    /** Snapshots native Data at admission. Shares write's pending slot and 16384 byte limit. */
+    writeData(bytes: Data): Promise<void>
     /** Sends TCP FIN while retaining the readable side. */
     end(): Promise<void>
     close(): Promise<void>
   }
+  type VPNModuleRef = { readonly [vpnResourceRefBrand]: "VPNModuleRef" }
+  type VPNScriptRef = { readonly [vpnResourceRefBrand]: "VPNScriptRef" }
+  type VPNConfigurationSaveResult = { status: "saved" | "cancelled" }
+  type VPNResourceSaveResult<T> = { status: "saved"; resource: T } | { status: "cancelled" }
+  type VPNResourceDeleteResult = { status: "deleted" | "cancelled" }
+  interface VPNModuleImportOptions {
+    text: string
+    /** Optional parser format: ini module or plugin. Omit to detect automatically. */
+    format?: "ini" | "plugin" | (string & {})
+    /** Script bodies keyed by the relative paths declared by the module. */
+    scripts?: Readonly<Record<string, string>>
+  }
+  interface VPNScriptImportOptions {
+    name: string
+    source: string
+    trigger?: { type: "generic" } | {
+      type: "request" | "response"
+      urlPattern: string
+      requiresBody?: boolean
+    }
+    argument?: string
+    /** Execution timeout in seconds. Defaults to 5. */
+    timeout?: number
+  }
+  interface VPNConfigurationAPI {
+    importModule(options: VPNModuleImportOptions): Promise<VPNResourceSaveResult<VPNModuleRef>>
+    importScript(options: VPNScriptImportOptions): Promise<VPNResourceSaveResult<VPNScriptRef>>
+    /** Lets the user choose or create a configuration. Adds disabled associations. */
+    attach(resources: readonly (VPNModuleRef | VPNScriptRef)[]): Promise<VPNConfigurationSaveResult>
+    /** Creates an empty, unselected configuration after native confirmation. */
+    create(options?: { suggestedName?: string }): Promise<VPNConfigurationSaveResult>
+    /** Replaces an unassociated module and returns a reference to its new revision. */
+    updateModule(resource: VPNModuleRef, options: VPNModuleImportOptions): Promise<VPNResourceSaveResult<VPNModuleRef>>
+    /** Replaces an unassociated network script and returns a reference to its new revision. */
+    updateScript(resource: VPNScriptRef, options: VPNScriptImportOptions): Promise<VPNResourceSaveResult<VPNScriptRef>>
+    deleteModule(resource: VPNModuleRef): Promise<VPNResourceDeleteResult>
+    deleteScript(resource: VPNScriptRef): Promise<VPNResourceDeleteResult>
+  }
+  type VPNRoutingMode = "direct" | "global" | "rules"
+  interface VPNTrafficRate {
+    uploadBytesPerSecond: number
+    downloadBytesPerSecond: number
+  }
+  interface VPNNamedItem {
+    /** Use the latest ID from the relevant VPN list. */
+    id: string
+    name: string
+  }
+  interface VPNPolicyGroup extends VPNNamedItem {
+    /** Whether the group supports manual member selection. */
+    selectable: boolean
+    members: VPNNamedItem[]
+  }
+  interface VPNPolicyGroupPatch {
+    hidden?: boolean | null
+    category?: string | null
+    iconURL?: string | null
+    noAlert?: boolean | null
+  }
+  type VPNContentStatus = "enabled" | "disabled" | "unattached"
+  /** Content IDs are shared with HTTP for the same VPN device and configuration and item revisions. */
+  interface VPNContentItem extends VPNNamedItem {
+    status: VPNContentStatus
+  }
+  interface VPNScriptItem extends VPNContentItem {
+    /** Whether this script supports setScriptsEnabled. */
+    editable: boolean
+    ownership: "standalone" | "module"
+    /** The current ID from listModules for the owning module. Omitted for standalone scripts. */
+    moduleId?: string
+  }
+  type VPNTrafficPeriod = "session" | "today"
+  interface VPNTrafficTotals {
+    uploadedBytes: number
+    downloadedBytes: number
+    /** True when the recorded total may have gaps. */
+    incomplete: boolean
+  }
+  type VPNProbeStatus = "reachable" | "failed" | "unavailable" | "skipped"
+  type VPNProbeMetric = "warm_http_response_head" | "warm_https_response_head" | "cold_http_response_head_fallback"
+  interface VPNProbeResult extends VPNNamedItem {
+    status: VPNProbeStatus
+    latencyMs: number | null
+    metric: VPNProbeMetric | null
+  }
+  /**
+   * App scripts use the native VPN service, independently of HTTP API configuration.
+   * Widgets/control actions and Share, Keyboard, Notification, and Translation UI extensions use the HTTP API.
+   * Extensions require an http-api declaration in the current configuration and a running VPN.
+   * HTTP is the default; enabling HTTPS verifies the server certificate without falling back to HTTP.
+   * VPN management methods do not request script permission. Keyboard calls require Full Access.
+   * VPN lifecycle, localDevVPN/RSD, and configuration sheets are available only in the app.
+   */
   interface VPNAPI {
     getState(): Promise<VPNState>
-    /** Completes when this App's tunnel is connected. Does not imply payload success. */
+    /** Reads the current Scripting VPN upload and download rates, or null if unavailable. */
+    getTrafficRate(): Promise<VPNTrafficRate | null>
+    /** Reads current tunnel-session totals or today's recorded totals. Defaults to "session". */
+    getTrafficTotals(period?: VPNTrafficPeriod): Promise<VPNTrafficTotals | null>
+    /** Reads the saved base routing mode. */
+    getRoutingMode(): Promise<VPNRoutingMode>
+    /** Saves the base routing mode for the current configuration. */
+    setRoutingMode(mode: VPNRoutingMode): Promise<VPNRoutingMode>
+    /** Saves global proxy and its selected node together. Use an ID from listProxyNodes(). */
+    setRoutingMode(mode: "global", options: { nodeId: string }): Promise<VPNRoutingMode>
+    listProxyNodes(): Promise<VPNNamedItem[]>
+    /** Reads the selected or default global proxy node for the current configuration. */
+    getGlobalProxyNode(): Promise<VPNNamedItem | null>
+    /** Tests up to 128 node IDs using the current configuration's manual probe settings. */
+    testProxyNodes(ids: readonly string[]): Promise<VPNProbeResult[]>
+    listPolicyGroups(): Promise<VPNPolicyGroup[]>
+    /** Reads the selected or default direct member of a manual selection group. */
+    getPolicyGroupSelection(groupId: string): Promise<VPNNamedItem | null>
+    /** Tests up to 128 direct members and reports results using their member IDs. */
+    testPolicyGroup(groupId: string): Promise<VPNProbeResult[]>
+    /** Changes the supplied fields. A null value clears the field. */
+    updatePolicyGroup(groupId: string, patch: VPNPolicyGroupPatch): Promise<VPNNamedItem>
+    /** Selects a member of a manual selection group. */
+    setPolicyGroupMember(groupId: string, memberId: string): Promise<VPNNamedItem>
+    listScripts(): Promise<VPNScriptItem[]>
+    /** Sets the saved enabled state of standalone Network scripts as a single batch. */
+    setScriptsEnabled(ids: readonly string[], enabled: boolean): Promise<void>
+    listModules(): Promise<VPNContentItem[]>
+    /** Sets the saved enabled state of modules in the current configuration as a single batch. */
+    setModulesEnabled(ids: readonly string[], enabled: boolean): Promise<void>
+    /** Reads the saved device-wide MITM switch. */
+    getMITMEnabled(): Promise<boolean>
+    /** Enables or disables MITM. Turning it on requires a trusted certificate. */
+    setMITMEnabled(enabled: boolean): Promise<boolean>
+    /** Reads the saved rewrite switch for the current configuration. */
+    getRewriteEnabled(): Promise<boolean>
+    setRewriteEnabled(enabled: boolean): Promise<boolean>
+    /** Reads the device-wide switch for Network traffic scripts. */
+    getScriptingEnabled(): Promise<boolean>
+    setScriptingEnabled(enabled: boolean): Promise<boolean>
+    /** Reads the saved traffic capture switch. */
+    getCaptureEnabled(): Promise<boolean>
+    /** Enables or disables the current capture session. */
+    setCaptureEnabled(enabled: boolean): Promise<boolean>
+    /** App only. Completes when this App's tunnel is connected. Does not imply payload success. */
     start(): Promise<VPNState>
-    /** Completes when this App's tunnel is disconnected; saved local-device intent remains. */
+    /** App only. Completes when this App's tunnel is disconnected; saved local-device intent remains. */
     stop(): Promise<VPNState>
     readonly localDevVPN: VPNLocalDevAPI
+    /** Available in supported foreground App script runs in development builds. */
+    readonly configuration?: VPNConfigurationAPI
   }
   const VPN: VPNAPI
 
@@ -164,11 +1480,25 @@ declare global {
    * Provides the information abouts the device, also some methods to use the capabilities of the device.
    *
    */
-  /** Requests and replies with a running main session of the same script, including supported App Group extensions. Global; no import required. */
+  /** Public main-App script services and same-script entry/extension requests. Global; no import required. */
   namespace ScriptSession {
     type Value = null | boolean | number | string | Value[] | { [key: string]: Value }
-    /** Registers only from the main App index/home_screen. Returns a fresh ID; persist it for other entries. */
-    function register(handler: (message: Value) => Value | void | Promise<Value | void>): string
+    interface RequestInfo {
+      readonly id: string
+      /** Immediate caller. Empty env means an older extension did not supply it. Not an authorization token. */
+      readonly caller: { readonly name: string; readonly env: string }
+      readonly source: "scriptSessionCall" | "scriptSessionRequest"
+    }
+    interface ServiceRequest extends RequestInfo {}
+    /** One public serial handler per script. Duplicate registration throws; replies keep the script alive. */
+    function serve(handler: (message: Value, request: ServiceRequest) => Value | void | Promise<Value | void>): string
+    /**
+     * Main-App JS only. A running server keeps its permissions. Cold startup follows the same call decisions as Script.run and waits up to 10 seconds for serve.
+     * A blocked call rejects with code SCRIPT_INVOCATION_BLOCKED. Total timeout includes confirmation and defaults to 30000 ms, range 100...300000.
+     */
+    function call<T extends Value = Value>(options: { name: string; message: Value; timeout?: number }): Promise<T>
+    /** Registers only from the main App index/home_screen/camera_control. Returns a fresh ID; persist it for other entries. */
+    function register(handler: (message: Value, request: RequestInfo) => Value | void | Promise<Value | void>): string
     /** No autolaunch, wake or keep-alive. 64 KiB JSON; timeout defaults to 10000 ms, range 100...30000, including sleep. */
     function request<T extends Value = Value>(sessionID: string, message: Value, options?: { timeout?: number }): Promise<T>
     /** Only the registering context can unregister. Script exit also closes the session. */
@@ -176,10 +1506,77 @@ declare global {
   }
 
   namespace Device {
+    /** Device physical memory in bytes, not the current process memory limit. */
+    const physicalMemory: number
+    /** Current host process memory footprint in bytes; null if the query fails. Includes other scripts and host allocations. Read on demand; avoid tight polling. */
+    const processMemoryUsage: number | null
+    /** Advisory bytes remaining before the current process reaches its current memory limit, not device-wide free RAM. Read fresh; 0 can also mean unavailable or the limit is exceeded. */
+    const availableMemory: number
     /** Scripting host App version (CFBundleShortVersionString), or an empty string if unavailable. No import required. */
     const appVersion: string
     /** Scripting host App build number (CFBundleVersion), preserved as a string; empty if unavailable. */
     const appBuildNumber: string
+    /** Hardware model identifier such as "iPhone17,1". Simulator reports the simulated model. Empty if unavailable. */
+    const hardwareModel: string
+    /** Whether the identified model is known to support Dynamic Island. Unknown models return false. */
+    const hasDynamicIsland: boolean
+    /** Native pixel dimensions in the display's fixed orientation and the logical and native scale factors. */
+    const nativeScreen: NativeScreen | null
+    /** Current main-screen brightness from 0 to 1, or null without a supported foreground window. */
+    const brightness: number | null
+    /** Sets main-screen brightness from 0 to 1. Throws for invalid levels and returns false when unavailable. */
+    function setBrightness(level: number): boolean
+    /** Observes brightness changes in a supported foreground window. Returns a cancellation function. */
+    function onBrightnessChanged(listener: (level: number) => void): () => void
+    /** Display refresh-rate limit in frames per second, or null on a background thread. */
+    const maximumFramesPerSecond: number | null
+    /** Whether the system currently has Low Power Mode enabled. */
+    const isLowPowerModeEnabled: boolean
+    /** Current system thermal state. */
+    const thermalState: ThermalState
+    type ThermalState = "nominal" | "fair" | "serious" | "critical" | "unknown"
+    interface NativeScreen {
+      readonly width: number
+      readonly height: number
+      readonly scale: number
+      readonly nativeScale: number
+    }
+    interface GeometryRect {
+      readonly x: number
+      readonly y: number
+      readonly width: number
+      readonly height: number
+    }
+    /** Current foreground window safe area in points. Null when the window is unavailable. */
+    const safeAreaInsets: WindowSafeAreaInsets | null
+    interface WindowSafeAreaInsets {
+      readonly top: number
+      readonly bottom: number
+      readonly leading: number
+      readonly trailing: number
+    }
+    /** Status bar height in points and visibility. Null when the scene or status bar is unavailable. */
+    const statusBar: StatusBar | null
+    interface StatusBar {
+      readonly height: number
+      readonly isHidden: boolean
+    }
+    /** Current bounds of the window scene in its coordinate space, in points. */
+    const sceneBounds: GeometryRect | null
+    /** The current window scene orientation. Null when unavailable. */
+    const interfaceOrientation: CurrentInterfaceOrientation | null
+    type CurrentInterfaceOrientation = "portrait" | "portraitUpsideDown" | "landscapeLeft" | "landscapeRight"
+    /** Active system occlusions in current window coordinates, in points. Empty before iOS 27.1 or without a window. */
+    const occlusionRegions: readonly OcclusionRegion[]
+    interface OcclusionRegion {
+      readonly frame: GeometryRect
+      readonly isActive: boolean
+    }
+    /** Whether the current scene is being continuously captured. Null when unavailable. */
+    const isScreenCaptured: boolean | null
+    /** Observes distinct capture changes, including null when unavailable. Read isScreenCaptured for the initial value. */
+    function onScreenCaptureChanged(listener: (isCaptured: boolean | null) => void): () => void
+
     /** System default-path information, not a probe of Internet or server reachability. */
     type NetworkState = {
       status: "satisfied" | "unsatisfied" | "requiresConnection" | "unknown"
@@ -471,8 +1868,9 @@ declare global {
     resetBytes(startIndex: number, endIndex: number): void
     /**
      * Creates a new data buffer by removing the specified number of bytes from the beginning of the original buffer.
-     * @param amount The number of bytes to strip from the input data buffer. The value must be less than the original data buffer's length.
+     * @param amount The number of bytes to strip from the input data buffer. The value must be nonnegative and less than the original data buffer's length.
      * @returns Returns a new data buffer created by removing the given number of bytes from the front of the original buffer.
+     * @throws an error if amount is negative or is at least the buffer length.
      */
     advanced(amount: number): Data
     /**
@@ -499,6 +1897,8 @@ declare global {
     decompressed(algorithm: CompressionAlgorithm): Data
     /**
      * Get a sub-data from the data.
+     * Indices follow JavaScript slice semantics: negative offsets count from the end,
+     * out-of-range offsets are clamped, and an end before the start returns empty Data.
      * @param start The start index of the sub-data, defaults to 0.
      * @param end The end index of the sub-data, defaults to the end of the data.
      * @returns Returns a new Data instance containing the bytes from start to end, or a new Data instance if no parameters are provided.
@@ -775,6 +2175,72 @@ declare global {
     function string(): string
   }
 
+  type ShaderEffect = "colorEffect" | "layerEffect" | "distortionEffect"
+  type ShaderArgumentKind = "float" | "float2" | "float3" | "float4" | "color" | "boundingRect" | "image"
+  type ShaderPlatform = "iphoneos" | "iphonesimulator"
+  type BuiltInShaderName = "tint" | "variableBlur" | "wave" | "displacement"
+
+  interface ShaderCapabilities {
+    builtIn: boolean
+    projectLibraries: boolean
+    platform: ShaderPlatform | null
+  }
+
+  interface ShaderSignature {
+    name: string
+    effect: ShaderEffect
+    arguments: readonly ShaderArgumentKind[]
+  }
+
+  interface ShaderLibraryManifest {
+    version: 1
+    libraries: Partial<Record<ShaderPlatform, string>>
+    functions: readonly ShaderSignature[]
+  }
+
+  type ShaderErrorCode =
+    | "unsupported" | "unsupportedPlatform" | "invalidPath" | "invalidManifest"
+    | "invalidLibrary" | "invalidSignature" | "resourceLimit" | "disposed" | "accessDenied"
+
+  type ShaderError = Error & { readonly code: ShaderErrorCode }
+
+  /** An argument created by Shader.Argument. */
+  interface ShaderArgument {
+    readonly __shaderArgumentBrand: never
+  }
+
+  interface ShaderArgumentFactory {
+    float(x: number): ShaderArgument
+    float2(x: number, y: number): ShaderArgument
+    float3(x: number, y: number, z: number): ShaderArgument
+    float4(x: number, y: number, z: number, w: number): ShaderArgument
+    color(value: Color): ShaderArgument
+    readonly boundingRect: ShaderArgument
+    image(value: UIImage): ShaderArgument
+  }
+
+  /** A shader with bound arguments. Create one through ShaderLibrary. */
+  class Shader {
+    private constructor()
+    private readonly shaderBrand: never
+    static readonly Argument: ShaderArgumentFactory
+  }
+
+  /** Accesses built-in SwiftUI shaders or a precompiled Metal library. */
+  class ShaderLibrary {
+    private constructor()
+    private readonly shaderLibraryBrand: never
+
+    static readonly builtIn: {
+      shader(name: BuiltInShaderName, args: readonly ShaderArgument[]): Shader
+    }
+    static getCapabilities(): Promise<ShaderCapabilities>
+    /** Loads a JSON signature manifest from an absolute file path or a path relative to the script project. Requires iOS 18+. */
+    static load(manifestPath: string): Promise<ShaderLibrary>
+    shader(name: string, args: readonly ShaderArgument[]): Shader
+    dispose(): Promise<void>
+  }
+
   /**
    * A class for creating UIImageSymbolConfiguration instances.
    * These instances can be used to configure the appearance of a symbol image.
@@ -823,8 +2289,44 @@ declare global {
   /**
    * UIImage instance for displaying or saving an Image.
    */
+  type ImagePixelFormat = 'rgba8' | 'bgra8'
+  type ImageAlphaMode = 'straight' | 'premultiplied' | 'opaque'
+  interface ImagePixels {
+    width: number
+    height: number
+    /** Raw pixels, not encoded PNG/JPEG. Typed array view boundaries are respected. */
+    data: Data | Uint8Array | Uint8ClampedArray
+    bytesPerRow?: number
+    format?: ImagePixelFormat
+    alphaMode?: ImageAlphaMode
+    colorSpace?: 'sRGB' | 'displayP3'
+    scale?: number
+  }
+  interface ImagePixelReadOptions {
+    format?: ImagePixelFormat
+    alphaMode?: ImageAlphaMode
+    colorSpace?: 'sRGB' | 'displayP3'
+    bytesPerRow?: number
+  }
+  interface ImagePixelResult<T extends Data | Uint8Array = Uint8Array> {
+    width: number
+    height: number
+    data: T
+    bytesPerRow: number
+    format: ImagePixelFormat
+    alphaMode: ImageAlphaMode
+    colorSpace: 'sRGB' | 'displayP3'
+    scale: number
+  }
+
   class UIImage {
     private constructor()
+    /** Raw pixels: top-left rows, RGBA8 straight alpha/sRGB/scale=1 by default. Throws on invalid data or resource limits. */
+    static fromPixels(pixels: ImagePixels): UIImage
+    static fromRGBA(width: number, height: number, data: Data | Uint8Array | Uint8ClampedArray): UIImage
+    /** Returns independent display-oriented pixels. Opaque output composites on black. */
+    toPixels(options: ImagePixelReadOptions & { dataType: 'data' }): ImagePixelResult<Data>
+    toPixels(options?: ImagePixelReadOptions & { dataType?: 'uint8Array' }): ImagePixelResult<Uint8Array>
     /**
      * The width of the image.
      */
@@ -1452,6 +2954,21 @@ declare global {
    * The interface to store data in Keychain.
    */
   namespace Keychain {
+    /**
+     * Presents an authenticated sheet for choosing a string from a script's Keychain.
+     * Tap a key to select it, then tap Confirm to return its current UTF-8 value.
+     * Returns null when cancelled or dismissed; an empty string is a valid value.
+     * title sets the navigation title; prompt displays instructions above the list.
+     * Requires a foreground app presentation context. Unsupported contexts or concurrent
+     * requests reject. Read or decoding errors are shown in the sheet for retry/cancel.
+     * The picker lists script-scoped items, including skill and workspace scopes;
+     * shared storage and internal application credentials are excluded.
+     */
+    function pick(options?: {
+      title?: string
+      prompt?: string
+    }): Promise<string | null>
+
     /**
      * Encrypts and saves the `key` with the given `value`.
      *
@@ -4590,6 +6107,143 @@ declare global {
     }
   }
 
+  /** Browser options fixed when the controller is created. Omitted values use WebKit defaults. */
+  interface WebViewConfigurationOptions {
+    ephemeral?: boolean
+    /** Inline playback also requires the video's playsinline attribute on iPhone. */
+    allowsInlineMediaPlayback?: boolean
+    mediaTypesRequiringUserActionForPlayback?: "none" | "audio" | "video" | "all"
+    allowsAirPlayForMediaPlayback?: boolean
+    allowsPictureInPictureMediaPlayback?: boolean
+    /** Controls scripts supplied by web content, independently of host evaluateJavaScript calls. */
+    allowsContentJavaScript?: boolean
+    preferredContentMode?: "recommended" | "mobile" | "desktop"
+    /** Allowing window.open does not itself provide a new-window host. */
+    javaScriptCanOpenWindowsAutomatically?: boolean
+    applicationNameForUserAgent?: string | null
+    suppressesIncrementalRendering?: boolean
+    ignoresViewportScaleLimits?: boolean
+    dataDetectorTypes?: Array<"none" | "all" | "phoneNumber" | "link" | "address" | "calendarEvent" | "trackingNumber" | "flightNumber" | "lookupSuggestion">
+    selectionGranularity?: "dynamic" | "character"
+  }
+  /** Settings that can change without recreating the webpage. */
+  interface WebViewSettings {
+    /** iOS 17+. Offscreen task scheduling. Omitted values use the current platform default. */
+    inactiveSchedulingPolicy: "suspend" | "throttle" | "none"
+    customUserAgent: string | null
+    allowsBackForwardNavigationGestures: boolean
+    allowsLinkPreview: boolean
+    isScrollEnabled: boolean
+    bounces: boolean
+    showsHorizontalScrollIndicator: boolean
+    showsVerticalScrollIndicator: boolean
+    /** Finite positive scale; 1 is the normal page size. */
+    pageZoom: number
+    isOpaque: boolean
+    isInspectable: boolean
+    isFindInteractionEnabled: boolean
+    /** Supported SDK color string, or null to restore the system background. Readback uses rgba(r,g,b,a). */
+    backgroundColor: string | null
+    underPageBackgroundColor: string | null
+  }
+  interface WebViewControllerOptions extends WebViewConfigurationOptions {
+    settings?: Partial<WebViewSettings>
+  }
+  interface WebViewState {
+    url: string | null
+    title: string | null
+    isLoading: boolean
+    estimatedProgress: number
+    canNavigateBack: boolean
+    canNavigateForward: boolean
+    hasOnlySecureContent: boolean
+    isDisposed: boolean
+    isAttached: boolean
+    isPresented: boolean
+  }
+  type WebViewContentWorld = "page" | { name: string }
+  type WebViewNavigationPolicy = "allow" | "cancel" | "download"
+  type WebViewJSONValue = null | boolean | number | string | WebViewJSONValue[] | { [key: string]: WebViewJSONValue }
+  interface WebViewFrameInfo {
+    /** Instance/document scoped token; expires on navigation/commit, process termination, disposal, or after 256 newer frame tokens. */
+    id: string
+    isMainFrame: boolean
+    url: string | null
+    securityOrigin: { protocol: string; host: string; port: number }
+  }
+  interface WebViewNavigationAction {
+    navigationId: string | null
+    url: string | null
+    method: string
+    headers: Record<string, string>
+    body: Data | null
+    timeoutInterval: number
+    navigationType: "linkActivated" | "reload" | "backForward" | "formResubmitted" | "formSubmitted" | "other"
+    sourceFrame: WebViewFrameInfo
+    targetFrame: WebViewFrameInfo | null
+    isMainFrame: boolean | null
+    /** The public iOS API does not expose a reliable user-gesture flag. */
+    isUserInitiated: null
+    shouldPerformDownload: boolean
+  }
+  interface WebViewNavigationResponse {
+    navigationId: string | null
+    url: string | null
+    mimeType: string | null
+    expectedContentLength: number
+    statusCode: number | null
+    headers: Record<string, string>
+    isForMainFrame: boolean
+    canShowMIMEType: boolean
+  }
+  interface WebViewRequest {
+    url: string
+    method?: string
+    headers?: Record<string, string>
+    body?: Data
+    /** Positive seconds; default 60. Headers and body apply to this request, not every subresource. */
+    timeoutInterval?: number
+    cachePolicy?: "useProtocolCachePolicy" | "reloadIgnoringLocalCacheData" | "returnCacheDataElseLoad" | "returnCacheDataDontLoad" | "reloadRevalidatingCacheData" | "reloadIgnoringLocalAndRemoteCacheData"
+  }
+  interface WebViewWaitOptions {
+    /** Positive seconds; omitted means no waiter timeout. Rejects with code timeout. */
+    timeout?: number
+    nextNavigation?: boolean
+    /** Default false. A waiter timeout normally leaves navigation running. */
+    cancelOnTimeout?: boolean
+  }
+  interface WebViewHistoryItem { id: string; url: string; initialURL: string; title: string | null }
+  interface WebViewHistory { backList: WebViewHistoryItem[]; currentItem: WebViewHistoryItem | null; forwardList: WebViewHistoryItem[] }
+  type WebViewEventType = "loadStart" | "redirect" | "commit" | "loadFinish" | "loadError" | "stateChange" | "webContentProcessTerminated" | "present" | "dismiss"
+  interface WebViewEvent {
+    type: WebViewEventType
+    navigationId: string | null
+    /** Main-document lifecycle events use true; unsupported subframe download errors use false. */
+    isMainFrame: boolean
+    state: WebViewState
+    error?: { code: string; message: string }
+  }
+  interface WebViewUserScriptOptions {
+    source: string
+    /** Default documentStart. Applies to future documents. */
+    injectionTime?: "documentStart" | "documentEnd"
+    /** Default true. */
+    forMainFrameOnly?: boolean
+    contentWorld?: WebViewContentWorld
+  }
+  interface WebViewJavaScriptOptions { contentWorld?: WebViewContentWorld; frameId?: string }
+  interface WebViewMessageOptions { contentWorld?: WebViewContentWorld; includeFrameInfo?: boolean }
+  interface WebViewMessageInfo { frame: WebViewFrameInfo; contentWorld: WebViewContentWorld }
+  interface WebViewCapabilities {
+    navigationPolicies: Array<"allow" | "cancel">
+    /** Download management is not available yet. A download decision cancels and emits an unsupported loadError. */
+    downloadPolicy: false
+    contentWorlds: boolean
+    frameTargeting: boolean
+    configurationOptions: Array<keyof WebViewConfigurationOptions>
+    runtimeSettings: Array<keyof WebViewSettings>
+  }
+
   /**
    * An object that displays interactive web content, such as for an in-app browser.
    */
@@ -4598,10 +6252,52 @@ declare global {
      * Create a new WebViewController.
      * @param options.ephemeral When true, the WebView uses a non-persistent data store so cookies and website data are isolated from the default container and discarded when the controller is released. Useful for sandboxed login flows or clean-slate scraping.
      */
-    constructor(options?: { ephemeral?: boolean })
+    constructor(options?: WebViewControllerOptions)
+    /** Explicit creation options; omitted fields retain platform defaults. Mutating this copy has no effect. */
+    readonly configuration: Readonly<WebViewConfigurationOptions>
+    /** State snapshots do not create a web view. Use getState for a consistent asynchronous read. */
+    readonly url: string | null
+    readonly title: string | null
+    readonly isLoading: boolean
+    readonly estimatedProgress: number
+    readonly canNavigateBack: boolean
+    readonly canNavigateForward: boolean
+    readonly hasOnlySecureContent: boolean
+    readonly isDisposed: boolean
+    readonly isAttached: boolean
+    /** Returns actual settings, creating the underlying web view if needed. */
+    getSettings(): Promise<WebViewSettings>
+    /** Validates the entire patch before applying it. Invalid values reject with code invalidArgument. */
+    setSettings(patch: Partial<WebViewSettings>): Promise<void>
+    getState(): Promise<WebViewState>
+    /** Supported option names; does not imply that hardware or system permissions are available. */
+    getCapabilities(): Promise<WebViewCapabilities>
     /**
-     * When the web view performs a request to load a resource, the function can determine whether or not to allow the request.
+     * Decides whether to allow a navigation. This callback does not intercept every subresource request.
      */
+    /** Takes precedence over shouldAllowRequest. Exceptions, invalid values and a 60-second timeout cancel. */
+    onNavigationAction?: (action: WebViewNavigationAction) => WebViewNavigationPolicy | Promise<WebViewNavigationPolicy>
+    /** Default: allow displayable MIME types, cancel others. Download currently reports unsupported. */
+    onNavigationResponse?: (response: WebViewNavigationResponse) => WebViewNavigationPolicy | Promise<WebViewNavigationPolicy>
+    loadRequest(request: WebViewRequest): Promise<boolean>
+    stopLoading(): Promise<void>
+    /** Revalidates the current page with the origin; does not promise to bypass every cache. */
+    reloadFromOrigin(): Promise<boolean>
+    getBackForwardList(): Promise<WebViewHistory>
+    goToHistoryItem(id: string): Promise<boolean>
+    addEventListener(type: WebViewEventType, listener: (event: WebViewEvent) => void): Promise<void>
+    removeEventListener(type: WebViewEventType, listener: (event: WebViewEvent) => void): Promise<void>
+    addUserScript(options: WebViewUserScriptOptions): Promise<string>
+    /** Removes future injection; cannot undo code already executed. Internal scripts are retained. */
+    removeUserScript(id: string): Promise<void>
+    removeAllUserScripts(): Promise<void>
+    /** Async function body with named JSON arguments. Defaults to the main frame in the page world. */
+    callAsyncJavaScript<T = any>(body: string, args?: Record<string, WebViewJSONValue>, options?: WebViewJavaScriptOptions): Promise<T>
+    removeScriptMessageHandler(name: string, options?: Pick<WebViewMessageOptions, "contentWorld">): Promise<void>
+    /** Compiles WebKit content-blocker JSON and installs it on this instance. Same id replaces atomically on success. */
+    addContentRuleList(options: { id: string; rules: string | Array<Record<string, any>> }): Promise<void>
+    removeContentRuleList(id: string): Promise<void>
+    removeAllContentRuleLists(): Promise<void>
     shouldAllowRequest?: (request: {
       /**
        * The URL of the request.
@@ -4655,9 +6351,9 @@ declare global {
      */
     loadData(data: Data, mimeType: string, encoding: string, baseURL: string): Promise<boolean>
     /**
-     * Wait for the WebView load completed, returns a Promise that resolves a boolean value indicates that whether it is successful.
+     * Waits for the first or current navigation. Resolves false on failure, replacement, process termination or disposal. A known terminal result is returned immediately.
      */
-    waitForLoad(): Promise<boolean>
+    waitForLoad(options?: WebViewWaitOptions): Promise<boolean>
     /**
      * Get current HTML content of the webpage, you must call this method after the website is loaded completed.
      */
@@ -4696,7 +6392,7 @@ declare global {
      * console.log(result) // "Hello!"
      * ```
      */
-    addScriptMessageHandler<P = any, R = any>(name: string, handler: (params?: P) => R): Promise<void>
+    addScriptMessageHandler<P = any, R = any>(name: string, handler: (params: P, info?: WebViewMessageInfo) => R | Promise<R>, options?: WebViewMessageOptions): Promise<void>
     /**
      * Present the WebView, returns a Promise that is resolved after the WebView is dismissed. If this WebViewController is used for the WebView view, this operation will be failure. And if this controller is presented, it can no longer use for WebView view.
      * @param fullscreen Whether present the WebView in fullscreen. Defaults to false.
@@ -4711,9 +6407,9 @@ declare global {
      */
     getCustomUserAgent(): string | null
     /**
-     * Set the custom user agent string of the WebView, returns a Promise that resolves with a boolean value indicates whether the operation is successful.
+     * Sets the custom user agent. Returns whether the change was accepted; a background caller applies it on the main queue. Await setSettings for application completion.
      * @param userAgent The custom user agent string, or `null` to reset to the default user agent.
-     * @returns A Promise that resolves with a boolean value indicates whether the operation is successful.
+     * @returns Whether the change was accepted.
      * @example
      * ```ts
      * const webView = new WebViewController()
@@ -5627,7 +7323,79 @@ If the event’s calendar does not support availability settings, this property�
    * The shared audio session instance.
    * An audio session acts as an intermediary between your app and the operating system — and, in turn, the underlying audio hardware.
    */
+  /** Media routing in the foreground main App; globals are provided by the native host. */
+  type ExternalDisplayState = "waiting" | "presenting" | "suspended" | "disposed"
+  namespace ExternalDisplay {
+    /** Registers external-display content for a visible UI owned by this main App script.
+     * Resolves without waiting for a display. A competing owner rejects. User connects AirPlay
+     * mirroring or a physical display through the system; this does not select receivers.
+     */
+    function createPresentation(): Promise<ExternalDisplayPresentation>
+  }
+  interface ExternalDisplayPresentation {
+    readonly state: ExternalDisplayState
+    /** Actual connected scene geometry in points; null while disconnected. */
+    readonly displayInfo: { width: number, height: number, scale: number } | null
+    /** Changes only; subscribe before reading state for the initial value. */
+    onStateChanged: ((state: ExternalDisplayState) => void) | null
+    /** Single-frame images only, at most 4096 by 4096 pixels. Does not prove receiver output. */
+    setImage(image: UIImage, options?: { contentMode?: "fit" | "fill", backgroundColor?: string }): Promise<void>
+    /** Replaces content with black; retains the presentation and ownership. */
+    clear(): Promise<void>
+    /** Terminal and idempotent. Releases the registration, image/window and callbacks. */
+    dispose(): void
+  }
+
+  namespace AirPlay {
+    /** Shows a panel containing the native AirPlay button. Tap it to open the system menu.
+     * Resolves when the panel closes, not when routing or playback succeeds.
+     * Rejects in unsupported environments, without a foreground host, or while another panel is open.
+     * Does not change the shared audio configuration or start playback.
+     */
+    function presentRoutePicker(options?: { prioritizesVideoDevices?: boolean }): Promise<void>
+  }
+
+  /** Reports additional playback routes, not a list of AirPlay devices. Main App only. */
+  class AVRouteDetector {
+    constructor()
+    /** Defaults to false. Detection consumes power; disable it when no longer needed.
+     * Enabling requires a foreground App script. Stops when the App leaves the foreground.
+     */
+    isRouteDetectionEnabled: boolean
+    /** False while disabled; does not prove that no receiver is nearby. */
+    readonly multipleRoutesDetected: boolean
+    /** Changes only; read the property after installing the callback for the initial state. */
+    onMultipleRoutesDetectedChanged: ((detected: boolean) => void) | null
+    /** Stops detection and releases observers and callbacks. Idempotent; the handle cannot be reused. */
+    dispose(): void
+  }
+
+  type AudioSessionRouteSharingPolicy = "default" | "longFormAudio" | "longFormVideo" | "independent" | "unknown"
+
   namespace SharedAudioSession {
+    /** Current process-wide policy. independent is system-managed. Main App only. */
+    const routeSharingPolicy: Promise<AudioSessionRouteSharingPolicy>
+    /** Sets category, mode, policy and options together without activating the session.
+     * Defaults: mode=default, routeSharingPolicy=default, options=[]. Affects all scripts in this process.
+     * Long-form policies require playback and default/moviePlayback/spokenAudio, with no options.
+     * Explicit allowAirPlay requires playAndRecord; playback enables it implicitly.
+     * Main App script context only. Invalid values reject with TypeError.
+     */
+    function configure(options: {
+      category: AudioSessionCategory
+      mode?: AudioSessionMode
+      routeSharingPolicy?: "default" | "longFormAudio" | "longFormVideo"
+      options?: AudioSessionCategoryOptions[]
+    }): Promise<void>
+    /** Prepares long-form video routing. The system may prompt when longFormVideo is configured.
+     * Requires a foreground main App script. This does not guarantee media delivery.
+     */
+    function prepareRouteSelectionForPlayback(): Promise<{
+      shouldStartPlayback: boolean
+      routeSelection: "none" | "local" | "external" | "unknown"
+    }>
+
+
 
     type AudioSessionSetActiveOptions = "notifyOthersOnDeactivation"
 
@@ -5968,9 +7736,11 @@ If the event’s calendar does not support availability settings, this property�
      * Mutually exclusive with `isMarkdown` — passing both as `true` will reject the promise.
      * If the SSML cannot be parsed, the promise rejects with `"Failed to parse SSML representation."`.
      *
-     * Inline SSML tags (e.g. `<prosody>`, `<voice>`, `<break>`) take precedence; the utterance-level
-     * `voice` / `rate` / `pitch` / `volume` options still apply as fallbacks for any text that is not
-     * overridden by inline tags.
+     * Per-call `rate`, `pitch`, and `volume` override the corresponding global Speech settings
+     * and provide default SSML prosody. Explicit inline prosody attributes take precedence.
+     * Rate uses an approximate mapping; the same value may sound different in plain text and
+     * SSML depending on the voice and system version. Voice options are fallbacks for inline
+     * voice selection. Custom XML entity declarations are not supported.
      *
      * See: https://developer.apple.com/documentation/avfaudio/avspeechutterance/init(ssmlrepresentation:)
      */
@@ -7043,14 +8813,14 @@ If the event’s calendar does not support availability settings, this property�
 
     convertScale(newTimescale: number, method: MediaTimeRoundingMethod): MediaTime
     getSeconds(): number
-    minus(other: MediaItem): MediaItem
-    plus(other: MediaItem): MediaItem
-    lt(other: MediaItem): boolean
-    gt(other: MediaItem): boolean
-    lte(other: MediaItem): boolean
-    gte(other: MediaItem): boolean
-    eq(other: MediaItem): boolean
-    neq(other: MediaItem): boolean
+    minus(other: MediaTime): MediaTime
+    plus(other: MediaTime): MediaTime
+    lt(other: MediaTime): boolean
+    gt(other: MediaTime): boolean
+    lte(other: MediaTime): boolean
+    gte(other: MediaTime): boolean
+    eq(other: MediaTime): boolean
+    neq(other: MediaTime): boolean
 
     /**
      * Makes a media time.
@@ -7773,14 +9543,28 @@ If the event’s calendar does not support availability settings, this property�
     stop(): void
     /** Stops and releases PiP without disposing the AVPlayer. This handle cannot be reused afterwards. */
     dispose(): void
-    onStateChanged?: ((state: "willStart" | "didStart" | "willStop" | "didStop" | "failedToStart") => void) | null
-    onPossibleChanged?: ((possible: boolean) => void) | null
+    onStateChanged?: ((state: "willStart" | "didStart" | "willStop" | "didStop" | "failedToStart") => void) | null | undefined
+    onPossibleChanged?: ((possible: boolean) => void) | null | undefined
   }
 
   /**
    * Use for playing audio or video.
    */
   class AVPlayer {
+    /** Allows external video playback; defaults to true. Does not disconnect AirPlay audio.
+     * May be set before setSource. External-playback controls require the main App script context.
+     */
+    allowsExternalPlayback: boolean
+    /** Whether this player is in external video playback mode, independently of the audio route. */
+    readonly isExternalPlaybackActive: boolean
+    /** Automatically use external video playback while an external screen is active. Defaults to false. */
+    usesExternalPlaybackWhileExternalScreenIsActive: boolean
+    /** External-video scaling. Defaults to resizeAspect. Settings persist across source changes. */
+    externalPlaybackVideoGravity: "resize" | "resizeAspect" | "resizeAspectFill"
+    /** Changes only; no initial callback. Cleared by dispose. */
+    onExternalPlaybackActiveChanged: ((active: boolean) => void) | null | undefined
+
+
     constructor()
     /**
      * Controls the volume of the AVPlayer.
@@ -7854,20 +9638,20 @@ If the event’s calendar does not support availability settings, this property�
     /**
      * Callback that is called when the media is ready to play.
      */
-    onReadyToPlay?: () => void
+    onReadyToPlay?: (() => void) | null | undefined
     /**
      * Callback that is called when the timeControlStatus changed.
      */
-    onTimeControlStatusChanged?: (status: TimeControlStatus) => void
+    onTimeControlStatusChanged?: ((status: TimeControlStatus) => void) | null | undefined
     /**
      * Callback that is called when the media playback has ended.
      */
-    onEnded?: () => void
+    onEnded?: (() => void) | null | undefined
     /**
      * Callback that is called when an error occurs during playback.
      * The callback receives an error message as an argument.
      */
-    onError?: (message: string) => void
+    onError?: ((message: string) => void) | null | undefined
 
     /**
      * Loads the metadata for the current media.
@@ -8371,6 +10155,8 @@ If the event’s calendar does not support availability settings, this property�
      * matching element in `formats`, so identity comparison works.
      */
     readonly activeFormat: AVCaptureDeviceFormat
+    /** The active native depth format, if one is selected. */
+    readonly activeDepthDataFormat: AVCaptureDeviceFormat | null
 
     /**
      * Switch the active capture format. The format must come from this device's
@@ -8455,6 +10241,11 @@ If the event’s calendar does not support availability settings, this property�
     /** "video" / "audio" / "depthData" / "metadata" / etc. (raw AVMediaType) */
     readonly mediaType: string
 
+    /** Native numeric FourCC from the format description. */
+    readonly pixelFormatCode: number
+    /** Depth formats compatible with this video format. */
+    readonly supportedDepthDataFormats: readonly AVCaptureDeviceFormat[]
+
     /** Pixel width from the video format description. `0` for non-video formats. */
     readonly width: number
     /** Pixel height from the video format description. `0` for non-video formats. */
@@ -8523,6 +10314,218 @@ If the event’s calendar does not support availability settings, this property�
 
   /** A point in normalized (0..1) coordinates. */
   type AVCapturePoint = { x: number; y: number }
+
+  type AVCaptureVideoPixelFormat = "native" | "bgra8" | "nv12VideoRange" | "nv12FullRange";
+
+  /** EXIF direction applied to the delivered camera pixels. */
+  type AVCaptureImageOrientation = "up" | "upMirrored" | "down" | "downMirrored" | "left" | "leftMirrored" | "right" | "rightMirrored";
+
+  interface AVCaptureVideoDataOutputOptions {
+    /** Defaults to the camera's native format. Request an exact format to guarantee its copy layout. */
+    pixelFormat?: AVCaptureVideoPixelFormat;
+  }
+
+  interface AVCaptureVideoFramePlaneInfo {
+    readonly index: number;
+    /** Number of samples across this plane. NV12 chroma samples each contain two bytes. */
+    readonly width: number;
+    readonly height: number;
+    readonly nativeBytesPerRow: number;
+    /** Bytes per tightly packed row, or null when this format cannot be copied. */
+    readonly bytesPerRow: number | null;
+  }
+
+  interface AVCaptureVideoFramePlane {
+    readonly index: number;
+    readonly width: number;
+    readonly height: number;
+    readonly bytesPerRow: number;
+    /** Tightly packed rows in native order. The bytes remain valid after frame disposal. */
+    readonly data: Uint8Array;
+  }
+
+  /** Color attachment names reported by the native pixel buffer. */
+  interface AVCaptureVideoFrameColorInfo {
+    readonly primaries?: string;
+    readonly transferFunction?: string;
+    readonly yCbCrMatrix?: string;
+    readonly chromaLocationTopField?: string;
+    readonly chromaLocationBottomField?: string;
+  }
+
+  interface AVCaptureVideoFrameInfo {
+    /** Decimal sequence number in this output's stream. Gaps can occur when frames are dropped. */
+    readonly sequence: string;
+    readonly width: number;
+    readonly height: number;
+    readonly pixelFormat: AVCaptureVideoPixelFormat;
+    /** Native numeric FourCC, including for formats outside the known set. */
+    readonly pixelFormatCode: number;
+    readonly presentationTime: MediaTime;
+    readonly duration: MediaTime;
+    /** The connection's clockwise physical rotation already applied to the pixels. */
+    readonly rotationAngle: number;
+    /** True when the connection already mirrored the pixels. */
+    readonly mirrored: boolean;
+    readonly color: AVCaptureVideoFrameColorInfo;
+    readonly planes: readonly AVCaptureVideoFramePlaneInfo[];
+  }
+
+  interface AVCaptureVideoFrameStats {
+    readonly receivedFrames: string;
+    readonly nativeDroppedFrames: string;
+    readonly replacedFrames: string;
+    readonly budgetDroppedFrames: string;
+    readonly invalidFrames: string;
+  }
+
+  /** Owns one camera frame until disposed or the capture session changes. */
+  class AVCaptureVideoFrame {
+    private constructor();
+    readonly info: AVCaptureVideoFrameInfo;
+    /** Copies BGRA or 8-bit NV12 planes and omits row padding. */
+    copyPlanes(): readonly AVCaptureVideoFramePlane[];
+    dispose(): void;
+  }
+
+  /** Add this output to a session created with new AVCaptureSession(). */
+  class AVCaptureVideoDataOutput extends AVCaptureOutput {
+    constructor(options?: AVCaptureVideoDataOutputOptions);
+    /** Cumulative decimal counters for the lifetime of this output. */
+    readonly frameStats: AVCaptureVideoFrameStats;
+    /** One request may be pending. Dispose old frames before acquiring more than two. */
+    nextFrame(options?: { signal?: AbortSignal }): Promise<AVCaptureVideoFrame>;
+    /** Removes this output from its session and releases its frames. */
+    dispose(): void;
+  }
+
+  type AVCaptureDepthPixelFormat = "depthFloat16" | "depthFloat32" | "disparityFloat16" | "disparityFloat32";
+
+  interface AVCaptureDepthMapInfo {
+    readonly width: number;
+    readonly height: number;
+    readonly pixelFormat: AVCaptureDepthPixelFormat;
+    readonly pixelFormatCode: number;
+    /** Number of bytes per tightly packed row in a copied map. */
+    readonly bytesPerRow: number;
+    /** Number of bytes per row in the native pixel buffer. */
+    readonly nativeBytesPerRow: number;
+    readonly unit: "meters" | "inverseMeters";
+    readonly accuracy: "absolute" | "relative" | "unknown";
+    readonly quality: "high" | "low" | "unknown";
+    readonly filtered: boolean;
+    readonly availableFormats: readonly AVCaptureDepthPixelFormat[];
+  }
+
+  interface AVCaptureDepthFrameInfo extends AVCaptureDepthMapInfo {
+    /** Clockwise physical rotation already applied by the depth connection. */
+    readonly rotationAngle: number;
+    readonly mirrored: boolean;
+  }
+
+  interface AVCaptureCameraCalibration {
+    /** Column-major 3 × 3 intrinsic matrix in reference image pixels. */
+    readonly intrinsicMatrix: readonly number[];
+    /** Column-major 4 × 3 extrinsic matrix; translation is in millimeters. */
+    readonly extrinsicMatrix: readonly number[];
+    readonly intrinsicMatrixReferenceDimensions: { readonly width: number; readonly height: number };
+    readonly pixelSize: number;
+    readonly lensDistortionCenter: { readonly x: number; readonly y: number };
+    /** Native Float32 radial lookup tables, when provided by the camera. */
+    readonly lensDistortionLookupTable: Data | null;
+    readonly inverseLensDistortionLookupTable: Data | null;
+  }
+
+  interface AVCaptureDepthMap extends AVCaptureDepthMapInfo {
+    /** Tightly packed rows in native pixel order, with Float16 or Float32 samples. */
+    readonly data: Data;
+    readonly calibration: AVCaptureCameraCalibration | null;
+  }
+
+  interface AVCaptureDepthMapOptions {
+    format?: AVCaptureDepthPixelFormat;
+    orientation?: AVCaptureImageOrientation;
+  }
+
+  class AVCaptureDepthFrame {
+    private constructor();
+    readonly info: AVCaptureDepthFrameInfo;
+    readonly calibration: AVCaptureCameraCalibration | null;
+    /** Copies the map and optionally applies native depth conversion or EXIF orientation. */
+    copyMap(options?: AVCaptureDepthMapOptions): AVCaptureDepthMap;
+    dispose(): void;
+  }
+
+  /** Exact native CMTime fields. Decimal strings preserve the full signed 64-bit range. */
+  interface AVCaptureSynchronizedTimestampDetails {
+    readonly value: string;
+    readonly timescale: number;
+    readonly epoch: string;
+    readonly flags: number;
+  }
+
+  type AVCaptureSynchronizedMemberInfo =
+    | { readonly status: "missing" }
+    | { readonly status: "ready"; readonly timestamp: MediaTime; readonly timestampDetails: AVCaptureSynchronizedTimestampDetails }
+    | {
+      readonly status: "dropped";
+      readonly timestamp: MediaTime;
+      readonly timestampDetails: AVCaptureSynchronizedTimestampDetails;
+      readonly reason: "none" | "lateData" | "outOfBuffers" | "discontinuity" | "unknown";
+      readonly reasonCode: number;
+    };
+
+  type AVCaptureSynchronizedDepthMemberInfo =
+    | Exclude<AVCaptureSynchronizedMemberInfo, { status: "dropped" }>
+    | (Extract<AVCaptureSynchronizedMemberInfo, { status: "dropped" }> & {
+      /** A dropped native depth sample may still carry format and calibration metadata. */
+      readonly pixelFormatCode?: number;
+      readonly pixelFormat?: AVCaptureDepthPixelFormat | null;
+      readonly calibration?: AVCaptureCameraCalibration | null;
+    });
+
+  interface AVCaptureSynchronizedFrameInfo {
+    readonly sequence: string;
+    /** Native timestamp of the primary member, or of the other member if the primary is missing. */
+    readonly timestamp: MediaTime;
+    readonly timestampDetails: AVCaptureSynchronizedTimestampDetails;
+    readonly video: AVCaptureSynchronizedMemberInfo;
+    readonly depth: AVCaptureSynchronizedDepthMemberInfo;
+  }
+
+  class AVCaptureSynchronizedFrame {
+    private constructor();
+    readonly info: AVCaptureSynchronizedFrameInfo;
+    readonly videoFrame: AVCaptureVideoFrame | null;
+    readonly depthFrame: AVCaptureDepthFrame | null;
+    /** Releases the collection and invalidates both frame handles. */
+    dispose(): void;
+  }
+
+  interface AVCaptureSynchronizedVideoDepthOutputOptions extends AVCaptureVideoDataOutputOptions {
+    /** Native synchronization clock, defaulting to video. */
+    primary?: "video" | "depth";
+    /** Enables native depth filtering. Defaults to true. */
+    filteringEnabled?: boolean;
+  }
+
+  interface AVCaptureSynchronizedVideoDepthStats {
+    readonly receivedCollections: string;
+    readonly replacedCollections: string;
+    readonly invalidCollections: string;
+    readonly budgetDroppedCollections: string;
+    readonly videoDroppedFrames: string;
+    readonly depthDroppedFrames: string;
+  }
+
+  /** Adds synchronized video and depth from one camera to a script-owned capture session. */
+  class AVCaptureSynchronizedVideoDepthOutput extends AVCaptureOutput {
+    constructor(options?: AVCaptureSynchronizedVideoDepthOutputOptions);
+    readonly frameStats: AVCaptureSynchronizedVideoDepthStats;
+    /** One request may wait at a time; release old collections before retaining more than two. */
+    nextFrame(options?: { signal?: AbortSignal }): Promise<AVCaptureSynchronizedFrame>;
+    dispose(): void;
+  }
 
   /**
    * A live connection between a capture input and this output. Obtained via
@@ -8911,6 +10914,8 @@ If the event’s calendar does not support availability settings, this property�
 
     canAddInput(input: AVCaptureDeviceInput): boolean
     addInput(input: AVCaptureDeviceInput): void
+    /** Selects a compatible depth format for a camera input already attached to this session. */
+    setActiveDepthDataFormat(input: AVCaptureDeviceInput, format: AVCaptureDeviceFormat): void
     removeInput(input: AVCaptureDeviceInput): void
 
     canAddOutput(output: AVCaptureOutput): boolean
@@ -9565,11 +11570,15 @@ If the event’s calendar does not support availability settings, this property�
      * @param options.reconnect An optional string that specifies the reconnection behavior. Can be "never", "always", or "once". Defaults to "never".
      * @returns A promise that resolves to an SSHClient instance if the connection is successful, or rejects with an error if the connection fails.
      */
+    /** Connects using native authentication saved in the selected App Tailscale connection. */
+    static connect(options: { tailscale: Tailscale.Session; serviceId: string; reconnect?: "never" }): Promise<SSHClient>
     static connect(options: {
       host: string
       port?: number
       authenticationMethod: SSHAuthenticationMethod
       trustedHostKeys?: string[]
+      /** Uses an App Tailscale session. Requires trustedHostKeys and reconnect: "never". */
+      tailscale?: Tailscale.Session
       reconnect?: "never" | "always" | "once"
     }): Promise<SSHClient>
 
@@ -12323,11 +14332,749 @@ If the event’s calendar does not support availability settings, this property�
     customWords?: string[]
   }
 
+  namespace ARKit {
+    type BodySkeletonKind = "body3D" | "body2D";
+
+    interface BodySkeletonDefinition {
+      readonly kind: BodySkeletonKind;
+      readonly jointCount: number;
+      readonly jointNames: readonly string[];
+      /** Indices use the order of jointNames. The root has no parent and uses -1. */
+      readonly parentIndices: readonly number[];
+      /** Looks up an exact native name. Returns -1 when the joint is absent. */
+      indexOfJoint(name: string): number;
+      /** Returns a fresh copy of the reference 3D T-pose. Its tracking bits are zero. */
+      copyNeutralPose(): BodyPose3D | null;
+    }
+
+    interface BodyPose3D {
+      /** Each joint occupies 16 column-major elements in the parent joint's coordinate space. */
+      readonly localTransforms: Float32Array;
+      /** Each joint occupies 16 column-major elements in the body anchor's coordinate space. */
+      readonly modelTransforms: Float32Array;
+      /** One byte per joint. Bit masks 1, 2 and 4 indicate native tracking, finite local and finite model data. */
+      readonly jointFlags: Uint8Array;
+    }
+
+    interface Body3D extends BodyPose3D {
+      /** Native anchor identifier within this session. */
+      readonly id: string;
+      readonly definition: BodySkeletonDefinition;
+      readonly tracked: boolean;
+      /** 16 column-major elements. World joint transform is anchorTransform times that joint's model transform. */
+      readonly anchorTransform: Float32Array | null;
+      /** Native scale estimate relative to the reference model. */
+      readonly estimatedScaleFactor: number | null;
+    }
+
+    interface Body2D {
+      readonly definition: BodySkeletonDefinition;
+      /** Consecutive x/y pairs in normalized captured-image coordinates with an upper-left origin. */
+      readonly landmarks: Float32Array;
+      /** One byte per joint. Bit masks 1 and 8 indicate native tracking and a finite landmark. */
+      readonly jointFlags: Uint8Array;
+    }
+
+    type CameraTrackingState =
+      | { readonly state: "normal" | "notAvailable" | "unknown" }
+      | {
+          readonly state: "limited";
+          readonly reason: "initializing" | "excessiveMotion" | "insufficientFeatures" | "relocalizing" | "unknown";
+        };
+
+    interface BodyFrameCamera {
+      /** Camera-to-world transform in 16 column-major elements. */
+      readonly worldTransform: Float32Array | null;
+      /** Intrinsic matrix in nine column-major elements, expressed in captured-image pixels. */
+      readonly intrinsics: Float32Array | null;
+      /** Pitch, yaw and roll, in radians. */
+      readonly eulerAngles: Float32Array | null;
+      readonly imageWidth: number;
+      readonly imageHeight: number;
+      readonly tracking: CameraTrackingState;
+    }
+
+    interface BodyFrame {
+      readonly generation: string;
+      /** Unsigned decimal count in this capture stream. */
+      readonly sequence: string;
+      /** Native ARFrame capture time in seconds. Use differences within a generation. */
+      readonly timestampSeconds: number;
+      readonly camera: BodyFrameCamera;
+      /** Body anchors from this frame in their native order. */
+      readonly bodies: readonly Body3D[];
+      /** Native 2D detection for this frame, with its own joint ordering. */
+      readonly detectedBody: Body2D | null;
+    }
+
+    type BodyTrackingState = "idle" | "starting" | "running" | "interrupted" | "paused" | "failed" | "closed";
+    interface BodyVideoFormat {
+      readonly index: number;
+      readonly width: number;
+      readonly height: number;
+      readonly framesPerSecond: number;
+      readonly captureDeviceType: string;
+    }
+    interface BodyTrackingCapabilities {
+      readonly bodyTracking: boolean;
+      readonly bodyDetection2D: boolean;
+      readonly videoFormats: readonly BodyVideoFormat[];
+    }
+    interface BodyTrackingOptions {
+      /** Defaults to true. Check bodyDetection2D on this device before enabling it. */
+      detectBody2D?: boolean;
+      /** Defaults to true. */
+      estimateSkeletonScale?: boolean;
+      /** Index from getCapabilities().videoFormats on this device. */
+      videoFormatIndex?: number;
+    }
+    interface BodyTrackingStats {
+      readonly receivedFrames: string;
+      readonly replacedFrames: string;
+      readonly invalidFrames: string;
+    }
+    interface BodyTrackingSession {
+      readonly state: BodyTrackingState;
+      /** Starts a new native capture generation and resets world tracking. */
+      start(): Promise<void>;
+      /** Returns the latest unused snapshot. Only one read may be pending. */
+      nextFrame(options?: { signal?: AbortSignal }): Promise<BodyFrame>;
+      getStats(): BodyTrackingStats;
+      getLastError(): { readonly code: string; readonly message: string } | null;
+      addStateListener(listener: (state: BodyTrackingState) => void): string;
+      removeStateListener(token: string): void;
+      pause(): void;
+      close(): void;
+    }
+    function getCapabilities(): BodyTrackingCapabilities;
+    function getBodySkeletonDefinition(kind: BodySkeletonKind): BodySkeletonDefinition;
+    function createBodyTrackingSession(options?: BodyTrackingOptions): BodyTrackingSession;
+
+    interface FaceTrackingCapabilities {
+      readonly supported: boolean;
+      readonly worldTracking: boolean;
+      readonly maximumTrackedFaces: number;
+      readonly videoFormats: readonly BodyVideoFormat[];
+    }
+    interface FaceTrackingOptions {
+      /** Defaults to one face. Query the device limit before increasing it. */
+      maximumFaces?: number;
+      /** Include device world tracking when the face configuration supports it. Defaults to false. */
+      worldTracking?: boolean;
+      lightEstimation?: boolean;
+      videoFormatIndex?: number;
+      /** Copy the original camera image into script-owned storage. Defaults to false. */
+      captureImage?: boolean;
+      viewport?: {
+        width: number;
+        height: number;
+        orientation?: "portrait" | "portraitUpsideDown" | "landscapeLeft" | "landscapeRight";
+        zNear?: number;
+        zFar?: number;
+      };
+    }
+    interface FaceGeometry {
+      /** Consecutive XYZ triples in the face coordinate space, in meters. */
+      readonly vertices: Float32Array;
+      /** Consecutive UV pairs for the mesh. */
+      readonly textureCoordinates: Float32Array;
+      /** Consecutive triangle triples indexing vertices. */
+      readonly triangleIndices: Uint16Array;
+    }
+    interface TrackedFace {
+      readonly id: string;
+      readonly tracked: boolean;
+      /** Column-major face-to-world matrix. */
+      readonly anchorTransform: Float32Array | null;
+      /** Column-major eye-to-face matrices. Left and right refer to the subject. */
+      readonly leftEyeTransform: Float32Array | null;
+      readonly rightEyeTransform: Float32Array | null;
+      /** Estimated XYZ gaze point in the face coordinate space. */
+      readonly lookAtPoint: Float32Array | null;
+      readonly blendShapes: Readonly<Partial<Record<string, number>>>;
+      readonly geometry: FaceGeometry;
+    }
+    interface FaceCameraImage {
+      readonly width: number;
+      readonly height: number;
+      readonly pixelFormat: "bgra8" | "gray8" | "gray16Float" | "nv12VideoRange" | "nv12FullRange";
+      readonly pixelFormatCode: number;
+      readonly color: Readonly<Partial<Record<string, string>>>;
+      readonly planes: readonly {
+        readonly index: number;
+        readonly width: number;
+        readonly height: number;
+        readonly bytesPerRow: number;
+        readonly nativeBytesPerRow: number;
+        readonly data: Data;
+      }[];
+    }
+    interface FaceFrame {
+      readonly generation: string;
+      readonly sequence: string;
+      readonly timestampSeconds: number;
+      readonly camera: BodyFrameCamera;
+      readonly faces: readonly TrackedFace[];
+      readonly projection: {
+        readonly viewMatrix: Float32Array;
+        readonly projectionMatrix: Float32Array;
+        /** Native image-normalized to view-normalized affine transform: a, b, c, d, tx, ty. */
+        readonly displayTransform: readonly number[];
+      } | null;
+      readonly lightEstimate: {
+        readonly ambientIntensity: number | null;
+        readonly ambientColorTemperature: number | null;
+        readonly primaryLightDirection: Float32Array | null;
+        readonly primaryLightIntensity: number | null;
+      } | null;
+      readonly image: FaceCameraImage | null;
+      /** Copy failure if requested, otherwise null. Geometry remains available. */
+      readonly imageError: string | null;
+    }
+    interface FaceTrackingSession extends Omit<BodyTrackingSession, "nextFrame"> {
+      /** Returns the latest unused snapshot. An empty faces array is a valid result. */
+      nextFrame(options?: { signal?: AbortSignal }): Promise<FaceFrame>;
+    }
+    function getFaceTrackingCapabilities(): FaceTrackingCapabilities;
+    function createFaceTrackingSession(options?: FaceTrackingOptions): FaceTrackingSession;
+
+    interface WorldTrackingCapabilities {
+      readonly supported: boolean;
+      readonly planeClassification: boolean;
+      /** Native support for each LiDAR depth mode, including simultaneously enabling both maps. */
+      readonly sceneDepth: Readonly<Record<"raw" | "smoothed" | "both", boolean>>;
+      /** Native support for each rear LiDAR reconstruction mode. */
+      readonly sceneReconstruction: Readonly<Record<"mesh" | "meshWithClassification", boolean>>;
+      readonly videoFormats: readonly BodyVideoFormat[];
+    }
+    interface WorldTrackingOptions extends Pick<FaceTrackingOptions, "lightEstimation" | "videoFormatIndex" | "captureImage" | "viewport"> {
+      /** Defaults to gravity. */
+      worldAlignment?: "gravity" | "camera";
+      /** Defaults to true. */
+      detectHorizontalPlanes?: boolean;
+      /** Defaults to true. */
+      detectVerticalPlanes?: boolean;
+      /** Include coarse plane geometry in each frame. Defaults to true. */
+      planeGeometry?: boolean;
+      /** A previously captured world map archive, at most 32 MiB. The session copies the archive at creation. */
+      initialWorldMap?: Data;
+      /** Opt in to rear LiDAR depth. Defaults to none. Query support on this device. */
+      sceneDepth?: "none" | "raw" | "smoothed" | "both";
+      /** Opt in to LiDAR scene reconstruction. Defaults to none. */
+      sceneReconstruction?: "none" | "mesh" | "meshWithClassification";
+    }
+    interface WorldPlaneGeometry {
+      /** Consecutive XYZ triples in the plane anchor's local coordinates, in meters. */
+      readonly vertices: Float32Array;
+      readonly textureCoordinates: Float32Array;
+      readonly triangleIndices: Uint16Array;
+      readonly boundaryVertices: Float32Array;
+    }
+    interface WorldPlane {
+      readonly alignment: "horizontal" | "vertical" | "unknown";
+      /** Center in local coordinates. The plane lies in the local XZ plane. */
+      readonly center: Float32Array | null;
+      readonly width: number | null;
+      readonly height: number | null;
+      /** Rotation of the extent rectangle around local Y, in radians. Does not apply to geometry. */
+      readonly rotationOnYAxis: number | null;
+      readonly classification: "wall" | "floor" | "ceiling" | "table" | "seat" | "window" | "door" | null;
+      readonly classificationStatus: "known" | "notAvailable" | "undetermined" | "unknown";
+      readonly geometry: WorldPlaneGeometry | null;
+      readonly geometryError: "invalidSample" | "resourceLimit" | null;
+    }
+    interface WorldAnchor {
+      readonly id: string;
+      readonly name: string | null;
+      /** Native anchor-to-world transform in 16 column-major elements. */
+      readonly transform: Float32Array | null;
+      readonly plane: WorldPlane | null;
+    }
+    interface WorldFrame extends Omit<FaceFrame, "faces"> {
+      readonly worldMappingStatus: "notAvailable" | "limited" | "extending" | "mapped" | "unknown";
+      readonly anchors: readonly WorldAnchor[];
+      /** Number of additional anchors not included in this snapshot. */
+      readonly omittedAnchorCount: number;
+      /** Raw depth sampled with this capture frame. Null when unavailable. */
+      readonly sceneDepth: WorldSceneDepth | null;
+      readonly sceneDepthError: string | null;
+      /** Native temporally smoothed depth for this frame. */
+      readonly smoothedSceneDepth: WorldSceneDepth | null;
+      readonly smoothedSceneDepthError: string | null;
+    }
+    interface WorldSceneDepth {
+      readonly width: number;
+      readonly height: number;
+      readonly nativePixelFormatCode: number;
+      readonly nativeBytesPerRow: number;
+      /** Tight row-major Float32 distances from the camera plane in meters, in sensor orientation. */
+      readonly distances: Float32Array;
+      /** Tight native confidence bytes: 0 low, 1 medium, 2 high. */
+      readonly confidence: Uint8Array | null;
+      readonly confidenceNativePixelFormatCode: number | null;
+      readonly confidenceNativeBytesPerRow: number | null;
+      readonly confidenceError: string | null;
+    }
+    type WorldRaycastTarget = "existingPlaneGeometry" | "existingPlaneInfinite" | "estimatedPlane";
+    type WorldRaycastAlignment = "horizontal" | "vertical" | "any";
+    interface WorldRaycastQuery {
+      /** Three finite Float32 elements in world coordinates, in meters. */
+      origin: Float32Array;
+      /** Three finite Float32 elements. The direction must be nonzero. */
+      direction: Float32Array;
+      target?: WorldRaycastTarget;
+      alignment?: WorldRaycastAlignment;
+    }
+    interface WorldRaycastHit {
+      readonly worldTransform: Float32Array | null;
+      readonly target: WorldRaycastTarget | "unknown";
+      readonly alignment: WorldRaycastAlignment | "unknown";
+      readonly anchorId: string | null;
+    }
+    interface WorldSceneMeshAnchor {
+      readonly id: string;
+      /** Opaque revision of a particular anchor snapshot. */
+      readonly revision: string;
+      /** Anchor-local to world transform, in column-major order. */
+      readonly transform: Float32Array | null;
+      readonly vertexCount: number;
+      readonly triangleCount: number;
+      readonly geometryError: string | null;
+    }
+    interface WorldSceneMesh extends WorldSceneMeshAnchor {
+      readonly geometry: {
+        /** Local XYZ triples in meters. */
+        readonly vertices: Float32Array;
+        readonly normals: Float32Array;
+        readonly triangleIndices: Uint32Array;
+        /** Native raw classifications in triangle order, or null if unavailable. */
+        readonly classifications: Uint8Array | null;
+        readonly classificationError: string | null;
+      } | null;
+    }
+    interface WorldSceneMeshAnchors {
+      /** False while reconciling the list or if the scene exceeds the available anchor slots. */
+      readonly complete: boolean;
+      readonly anchors: readonly WorldSceneMeshAnchor[];
+    }
+    interface WorldTrackingSession extends Omit<BodyTrackingSession, "nextFrame"> {
+      nextFrame(options?: { signal?: AbortSignal }): Promise<WorldFrame>;
+      /** Adds an anchor at a world transform (16 column-major floats). Returns its identifier. */
+      addAnchor(options: { name?: string; transform: Float32Array }): string;
+      /** Only removes an anchor added by this session in the current generation. */
+      removeAnchor(id: string): boolean;
+      /** Performs a one-shot native world raycast. Returns hits in native order. */
+      raycast(query: WorldRaycastQuery): readonly WorldRaycastHit[];
+      /** Captures the native world map as a local archive. Only one capture can be in progress. */
+      captureWorldMap(): Promise<Data>;
+      /** Lists current mesh anchor revisions without copying their geometry into JavaScript. */
+      getSceneMeshAnchors(): WorldSceneMeshAnchors;
+      /** Copies one mesh. Returns null for an absent anchor. Throws staleRevision if the requested revision changed. */
+      copySceneMesh(options: { id: string; revision?: string }): WorldSceneMesh | null;
+    }
+    function getWorldTrackingCapabilities(): WorldTrackingCapabilities;
+    function createWorldTrackingSession(options?: WorldTrackingOptions): WorldTrackingSession;
+  }
+
+  /** Recognize text in static images from a foreground Scripting app script. */
+  namespace LiveText {
+    type AnalyzeOptions = {
+      /** Recognition languages in priority order. Omit or pass an empty list for the system default. */
+      locales?: readonly string[]
+      signal?: import("scripting").AbortSignal
+    }
+
+    /** Reports whether the current script environment and device support Live Text. */
+    function isSupported(): boolean
+    /** Returns supported language identifiers, or an empty array when Live Text is unavailable. */
+    function getSupportedTextRecognitionLanguages(): string[]
+    /** Returns all recognized text in the system's reading order, or an empty string when no text is found. */
+    function analyze(image: UIImage, options?: AnalyzeOptions): Promise<string>
+  }
+
   /**
-   * This module provides an interface for text recognition tasks.
-   * It allows you to detect and recognize text in images or camera input.
+   * Recognize text, faces, and body or hand poses in still images, or scan documents for text.
    */
   namespace Vision {
+    type Point = { x: number; y: number }
+    type Rect = Point & { width: number; height: number }
+    type Size = { width: number; height: number }
+    type RequestKind = 'faces' | 'faceLandmarks' | 'bodyPose' | 'bodyPose3D' | 'handPose' | 'coreML'
+    type FrameOrientation = AVCaptureImageOrientation
+    interface FrameAnalysisOptions {
+      /** EXIF orientation of the delivered pixels. Defaults to up. */
+      orientation?: FrameOrientation
+    }
+    type TrackingLevel = 'fast' | 'accurate'
+    type TrackingKind = 'object' | 'rectangle'
+    interface TrackingOptions {
+      revision?: number
+      trackingLevel?: TrackingLevel
+    }
+    interface TrackingCorners {
+      topLeft: Point
+      topRight: Point
+      bottomRight: Point
+      bottomLeft: Point
+    }
+    interface TrackingObservation {
+      id: string
+      confidence: number
+      boundingBox: Rect
+    }
+    type TrackingResult = {
+      trackId: string
+      revision: number
+      finished: boolean
+    } & (
+      { kind: 'object'; observation: TrackingObservation | null } |
+      { kind: 'rectangle'; observation: (TrackingObservation & { corners: TrackingCorners }) | null }
+    )
+    interface TrackingFrameOptions {
+      signal?: AbortSignal
+      /** Active tracks that finish after processing this frame. */
+      finishTracks?: readonly string[]
+    }
+    interface TrackingSession {
+      addObject(boundingBox: Rect, options?: TrackingOptions): string
+      addRectangle(corners: TrackingCorners, options?: TrackingOptions): string
+      process(source: UIImage | AVCaptureVideoFrame, options?: TrackingFrameOptions): Promise<TrackingResult[]>
+      process(frame: AVCaptureVideoFrame, options?: TrackingFrameOptions & FrameAnalysisOptions): Promise<TrackingResult[]>
+      /** Clears the sequence and all tracks, and cancels work in progress. */
+      reset(): void
+      close(): void
+    }
+    interface TrackingCapabilities {
+      maximumTracks: number
+      maximumSessions: number
+      trackers: {
+        kind: TrackingKind
+        revision: number
+        defaultRevision: number
+        trackingLevel: TrackingLevel
+        maximumNativeTrackers: number
+      }[]
+    }
+    /** Creates a sequence for tracking object boxes and rectangle corners. */
+    function createTrackingSession(): TrackingSession
+    function getTrackingCapabilities(): TrackingCapabilities
+    type RegistrationKind = 'translation' | 'homography'
+    interface RegistrationOptions {
+      /** Defaults to translation. */
+      kind?: RegistrationKind
+      revision?: number
+    }
+    type RegistrationObservation = { id: string; revision: number; confidence: number } & (
+      { kind: 'translation'; transform: { a: number; b: number; c: number; d: number; tx: number; ty: number } } |
+      { kind: 'homography'; matrix: [number, number, number, number, number, number, number, number, number] }
+    )
+    interface RegistrationSession {
+      /** Returns native alignment observations. The first frame establishes a reference. */
+      process(image: UIImage, options: { presentationTime: MediaTime; signal?: AbortSignal }): Promise<RegistrationObservation[]>
+      process(frame: AVCaptureVideoFrame, options?: FrameAnalysisOptions & { signal?: AbortSignal }): Promise<RegistrationObservation[]>
+      /** Clears the reference and cancels work in progress. */
+      reset(): void
+      close(): void
+    }
+    interface RegistrationCapabilities {
+      maximumSessions: number
+      requests: { kind: RegistrationKind; revisions: number[]; defaultRevision: number; minimumLatencyFrameCount: number }[]
+    }
+    /** Aligns consecutive oriented images using native Vision on iOS 17 or later. */
+    function createRegistrationSession(options?: RegistrationOptions): RegistrationSession
+    function getRegistrationCapabilities(): RegistrationCapabilities
+    interface TrajectoryOptions {
+      revision?: number
+      /** Number of points required by the detector, from 5 to 256. Defaults to 5. */
+      trajectoryLength?: number
+      /** Minimum time between analyzed frames. Defaults to MediaTime.zero(). */
+      frameAnalysisSpacing?: MediaTime
+      /** Desired processing time for adaptive accuracy. Defaults to MediaTime.indefinite(). */
+      targetFrameTime?: MediaTime
+      objectMinimumNormalizedRadius?: number
+      objectMaximumNormalizedRadius?: number
+      /** Normalized rectangle in the oriented image, with bottom-left origin. */
+      regionOfInterest?: Rect
+    }
+    interface TrajectoryObservation {
+      id: string
+      revision: number
+      confidence: number
+      /** Points in the normalized analysis region, with bottom-left origin. */
+      detectedPoints: Point[]
+      projectedPoints: Point[]
+      /** Coefficients of y = a*x*x + b*x + c in the analysis region. */
+      equationCoefficients: { a: number; b: number; c: number }
+      movingAverageRadius: number
+      timeRange: { start: MediaTime; duration: MediaTime }
+    }
+    interface TrajectorySession {
+      /** The configured native request's minimum latency in frames. */
+      readonly minimumLatencyFrameCount: number
+      process(image: UIImage, options: { presentationTime: MediaTime; signal?: AbortSignal }): Promise<TrajectoryObservation[]>
+      process(frame: AVCaptureVideoFrame, options?: FrameAnalysisOptions & { signal?: AbortSignal }): Promise<TrajectoryObservation[]>
+      reset(): void
+      close(): void
+    }
+    interface TrajectoryCapabilities {
+      revisions: number[]
+      defaultRevision: number
+      minimumTrajectoryLength: number
+      maximumTrajectoryLength: number
+      maximumSessions: number
+    }
+    function createTrajectorySession(options?: TrajectoryOptions): TrajectorySession
+    function getTrajectoryCapabilities(): TrajectoryCapabilities
+    type OpticalFlowAccuracy = 'low' | 'medium' | 'high' | 'veryHigh'
+    type OpticalFlowFormat = 'float32' | 'float16' | 'network'
+    interface OpticalFlowOptions {
+      revision?: number
+      /** Defaults to medium. */
+      accuracy?: OpticalFlowAccuracy
+      /** Defaults to float32. Network output uses the actual network layout. */
+      format?: OpticalFlowFormat
+      /** Normalized rectangle in the oriented image, with bottom-left origin. */
+      regionOfInterest?: Rect
+    }
+    interface OpticalFlowFieldInfo {
+      width: number
+      height: number
+      /** Packed bytes per row returned by copyBytes(). */
+      bytesPerRow: number
+      nativeBytesPerRow: number
+      pixelFormatCode: number
+      componentFormat: 'float32' | 'float16'
+      networkOutput: boolean
+    }
+    interface OpticalFlowField {
+      readonly info: OpticalFlowFieldInfo
+      /** Reads the native pair at a zero-based column and stored row. */
+      vectorAt(x: number, y: number): Point
+      /** Copies packed native pairs, preserving their component bits. */
+      copyBytes(): Data
+      dispose(): void
+    }
+    interface OpticalFlowObservation {
+      id: string
+      revision: number
+      confidence: number
+      field: OpticalFlowField
+    }
+    interface OpticalFlowSession {
+      process(image: UIImage, options: { presentationTime: MediaTime; signal?: AbortSignal }): Promise<OpticalFlowObservation[]>
+      process(frame: AVCaptureVideoFrame, options?: FrameAnalysisOptions & { signal?: AbortSignal }): Promise<OpticalFlowObservation[]>
+      reset(): void
+      close(): void
+    }
+    interface OpticalFlowCapabilities {
+      revisions: number[]
+      defaultRevision: number
+      accuracyLevels: OpticalFlowAccuracy[]
+      formats: OpticalFlowFormat[]
+      maximumInputPixels: number
+      maximumSessions: number
+    }
+    /** Analyzes optical flow across consecutive frames on iOS 17 or later. */
+    function createOpticalFlowSession(options?: OpticalFlowOptions): OpticalFlowSession
+    function getOpticalFlowCapabilities(): OpticalFlowCapabilities
+    type FaceRegionName = 'faceContour' | 'leftEye' | 'rightEye' | 'leftEyebrow' | 'rightEyebrow' | 'nose' | 'noseCrest' | 'medianLine' | 'outerLips' | 'innerLips' | 'leftPupil' | 'rightPupil'
+    interface ImageRequestOptions {
+      /** Full oriented image coordinates, normalized with bottom-left origin. */
+      regionOfInterest?: Rect
+      revision?: number
+      signal?: AbortSignal
+    }
+    interface FaceLandmarkOptions extends ImageRequestOptions {
+      /** Defaults to points76. Unsupported revision/constellation combinations reject. */
+      constellation?: 'points65' | 'points76'
+      /** Previously detected faces from the same UIImage or active frame in the same orientation. */
+      inputFaces?: FaceObservation[]
+      /** Manually selected face boxes; mutually exclusive with inputFaces. */
+      inputFaceBoundingBoxes?: Rect[]
+    }
+    interface HandPoseOptions extends ImageRequestOptions { maximumHandCount?: number }
+    interface LandmarkRegion {
+      /** Normalized within the face box, with bottom-left origin. */
+      points: Point[]
+      pointsClassification: 'disconnected' | 'openPath' | 'closedPath'
+      /** Native precision estimates, not detection confidence. */
+      precisionEstimates?: number[]
+    }
+    interface FaceObservation {
+      id: string
+      revision: number
+      boundingBox: Rect
+      confidence: number
+      /** Native angles in radians; unavailable angles are null. */
+      roll: number | null
+      yaw: number | null
+      pitch: number | null
+      landmarks: null | {
+        confidence: number
+        constellation: 'points65' | 'points76'
+        allPoints: LandmarkRegion | null
+        regions: Partial<Record<FaceRegionName, LandmarkRegion>>
+      }
+    }
+    interface RecognizedJoint extends Point { confidence: number }
+    type BodyJointName = 'nose' | 'neck' | 'root' | 'leftEye' | 'rightEye' | 'leftEar' | 'rightEar' | 'leftShoulder' | 'rightShoulder' | 'leftElbow' | 'rightElbow' | 'leftWrist' | 'rightWrist' | 'leftHip' | 'rightHip' | 'leftKnee' | 'rightKnee' | 'leftAnkle' | 'rightAnkle'
+    type HandJointName = 'wrist' | 'thumbCMC' | 'thumbMP' | 'thumbIP' | 'thumbTip' | 'indexMCP' | 'indexPIP' | 'indexDIP' | 'indexTip' | 'middleMCP' | 'middlePIP' | 'middleDIP' | 'middleTip' | 'ringMCP' | 'ringPIP' | 'ringDIP' | 'ringTip' | 'littleMCP' | 'littlePIP' | 'littleDIP' | 'littleTip'
+    interface BodyPoseObservation {
+      id: string
+      revision: number
+      confidence: number
+      joints: Partial<Record<BodyJointName, RecognizedJoint>> & Record<string, RecognizedJoint | undefined>
+    }
+    /** Column-major 4 × 4 transform. Translation occupies indexes 12–14. */
+    type BodyPose3DMatrix = readonly [
+      number, number, number, number,
+      number, number, number, number,
+      number, number, number, number,
+      number, number, number, number,
+    ]
+    type BodyPose3DJointName =
+      | 'root' | 'spine' | 'centerShoulder' | 'centerHead' | 'topHead'
+      | 'leftShoulder' | 'leftElbow' | 'leftWrist' | 'rightShoulder' | 'rightElbow' | 'rightWrist'
+      | 'leftHip' | 'leftKnee' | 'leftAnkle' | 'rightHip' | 'rightKnee' | 'rightAnkle'
+    type BodyPose3DJointGroupName = 'all' | 'head' | 'torso' | 'leftArm' | 'rightArm' | 'leftLeg' | 'rightLeg'
+    interface BodyPose3DJoint {
+      /** Native parent joint name. The root has no parent. */
+      parentJoint: string | null
+      /** Joint transform in the model frame rooted at the center of the hips. */
+      modelTransform: BodyPose3DMatrix
+      /** Joint transform relative to its parent joint. */
+      localTransform: BodyPose3DMatrix
+      /** Joint transform in the camera frame, when Vision provides it. */
+      cameraRelativeTransform: BodyPose3DMatrix | null
+      /** Native projection into the full display-oriented image, normalized with a lower-left origin. */
+      imagePoint: Point | null
+    }
+    interface BodyPose3DObservation {
+      id: string
+      revision: number
+      confidence: number
+      /** Estimated height in meters. See heightEstimation before interpreting this value. */
+      bodyHeight: number
+      heightEstimation: 'reference' | 'measured' | 'unknown'
+      /** Native camera-origin transform from the hip root to the camera projection center. */
+      cameraOriginMatrix: BodyPose3DMatrix
+      /** Transform translations are in meters. Joint names can vary with the native request revision. */
+      joints: Partial<Record<BodyPose3DJointName, BodyPose3DJoint>> & Record<string, BodyPose3DJoint | undefined>
+      jointGroups: Partial<Record<BodyPose3DJointGroupName, string[]>> & Record<string, string[] | undefined>
+    }
+
+    interface HandPoseObservation {
+      id: string
+      revision: number
+      confidence: number
+      chirality: 'left' | 'right' | 'unknown'
+      joints: Partial<Record<HandJointName, RecognizedJoint>> & Record<string, RecognizedJoint | undefined>
+    }
+    type CoreMLImageCropAndScale = 'centerCrop' | 'scaleFit' | 'scaleFill' | 'scaleFitRotate90CCW' | 'scaleFillRotate90CCW'
+    interface CoreMLRequestOptions extends Omit<ImageRequestOptions, 'signal'> {
+      /** Required when the model has multiple image inputs. */
+      imageInputName?: string
+      /** Defaults to centerCrop. */
+      cropAndScale?: CoreMLImageCropAndScale
+      additionalFeatures?: Record<string, CoreML.InputFeature>
+      preferBackgroundProcessing?: boolean
+    }
+    interface CoreMLClassificationObservation {
+      type: 'classification'
+      id: string
+      confidence: number
+      identifier: string
+    }
+    interface CoreMLImageObservation {
+      type: 'image'
+      id: string
+      confidence: number
+      featureName: string | null
+      pixelBuffer: PixelBuffer
+    }
+    interface CoreMLFeatureValueObservation {
+      type: 'featureValue'
+      id: string
+      confidence: number
+      featureName: string
+      value: CoreML.OutputFeature
+    }
+    interface CoreMLRecognizedObjectObservation {
+      type: 'recognizedObject'
+      id: string
+      confidence: number
+      /** Native normalized Vision rectangle, with bottom-left origin. */
+      boundingBox: Rect
+      labels: CoreMLClassificationObservation[]
+      globalSegmentationMask: CoreMLImageObservation | null
+    }
+    type CoreMLObservation = CoreMLClassificationObservation | CoreMLImageObservation | CoreMLFeatureValueObservation | CoreMLRecognizedObjectObservation
+    interface RequestObservations {
+      faces: FaceObservation[]
+      faceLandmarks: FaceObservation[]
+      bodyPose: BodyPoseObservation[]
+      bodyPose3D: BodyPose3DObservation[]
+      handPose: HandPoseObservation[]
+      coreML: CoreMLObservation[]
+    }
+    interface ImageRequest<K extends RequestKind = RequestKind> {
+      readonly kind: K
+      readonly revision: number
+    }
+    /** Immutable, reusable request descriptors. Each perform creates independent native requests. */
+    namespace Request {
+      function faces(options?: Omit<ImageRequestOptions, 'signal'>): ImageRequest<'faces'>
+      function faceLandmarks(options?: Omit<FaceLandmarkOptions, 'signal'>): ImageRequest<'faceLandmarks'>
+      function bodyPose(options?: Omit<ImageRequestOptions, 'signal'>): ImageRequest<'bodyPose'>
+      function bodyPose3D(options?: Omit<ImageRequestOptions, 'signal'>): ImageRequest<'bodyPose3D'>
+      function handPose(options?: Omit<HandPoseOptions, 'signal'>): ImageRequest<'handPose'>
+      function coreML(model: CoreML.Model, options?: CoreMLRequestOptions): ImageRequest<'coreML'>
+    }
+    type RequestResult<K extends RequestKind = RequestKind> = K extends RequestKind ? {
+      kind: K
+      revision: number
+      observations: RequestObservations[K]
+    } : never
+    interface RequestCapability {
+      supported: boolean
+      reason?: string
+      revisions: number[]
+      defaultRevision: number
+      minimumIOSVersion: string
+      constellationsByRevision?: Record<string, Array<'points65' | 'points76'>>
+      jointNames?: string[]
+      jointGroups?: string[]
+    }
+    function getCapabilities(): {
+      requests: Record<RequestKind, RequestCapability>
+      maximumPendingJobs: number
+      maximumRequestsPerJob: number
+      maximumImagePixels: number
+      maximumHandCount: number
+    }
+    /** Static detection runs natively off the main thread; invoke from the main script executor. */
+    function detectFaces(source: UIImage | AVCaptureVideoFrame, options?: ImageRequestOptions): Promise<FaceObservation[]>
+    function detectFaces(frame: AVCaptureVideoFrame, options?: ImageRequestOptions & FrameAnalysisOptions): Promise<FaceObservation[]>
+    function detectFaceLandmarks(source: UIImage | AVCaptureVideoFrame, options?: FaceLandmarkOptions): Promise<FaceObservation[]>
+    function detectFaceLandmarks(frame: AVCaptureVideoFrame, options?: FaceLandmarkOptions & FrameAnalysisOptions): Promise<FaceObservation[]>
+    function detectBodyPose(source: UIImage | AVCaptureVideoFrame, options?: ImageRequestOptions): Promise<BodyPoseObservation[]>
+    function detectBodyPose(frame: AVCaptureVideoFrame, options?: ImageRequestOptions & FrameAnalysisOptions): Promise<BodyPoseObservation[]>
+    /** Estimates the most prominent full-body pose from an oriented still image. Available on iOS 17 and later. */
+    function detectBodyPose3D(source: UIImage | AVCaptureVideoFrame, options?: ImageRequestOptions): Promise<BodyPose3DObservation[]>
+    function detectBodyPose3D(frame: AVCaptureVideoFrame, options?: ImageRequestOptions & FrameAnalysisOptions): Promise<BodyPose3DObservation[]>
+    function detectHandPose(source: UIImage | AVCaptureVideoFrame, options?: HandPoseOptions): Promise<HandPoseObservation[]>
+    function detectHandPose(frame: AVCaptureVideoFrame, options?: HandPoseOptions & FrameAnalysisOptions): Promise<HandPoseObservation[]>
+    /** Atomic batch: rejects if any request fails; no partial observations are published. */
+    function perform(source: UIImage | AVCaptureVideoFrame, requests: readonly ImageRequest[], options?: Pick<ImageRequestOptions, 'signal'>): Promise<RequestResult[]>
+    function perform(frame: AVCaptureVideoFrame, requests: readonly ImageRequest[], options?: Pick<ImageRequestOptions, 'signal'> & FrameAnalysisOptions): Promise<RequestResult[]>
+    function facePointToImage(point: Point, boundingBox: Rect): Point
+    /** Normalized bottom-left input to top-left pixel coordinates. */
+    function imagePointToPixels(point: Point, imageSize: Size): Point
+    /** Includes centered fit/fill offsets; aspectFill points may lie outside the view. */
+    function imagePointToView(point: Point, options: {
+      imageSize: Size; viewSize: Size; contentMode?: 'aspectFit' | 'aspectFill'; mirrored?: boolean
+    }): Point
+
 
     /**
      * Recognizes text in the provided image.
@@ -15017,8 +17764,10 @@ If the event’s calendar does not support availability settings, this property�
     /**
      * Queries the medications a person is tracking in the Health app.
      *
-     * Medications use per-object authorization: the first time you call this, the system asks the
-     * person to choose which medications your script may access. Authorization is requested automatically.
+     * Automatically asks the person to choose which medications Scripting may read. Access also
+     * covers their dose events. Later queries may show medication selection again. Empty results
+     * do not indicate whether read access was granted. Closing selection may return an empty result;
+     * request failures reject the promise.
      *
      * Requires iOS 26.0 or later.
      * @param options Optional parameters for the query, including:
@@ -15038,6 +17787,11 @@ If the event’s calendar does not support availability settings, this property�
 
     /**
      * Queries logged medication dose events (each time a medication was taken, skipped, snoozed, etc.).
+     *
+     * Automatically requests access to the selected medications, including their dose events.
+     * Can be called without first querying medications. The system may show medication selection
+     * again on later queries. Closing selection may return an empty result; request failures reject
+     * the promise.
      *
      * Requires iOS 26.0 or later.
      * @param options Optional parameters for the query, including:
@@ -16179,7 +18933,7 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
   /**
    * Controls background keep-alive behavior for the Scripting App.
    * 
-   * Only available in `Script.env === "index"`.
+   * Available in the main Scripting App: `Script.env === "index"`, `"home_screen"`, or `"camera_control"`.
    *
    * Request `keepAlive()` while foregrounded, before starting background work.
    * Release it with `stopKeepAlive()` when the work finishes.
@@ -18968,11 +21722,10 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     function run(code: string, options?: ShellRunOptions): Promise<ShellExecutionResult>;
 
     /**
-     * Execute a Python file by absolute filesystem path. The script runs
-     * under `__main__` (so `if __name__ == "__main__":` triggers, `__file__`
-     * is the given path, and `sys.argv[0]` matches). The directory
-     * containing the file is prepended to `sys.path` so sibling modules
-     * are importable without manual setup.
+     * Execute a Python file as `__main__`. Pass an absolute path or a path
+     * relative to `options.cwd` when supplied. Python searches the file's
+     * directory first and reloads its local Python source modules each run.
+     * Installed packages and native extensions remain available.
      *
      * @example
      * ```ts
@@ -19430,7 +22183,7 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
      */
     getItems(): Promise<SpotlightIndexedItem[]>
   }
-  /** Persistent HTTP(S) download queues. Available in main-app scripts. */
+  /** Persistent HTTP(S) download queues. Available in main-app scripts (index, home_screen, and camera_control). */
   namespace DownloadManager {
     type Mode = 'background' | 'foreground'
     type State = 'waiting' | 'running' | 'retrying' | 'suspended' | 'verifying' | 'publishing' | 'canceled' | 'completed' | 'failed' | 'removed'
@@ -19596,7 +22349,7 @@ export { }
 /** Native device-service transports and protocols. Available in App scripts; no import is needed. */
 declare global {
 namespace DeviceServices {
-  type PlistValue = string | number | boolean | Date | Uint8Array | PlistValue[] | { [key: string]: PlistValue }
+  type PlistValue = string | number | bigint | boolean | Date | Uint8Array | PlistValue[] | { [key: string]: PlistValue }
   interface ConnectionOptions {
     host: string
     port: number
@@ -19608,7 +22361,7 @@ namespace DeviceServices {
   interface MessageOptions { timeout?: number }
   interface Connection {
     writePlist(value: PlistValue, options?: MessageOptions & { format?: "binary" | "xml" }): Promise<void>
-    /** Returns null only for EOF before the next message header. */
+    /** Returns null only for EOF before the next message header. Integers outside the safe number range use bigint. */
     readPlist(options?: MessageOptions): Promise<PlistValue | null>
     /** RSDCheckin followed by StartService acknowledgment; TLS-required services are rejected. */
     checkin(options?: MessageOptions & { label?: string }): Promise<void>
@@ -19616,6 +22369,29 @@ namespace DeviceServices {
     openAFC(options?: MessageOptions): Promise<AFCClient>
     close(): Promise<void>
   }
+  interface RSDServiceOptions {
+    port?: number
+    /** Exact advertised name when port is omitted; descriptive metadata when port is provided. */
+    serviceName?: string
+    label?: string
+    /** Total directory/connection/check-in deadline in milliseconds, 1–300000; default 30000. */
+    timeout?: number
+    maximumFrameBytes?: number
+  }
+  interface RSDServiceSession {
+    readonly port: number
+    readonly serviceName: string | null
+    readonly connection: Connection
+    close(): Promise<void>
+  }
+  interface RSDSession {
+    /** Creates a fresh independent stream, adopts it and completes plist RSDCheckin. */
+    openService(options: RSDServiceOptions): Promise<RSDServiceSession>
+    /** Closes only this session's children and pending opens; does not close the borrowed tunnel handle. */
+    close(): Promise<void>
+  }
+  /** Borrows a genuine script-owned native tunnel. Pairing remains the script's responsibility; service names resolve natively. */
+  function openRSDSession(tunnel: VPNRSDTunnel): Promise<RSDSession>
   interface FileProgress { bytesTransferred: number; totalBytes: number }
   interface FileResult { bytesTransferred: number; seconds: number; sha256: string }
   interface TransferOptions {
@@ -19645,4 +22421,2410 @@ namespace DeviceServices {
   /** Exclusively adopts a genuine native connection owned by this script, with no outstanding IO. */
   function adopt(source: object, options?: { maximumFrameBytes?: number }): Connection
 }
+}
+
+/** App-owned Tailnet connections for foreground Scripting scripts. */
+declare global {
+  namespace Tailscale {
+    interface Service {
+      readonly id: string
+      readonly name: string
+      readonly kind: "sshPassword" | "sshEd25519" | "sshRSA" | "httpAuthorization" | "httpCookie"
+      readonly host: string
+      readonly port: number
+      readonly username: string
+      readonly origin: string
+    }
+    interface Connection { readonly id: string; readonly name: string }
+    interface Peer {
+      readonly id: string
+      readonly name: string
+      readonly dnsName: string
+      readonly addresses: readonly string[]
+      /** A control-plane snapshot; it does not prove a service is reachable. */
+      readonly online: boolean
+    }
+    interface RequestOptions {
+      /** Uses saved authentication only when the request matches its exact origin. */
+      serviceId?: string
+      method?: string
+      headers?: import("scripting").HeadersInit
+      body?: string | Data | Uint8Array
+      /** Total request deadline in milliseconds, from 1 to 30000. */
+      timeout?: number
+      signal?: AbortSignal
+    }
+    interface Session {
+      getStatus(): Promise<{ state: string }>
+      getPeers(): Promise<Peer[]>
+      /** Lists service names and targets; never returns passwords or private keys. */
+      getServices(): Promise<Service[]>
+      /** Sends HTTP/HTTPS exclusively to online peers in this connection. */
+      fetch(url: string, options?: RequestOptions): Promise<import("scripting").Response>
+      /** Closes this script's resources, preserving the saved login identity. */
+      close(): Promise<void>
+    }
+    /** Presents a connection picker and asks for access for this script run. */
+    function selectConnection(): Promise<Connection | null>
+    /** Opens a saved connection. It may ask for access; sign in in the App first. */
+    function open(options: { connectionId: string; signal?: AbortSignal }): Promise<Session>
+  }
+}
+
+/** On-device model inference, training updates, numerical tensors and model diagnostics. */
+declare global {
+  namespace CoreML {
+    type ComputeUnits = "all" | "cpuOnly" | "cpuAndGPU" | "cpuAndNeuralEngine"
+    type ByteSource = Data | Uint8Array
+    type MultiArrayDType = "float16" | "float32" | "float64" | "int32" | "int8"
+    type MultiArrayTypedArray = Uint16Array | Float32Array | Float64Array | Int32Array | Int8Array
+    type TensorDType = "float16" | "float32" | "bool" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32"
+    type TensorTypedArray = Uint16Array | Float32Array | Uint8Array | Int8Array | Int16Array | Int32Array | Uint32Array
+    interface OperationOptions { signal?: AbortSignal }
+    type AsyncOptions = OperationOptions
+    interface SourceOptions extends OperationOptions {
+      /** Explicitly trusts opaque external compiled models and their uninspectable native dependencies. Defaults to false. */
+      trustCompiledModels?: boolean
+    }
+    interface RuntimeError extends Error {
+      code: string
+      nativeDomain?: string
+      nativeCode?: number
+      cause?: { domain: string; code: number; message: string }
+    }
+    interface Capabilities {
+      version: number
+      inference: boolean
+      updates: boolean
+      tensorComputation: boolean
+      computePlans: boolean
+      modelStructure: boolean
+      stateful: boolean
+      multiFunctions: boolean
+      maximumPendingJobs: number
+      maximumOwnedBytes: number
+      maximumMemorySnapshotBytes: number
+      maximumDiskSnapshotBytes: number
+      compiledModelPolicy: "explicitTrust"
+      maximumOwnedResources: number
+      maximumBatchSize: number
+      maximumActiveUpdates: number
+      maximumTrainingBatchSize: number
+      tensorDTypes: TensorDType[]
+      multiArrayDTypes: MultiArrayDType[]
+      pixelFormats: PixelBufferFormat[]
+      customNativeImplementations: boolean
+    }
+    interface ComputeDevice {
+      type: "cpu" | "gpu" | "neuralEngine" | "unknown"
+      id?: string
+      name?: string
+      totalCoreCount?: number
+    }
+    interface ModelParameterKey {
+      name: "learningRate" | "momentum" | "miniBatchSize" | "beta1" | "beta2" | "eps" | "epochs" | "shuffle" | "seed" | "numberOfNeighbors" | "linkedModelFileName" | "linkedModelSearchPath" | "weights" | "biases"
+      scope?: string
+    }
+    type ModelParameter = { key: ModelParameterKey } & (
+      { type: "int64"; value: string } | { type: "double"; value: number } |
+      { type: "boolean"; value: boolean } | { type: "string"; value: string }
+    )
+    type ParameterMetadata = { type: "int64"; value: string } | { type: "double"; value: number } | { type: "boolean"; value: boolean } | string
+    interface ModelConfigurationSnapshot {
+      computeUnits: ComputeUnits
+      modelDisplayName: string | null
+      allowLowPrecisionAccumulationOnGPU: boolean
+      preferredMetalDevice: string | null
+      functionName?: string | null
+      optimizationHints?: { reshapeFrequency: "frequent" | "infrequent"; specializationStrategy?: "default" | "fastPrediction" }
+      parameters: { key: { name: string; scope: string | null }; value: ParameterMetadata }[]
+    }
+    interface ModelConfiguration {
+      computeUnits?: ComputeUnits
+      /** Selects a model function on iOS 18 and later. */
+      functionName?: string
+      modelDisplayName?: string
+      allowLowPrecisionAccumulationOnGPU?: boolean
+      /** Use a GPU identifier returned by getComputeDevices(). */
+      preferredMetalDevice?: string
+      optimizationHints?: {
+        /** iOS 17.4 and later. */
+        reshapeFrequency?: "frequent" | "infrequent"
+        /** iOS 18 and later. */
+        specializationStrategy?: "default" | "fastPrediction"
+      }
+      parameters?: ModelParameter[]
+    }
+    interface NumericRange { minimum: number; maximum: number | null }
+    interface FeatureDescription {
+      name: string
+      type: "int64" | "double" | "string" | "multiArray" | "image" | "dictionary" | "sequence" | "state" | "invalid"
+      optional: boolean
+      multiArray?: {
+        dtype: MultiArrayDType | "unsupported"
+        shape: number[]
+        shapeConstraint: { type: number; enumeratedShapes: number[][]; sizeRangeForDimension: NumericRange[] }
+      }
+      image?: {
+        width: number; height: number; pixelFormatCode: number
+        sizeConstraint: {
+          type: number
+          enumeratedSizes: { width: number; height: number }[]
+          widthRange: NumericRange; heightRange: NumericRange
+        }
+      }
+      dictionary?: { keyType: "int64" | "string" }
+      sequence?: { element: FeatureDescription; countRange: NumericRange }
+      state?: { shape: number[]; dtype: MultiArrayDType | "unsupported" }
+    }
+    interface ModelDescription {
+      inputs: Record<string, FeatureDescription>
+      outputs: Record<string, FeatureDescription>
+      states?: Record<string, FeatureDescription>
+      trainingInputs: Record<string, FeatureDescription>
+      isUpdatable: boolean
+      predictedFeatureName: string | null
+      predictedProbabilitiesName: string | null
+      metadata: Record<string, unknown>
+      classLabels?: ({ type: "int64"; value: string } | { type: "string"; value: string })[]
+      parameters: {
+        key: string; scope: string | null; defaultValue: unknown
+        constraint?: { minimum: number; maximum: number; allowedValues: number[] | null }
+      }[]
+    }
+    type ValueFeatureType = "int64" | "double" | "string" | "multiArray" | "image" | "dictionary" | "sequence"
+    type ScalarFeature = { type: "int64"; value: string } | { type: "double"; value: number } | { type: "string"; value: string }
+    type DictionaryFeature = { type: "dictionary"; keyType: "int64" | "string"; entries: [string, number][] }
+    type SequenceFeature = { type: "sequence"; elementType: "int64" | "string"; values: string[] }
+    interface ImageOptions {
+      cropAndScale?: "scaleFill" | "scaleFit" | "centerCrop"
+      /** Normalized image coordinates; origin is at the lower left. */
+      cropRect?: { x: number; y: number; width: number; height: number }
+    }
+    type InputFeature = ScalarFeature | DictionaryFeature | SequenceFeature |
+      { type: "undefined"; featureType: ValueFeatureType } |
+      { type: "multiArray"; value: MultiArray } |
+      { type: "image"; value: PixelBuffer | UIImage; imageOptions?: ImageOptions }
+    type OutputFeature = ScalarFeature | DictionaryFeature | SequenceFeature |
+      { type: "undefined"; featureType: ValueFeatureType } |
+      { type: "multiArray"; value: MultiArray } | { type: "image"; value: PixelBuffer }
+    type FeatureInputs = Record<string, InputFeature>
+    type FeatureOutputs = Record<string, OutputFeature>
+    interface PredictionOptions extends OperationOptions {
+      /** A State belongs to the exact model/function instance that created it. */
+      state?: State
+      /** Native Core ML may ignore a backing; inspect returned object identity. */
+      outputBackings?: Record<string, MultiArray | PixelBuffer>
+    }
+    interface MultiArrayOptions<D extends MultiArrayDType = MultiArrayDType> {
+      dtype: D
+      shape: number[]
+      /** Destination element strides. Input bytes remain tightly packed logical values. iOS 18+. */
+      strides?: number[]
+    }
+    /** Native array storage. float16 values use Uint16Array containing IEEE 754 half bits. */
+    class MultiArray {
+      private constructor()
+      static create(options: MultiArrayOptions & { data?: Data | MultiArrayTypedArray }): MultiArray
+      static fromTypedArray(data: Uint16Array, options: MultiArrayOptions<"float16">): MultiArray
+      static fromTypedArray(data: Float32Array, options: MultiArrayOptions<"float32">): MultiArray
+      static fromTypedArray(data: Float64Array, options: MultiArrayOptions<"float64">): MultiArray
+      static fromTypedArray(data: Int32Array, options: MultiArrayOptions<"int32">): MultiArray
+      /** iOS 26 and later. Operator/model support is separate from storage dtype support. */
+      static fromTypedArray(data: Int8Array, options: MultiArrayOptions<"int8">): MultiArray
+      static fromData(data: Data, options: MultiArrayOptions): MultiArray
+      static fromPixelBuffer(pixel: PixelBuffer, shape: number[]): MultiArray
+      static concatenate(arrays: MultiArray[], options: { axis: number; dtype: MultiArrayDType }): MultiArray
+      readonly dtype: MultiArrayDType
+      readonly shape: number[]
+      readonly strides: number[]
+      readonly count: number
+      readonly pixelBuffer: PixelBuffer | null
+      copyToTypedArray(): MultiArrayTypedArray
+      copyToData(): Data
+      /** Writes logical values in C order, without copying input padding. */
+      write(data: Data | MultiArrayTypedArray): void
+      fill(value: number): void
+      /** Independent logical copy; one positive count/step range per axis, retaining rank. */
+      sliced(ranges: ReadonlyArray<{ start: number; count: number; step?: number }>): MultiArray
+      get(indices: number[]): number
+      set(indices: number[], value: number): void
+      converted(dtype: MultiArrayDType): MultiArray
+      /** iOS 18+. Creates a Tensor from compatible array values. */
+      toTensor(): Tensor
+      dispose(): void
+    }
+    class ModelAsset {
+      private constructor()
+      static fromFile(path: string, options?: SourceOptions): Promise<ModelAsset>
+      static fromData(specification: ByteSource, options?: SourceOptions & { blobMapping?: Record<string, ByteSource>; baseDirectory?: string }): Promise<ModelAsset>
+      getFunctionNames(options?: OperationOptions): Promise<string[]>
+      getDescription(functionName?: string, options?: OperationOptions): Promise<ModelDescription>
+      load(configuration?: ModelConfiguration, options?: SourceOptions): Promise<Model>
+      dispose(): void
+    }
+    class Model {
+      private constructor()
+      static load(source: string | ModelAsset, configuration?: ModelConfiguration, options?: SourceOptions): Promise<Model>
+      static compile(path: string, options?: SourceOptions): Promise<ModelAsset>
+      readonly description: ModelDescription
+      /** Actual native configuration; unavailable names/devices are null. */
+      readonly configuration: ModelConfigurationSnapshot
+      readonly isWritable: boolean
+      isAllowedValue(name: string, value: InputFeature, options?: { kind?: "input" | "output" | "training" }): boolean
+      /** Writes only models with native MLWritable support to a new .mlmodelc path. */
+      save(path: string, options?: AsyncOptions): Promise<string>
+      getParameter(key: ModelParameterKey, options?: OperationOptions): Promise<unknown>
+      predict(inputs: FeatureInputs, options?: PredictionOptions): Promise<FeatureOutputs>
+      /** Batch preserves input order and does not accept a shared State or outputBackings. */
+      predictBatch(inputs: FeatureInputs[], options?: OperationOptions): Promise<FeatureOutputs[]>
+      /** iOS 18+. Native tensor feature dictionaries; not a generic image/scalar feature conversion. */
+      predictTensors(inputs: Record<string, Tensor>, options?: OperationOptions & { state?: State }): Promise<Record<string, Tensor>>
+      makeState(): State
+      dispose(): void
+    }
+    /** iOS 18+. A cancelled or failed stateful prediction requires reset before reuse. */
+    class State {
+      private constructor()
+      reset(): void
+      copyBuffer(name: string): MultiArray
+      writeBuffer(name: string, data: Data | MultiArrayTypedArray): void
+      dispose(): void
+    }
+    type UpdateEvent = "trainingBegin" | "epochEnd" | "miniBatchEnd"
+    interface UpdateProgress {
+      event: UpdateEvent
+      metrics: Record<string, unknown>
+      parameters: { key: { name: string; scope: string | null }; value: unknown }[]
+    }
+    interface UpdateOptions extends OperationOptions { configuration?: ModelConfiguration; events?: UpdateEvent[] }
+    class UpdateTask {
+      private constructor()
+      static create(model: Model, trainingData: FeatureInputs[], options?: UpdateOptions): Promise<UpdateTask>
+      readonly description: { id: string; state: "suspended" | "running" | "cancelling" | "completed" | "failed" | "unknown"; error: { nativeDomain: string; nativeCode: number; message: string } | null }
+      readonly finished: Promise<UpdateTask>
+      set onProgress(handler: ((event: UpdateProgress) => void) | null)
+      resume(parameters?: ModelParameter[]): void
+      cancel(): void
+      getUpdatedModel(): Model
+      /** Saves a completed update to a new absolute .mlmodelc path. */
+      save(path: string, options?: OperationOptions): Promise<string>
+      dispose(): void
+    }
+    interface TensorFactoryOptions { dtype?: TensorDType; computeUnits?: ComputeUnits }
+    interface TensorRandomNormalOptions extends Pick<TensorFactoryOptions, "computeUnits"> { dtype?: "float16" | "float32"; mean?: number; standardDeviation?: number; seed?: string }
+    interface TensorRandomUniformOptions extends Pick<TensorFactoryOptions, "computeUnits"> { dtype?: Exclude<TensorDType, "bool">; lower?: number; upper?: number; seed?: string }
+    type TensorSlice = { type: "all" | "newAxis" | "squeeze" } | { type: "index"; index: number } | { type: "range"; start: number; end: number; stride?: number }
+    interface TensorOptions {
+      axis?: number
+      axes?: number[]
+      keepRank?: boolean
+      shape?: number[]
+      permutation?: number[]
+      dtype?: TensorDType
+      value?: number
+      k?: number
+      sizes?: number[]
+      multiples?: number[]
+      lower?: number
+      upper?: number
+      computeUnits?: ComputeUnits
+      height?: number
+      width?: number
+      method?: string
+      alignCorners?: boolean
+      descending?: boolean
+    }
+    type TensorBinaryOperation = "add" | "subtract" | "multiply" | "divide" | "remainder" | "minimum" | "maximum" | "equal" | "notEqual" | "greater" | "greaterEqual" | "less" | "lessEqual" | "and" | "or" | "xor" | "matmul"
+    type TensorUnaryOperation = "abs" | "acos" | "acosh" | "asin" | "asinh" | "atan" | "atanh" | "ceil" | "cos" | "cosh" | "exp" | "exp2" | "floor" | "log" | "reciprocal" | "round" | "rsqrt" | "sign" | "sin" | "sinh" | "sqrt" | "square" | "tan" | "tanh" | "negate" | "not" | "flatten" | "transpose" | "sum" | "mean" | "min" | "max" | "product" | "all" | "any" | "argmax" | "argmin" | "argsort" | "softmax" | "cumulativeSum" | "cumulativeProduct" | "reverse" | "squeeze" | "expand" | "tile" | "reshape" | "cast" | "pow"
+    /** iOS 18+. Operations build a native computation graph; copy methods materialize asynchronously. */
+    class Tensor {
+      private constructor()
+      static fromTypedArray(data: TensorTypedArray, options: { dtype: TensorDType; shape: number[] }): Tensor
+      static fromData(data: Data, options: { dtype: TensorDType; shape: number[] }): Tensor
+      static full(shape: number[], value: number | boolean, options?: TensorFactoryOptions): Tensor
+      static zeros(shape: number[], options?: TensorFactoryOptions): Tensor
+      static ones(shape: number[], options?: TensorFactoryOptions): Tensor
+      static randomNormal(shape: number[], options?: TensorRandomNormalOptions): Tensor
+      /** Float bounds are upper-exclusive; integer bounds follow the native closed-range overload. */
+      static randomUniform(shape: number[], options?: TensorRandomUniformOptions): Tensor
+      static range(start: number, end: number, step?: number, options?: { dtype?: Exclude<TensorDType, "bool">; computeUnits?: ComputeUnits }): Tensor
+      static linspace(start: number, end: number, count: number, options?: { dtype?: "float16" | "float32"; computeUnits?: ComputeUnits }): Tensor
+      static concatenate(tensors: Tensor[], axis?: number): Tensor
+      static stack(tensors: Tensor[], axis?: number): Tensor
+      readonly dtype: TensorDType
+      readonly shape: number[]
+      readonly rank: number
+      readonly count: number
+      copyToTypedArray(options?: OperationOptions): Promise<TensorTypedArray>
+      copyToData(options?: OperationOptions): Promise<Data>
+      apply(operation: TensorUnaryOperation, options?: TensorOptions): Tensor
+      split(options: { axis?: number; sizes?: number[]; count?: number }): Tensor[]
+      unstack(axis?: number): Tensor[]
+      topK(k: number): { values: Tensor; indices: Tensor }
+      slice(indices: TensorSlice[]): Tensor
+      gather(indices: Tensor, options?: OperationOptions & { axis?: number }): Promise<Tensor>
+      gatherND(indices: Tensor, options?: OperationOptions): Promise<Tensor>
+      replaceWhere(mask: Tensor, replacement: Tensor): Tensor
+      scatter(indices: Tensor, replacement: Tensor, options?: OperationOptions & { axis?: number }): Promise<Tensor>
+      pad(sizes: [number, number][], options?: { mode?: "constant" | "reflection" | "symmetric"; value?: number }): Tensor
+      resized(options: { height: number; width: number; method?: "nearestNeighbor" | "bilinear"; alignCorners?: boolean }): Tensor
+      clamp(options: { lower?: number; upper?: number }): Tensor
+      bandPart(lower: number, upper: number): Tensor
+      toMultiArray(options?: OperationOptions & { dtype?: MultiArrayDType }): Promise<MultiArray>
+      add(other: Tensor, options?: TensorOptions): Tensor
+      subtract(other: Tensor, options?: TensorOptions): Tensor
+      multiply(other: Tensor, options?: TensorOptions): Tensor
+      divide(other: Tensor, options?: TensorOptions): Tensor
+      remainder(other: Tensor, options?: TensorOptions): Tensor
+      minimum(other: Tensor, options?: TensorOptions): Tensor
+      maximum(other: Tensor, options?: TensorOptions): Tensor
+      equal(other: Tensor, options?: TensorOptions): Tensor
+      notEqual(other: Tensor, options?: TensorOptions): Tensor
+      greater(other: Tensor, options?: TensorOptions): Tensor
+      greaterEqual(other: Tensor, options?: TensorOptions): Tensor
+      less(other: Tensor, options?: TensorOptions): Tensor
+      lessEqual(other: Tensor, options?: TensorOptions): Tensor
+      and(other: Tensor, options?: TensorOptions): Tensor
+      or(other: Tensor, options?: TensorOptions): Tensor
+      xor(other: Tensor, options?: TensorOptions): Tensor
+      matmul(other: Tensor, options?: TensorOptions): Tensor
+      abs(options?: TensorOptions): Tensor
+      acos(options?: TensorOptions): Tensor
+      acosh(options?: TensorOptions): Tensor
+      asin(options?: TensorOptions): Tensor
+      asinh(options?: TensorOptions): Tensor
+      atan(options?: TensorOptions): Tensor
+      atanh(options?: TensorOptions): Tensor
+      ceil(options?: TensorOptions): Tensor
+      cos(options?: TensorOptions): Tensor
+      cosh(options?: TensorOptions): Tensor
+      exp(options?: TensorOptions): Tensor
+      exp2(options?: TensorOptions): Tensor
+      floor(options?: TensorOptions): Tensor
+      log(options?: TensorOptions): Tensor
+      reciprocal(options?: TensorOptions): Tensor
+      round(options?: TensorOptions): Tensor
+      rsqrt(options?: TensorOptions): Tensor
+      sign(options?: TensorOptions): Tensor
+      sin(options?: TensorOptions): Tensor
+      sinh(options?: TensorOptions): Tensor
+      sqrt(options?: TensorOptions): Tensor
+      square(options?: TensorOptions): Tensor
+      tan(options?: TensorOptions): Tensor
+      tanh(options?: TensorOptions): Tensor
+      negate(options?: TensorOptions): Tensor
+      not(options?: TensorOptions): Tensor
+      flatten(options?: TensorOptions): Tensor
+      transpose(options?: TensorOptions): Tensor
+      sum(options?: TensorOptions): Tensor
+      mean(options?: TensorOptions): Tensor
+      min(options?: TensorOptions): Tensor
+      max(options?: TensorOptions): Tensor
+      product(options?: TensorOptions): Tensor
+      all(options?: TensorOptions): Tensor
+      any(options?: TensorOptions): Tensor
+      argmax(options?: TensorOptions): Tensor
+      argmin(options?: TensorOptions): Tensor
+      argsort(options?: TensorOptions): Tensor
+      softmax(options?: TensorOptions): Tensor
+      cumulativeSum(options?: TensorOptions): Tensor
+      cumulativeProduct(options?: TensorOptions): Tensor
+      reverse(options?: TensorOptions): Tensor
+      squeeze(options?: TensorOptions): Tensor
+      expand(options?: TensorOptions): Tensor
+      tile(options?: TensorOptions): Tensor
+      reshape(options?: TensorOptions): Tensor
+      cast(options?: TensorOptions): Tensor
+      pow(options?: TensorOptions): Tensor
+      dispose(): void
+    }
+    interface DeviceUsage { preferred: ComputeDevice; supported: ComputeDevice[] }
+    interface NamedValueType { name: string; type: { opaque: true } }
+    interface ProgramBlock { inputs: NamedValueType[]; outputNames: string[]; operations: ProgramOperation[] }
+    interface ProgramOperation {
+      id: string
+      operatorName: string
+      inputs: Record<string, ({ type: "name"; name: string } | { type: "value"; opaque: true } | { type: "unknown" })[]>
+      outputs: NamedValueType[]
+      blocks: ProgramBlock[]
+      deviceUsage: DeviceUsage | null
+      estimatedCost: { weight: number } | null
+    }
+    type ModelStructure = { type: "unsupported" | "unknown" } |
+      { type: "program"; functions: Record<string, { inputs: NamedValueType[]; block: ProgramBlock }> } |
+      { type: "neuralNetwork"; layers: { id: string; name: string; type: string; inputNames: string[]; outputNames: string[]; deviceUsage: DeviceUsage | null }[] } |
+      { type: "pipeline"; subModelNames: string[]; subModels: ModelStructure[] }
+    interface CacheEntry { key: string; sourceName: string; sourceBytes: number; diskBytes: number; inUse: boolean }
+    function getCacheInfo(options?: AsyncOptions): Promise<CacheEntry[]>
+    /** Removes unused cache entries; models/assets still in use retain their storage. */
+    function clearCache(options?: AsyncOptions): Promise<number>
+    function getCapabilities(): Capabilities
+    function getComputeDevices(options?: { all?: boolean }): ComputeDevice[]
+    /** iOS 17.4+. Native type/value internals that cannot be inspected are marked opaque. */
+    function getModelStructure(source: string | ModelAsset, options?: SourceOptions): Promise<ModelStructure>
+    /** iOS 17.4+. Costs are estimates, not measurements or proof of actual device use. */
+    function getComputePlan(source: string | ModelAsset, configuration?: ModelConfiguration, options?: SourceOptions): Promise<ModelStructure>
+  }
+  type PackedPixelBufferFormat = "bgra8" | "gray8" | "gray16Float"
+  type NV12PixelBufferFormat = "nv12VideoRange" | "nv12FullRange"
+  type PixelBufferFormat = PackedPixelBufferFormat | NV12PixelBufferFormat
+  interface PixelBufferImageOptions {
+    width?: number
+    height?: number
+    format?: PackedPixelBufferFormat
+    colorSpace?: "sRGB" | "displayP3"
+    /** Requests a Metal-compatible native allocation. */
+    metalCompatible?: boolean
+  }
+  type PixelBufferCaptureFrameOptions = {
+    /** Additional EXIF orientation applied to the delivered pixels. Defaults to up. */
+    orientation?: AVCaptureImageOrientation
+    width?: number
+    height?: number
+  } & (
+    { format?: "bgra8"; colorSpace?: "sRGB" | "displayP3" } |
+    { format: "gray8" | "gray16Float"; colorSpace?: never } |
+    { format: NV12PixelBufferFormat; colorSpace?: never }
+  )
+  interface PixelBufferDescription {
+    width: number
+    height: number
+    format: PixelBufferFormat | `native:${number}`
+    pixelFormatCode: number
+    planes: { width: number; height: number; bytesPerRow: number }[]
+  }
+  interface PixelBufferPlane<T extends Data | Uint8Array = Uint8Array> {
+    width: number; height: number; bytesPerRow: number; data: T
+  }
+  /** Native image storage for inference and output backings; no scripting import is needed. */
+  interface PixelBufferPlaneSource<T extends Data | Uint8Array | Uint16Array = Data | Uint8Array | Uint16Array> {
+    plane: number
+    data: T
+    /** Source row stride in bytes. Defaults to the tightly packed row size. */
+    bytesPerRow?: number
+  }
+  interface PixelBufferPlaneWrite extends PixelBufferPlaneSource {
+    /** Coordinates and sizes are in samples of the selected plane. */
+    x?: number
+    y?: number
+    width?: number
+    height?: number
+  }
+  type PixelBufferCreateOptions = { width: number; height: number; metalCompatible?: boolean } & (
+    { format?: PackedPixelBufferFormat; colorSpace?: "sRGB" | "displayP3" } & (
+      { data?: Data | Uint8Array | Uint16Array; bytesPerRow?: number; planes?: never } |
+      { planes: readonly PixelBufferPlaneSource[]; data?: never; bytesPerRow?: never }
+    ) |
+    { format: NV12PixelBufferFormat; planes?: readonly PixelBufferPlaneSource<Data | Uint8Array>[]; data?: never; bytesPerRow?: never; colorSpace?: "bt709" }
+  )
+  class PixelBuffer {
+    private constructor()
+    static create(options: PixelBufferCreateOptions): PixelBuffer
+    static fromImage(image: UIImage, options?: PixelBufferImageOptions): PixelBuffer
+    /** Copies pixels out of a live frame. The resulting buffer has its own lifetime. */
+    static fromCaptureFrame(frame: AVCaptureVideoFrame, options?: PixelBufferCaptureFrameOptions): PixelBuffer
+    readonly description: PixelBufferDescription
+    /** Applies all plane updates together. Each plane can appear once per call. */
+    writePlanes(writes: readonly PixelBufferPlaneWrite[]): void
+    /** Copies tightly packed rows; native padding is excluded. */
+    copyPlanes(options: { dataType: "data" }): PixelBufferPlane<Data>[]
+    copyPlanes(options?: { dataType?: "typedArray" }): PixelBufferPlane<Uint8Array>[]
+    toImage(): UIImage
+    dispose(): void
+  }
+}
+
+/** CPU vector and matrix operations with float32 and float64 data. */
+declare global {
+  namespace Accelerate {
+    type DType = "float32" | "float64"
+    type Layout = "rowMajor" | "columnMajor"
+    interface AsyncOptions { signal?: AbortSignal }
+    interface BufferRange { offset?: number; count?: number }
+    interface RuntimeError extends Error { code: string; lapackInfo?: number }
+    interface Capabilities {
+      dtypes: DType[]
+      maximumBytes: number
+      maximumResources: number
+      maximumJobs: number
+      features: string[]
+    }
+    class FloatBuffer {
+      private constructor()
+      static create(length: number): FloatBuffer
+      static from(data: Float32Array | Data): FloatBuffer
+      readonly length: number
+      readonly byteLength: number
+      upload(data: Float32Array | Data, options?: { offset?: number }): void
+      copyToTypedArray(options?: BufferRange): Float32Array
+      copyToData(options?: BufferRange): Data
+      dispose(): void
+    }
+    class DoubleBuffer {
+      private constructor()
+      static create(length: number): DoubleBuffer
+      static from(data: Float64Array | Data): DoubleBuffer
+      readonly length: number
+      readonly byteLength: number
+      upload(data: Float64Array | Data, options?: { offset?: number }): void
+      copyToTypedArray(options?: BufferRange): Float64Array
+      copyToData(options?: BufferRange): Data
+      dispose(): void
+    }
+    type FloatStorage = Float32Array | FloatBuffer
+    type DoubleStorage = Float64Array | DoubleBuffer
+    interface VectorView32<T extends FloatStorage = FloatStorage> {
+      data: T
+      count: number
+      offset?: number
+      stride?: number
+    }
+    interface VectorView64<T extends DoubleStorage = DoubleStorage> {
+      data: T
+      count: number
+      offset?: number
+      stride?: number
+    }
+    interface MatrixView32<T extends FloatStorage = FloatStorage> {
+      data: T
+      rows: number
+      columns: number
+      layout?: Layout
+      leadingDimension?: number
+      offset?: number
+    }
+    interface MatrixView64<T extends DoubleStorage = DoubleStorage> {
+      data: T
+      rows: number
+      columns: number
+      layout?: Layout
+      leadingDimension?: number
+      offset?: number
+    }
+    interface GemvOptions32<T extends FloatStorage = Float32Array> extends AsyncOptions {
+      a: MatrixView32; x: VectorView32; y?: VectorView32<T>
+      transpose?: boolean; alpha?: number; beta?: number
+    }
+    interface GemvOptions64<T extends DoubleStorage = Float64Array> extends AsyncOptions {
+      a: MatrixView64; x: VectorView64; y?: VectorView64<T>
+      transpose?: boolean; alpha?: number; beta?: number
+    }
+    interface GemmOptions32<T extends FloatStorage = Float32Array> extends AsyncOptions {
+      a: MatrixView32; b: MatrixView32; c?: MatrixView32<T>
+      transposeA?: boolean; transposeB?: boolean; alpha?: number; beta?: number
+    }
+    interface GemmOptions64<T extends DoubleStorage = Float64Array> extends AsyncOptions {
+      a: MatrixView64; b: MatrixView64; c?: MatrixView64<T>
+      transposeA?: boolean; transposeB?: boolean; alpha?: number; beta?: number
+    }
+    namespace blas {
+      function sgemv<T extends FloatStorage>(options: GemvOptions32<T> & { y: VectorView32<T> }): Promise<T>
+      function sgemv(options: Omit<GemvOptions32, "y"> & { y?: undefined }): Promise<Float32Array>
+      function sgemv<T extends FloatStorage>(options: GemvOptions32<T>): Promise<Float32Array | T>
+      function dgemv<T extends DoubleStorage>(options: GemvOptions64<T> & { y: VectorView64<T> }): Promise<T>
+      function dgemv(options: Omit<GemvOptions64, "y"> & { y?: undefined }): Promise<Float64Array>
+      function dgemv<T extends DoubleStorage>(options: GemvOptions64<T>): Promise<Float64Array | T>
+      function sgemm<T extends FloatStorage>(options: GemmOptions32<T> & { c: MatrixView32<T> }): Promise<T>
+      function sgemm(options: Omit<GemmOptions32, "c"> & { c?: undefined }): Promise<Float32Array>
+      function sgemm<T extends FloatStorage>(options: GemmOptions32<T>): Promise<Float32Array | T>
+      function dgemm<T extends DoubleStorage>(options: GemmOptions64<T> & { c: MatrixView64<T> }): Promise<T>
+      function dgemm(options: Omit<GemmOptions64, "c"> & { c?: undefined }): Promise<Float64Array>
+      function dgemm<T extends DoubleStorage>(options: GemmOptions64<T>): Promise<Float64Array | T>
+      function saxpy<T extends FloatStorage>(options: AsyncOptions & { x: VectorView32; y: VectorView32<T>; alpha?: number }): Promise<T>
+      function daxpy<T extends DoubleStorage>(options: AsyncOptions & { x: VectorView64; y: VectorView64<T>; alpha?: number }): Promise<T>
+      function sscal<T extends FloatStorage>(options: AsyncOptions & { x: VectorView32<T>; alpha: number }): Promise<T>
+      function dscal<T extends DoubleStorage>(options: AsyncOptions & { x: VectorView64<T>; alpha: number }): Promise<T>
+      function scopy<T extends FloatStorage>(options: AsyncOptions & { x: VectorView32; out: VectorView32<T> }): Promise<T>
+      function scopy(options: AsyncOptions & { x: VectorView32; out?: undefined }): Promise<Float32Array>
+      function scopy<T extends FloatStorage>(options: AsyncOptions & { x: VectorView32; out?: VectorView32<T> }): Promise<Float32Array | T>
+      function dcopy<T extends DoubleStorage>(options: AsyncOptions & { x: VectorView64; out: VectorView64<T> }): Promise<T>
+      function dcopy(options: AsyncOptions & { x: VectorView64; out?: undefined }): Promise<Float64Array>
+      function dcopy<T extends DoubleStorage>(options: AsyncOptions & { x: VectorView64; out?: VectorView64<T> }): Promise<Float64Array | T>
+      function sdot(options: AsyncOptions & { x: VectorView32; y: VectorView32 }): Promise<number>
+      function ddot(options: AsyncOptions & { x: VectorView64; y: VectorView64 }): Promise<number>
+    }
+    interface VectorBinaryOptions32<T extends FloatStorage = Float32Array> extends AsyncOptions { a: VectorView32; b: VectorView32; out?: VectorView32<T> }
+    interface VectorBinaryOptions64<T extends DoubleStorage = Float64Array> extends AsyncOptions { a: VectorView64; b: VectorView64; out?: VectorView64<T> }
+    interface VectorTernaryOptions32<T extends FloatStorage = Float32Array> extends VectorBinaryOptions32<T> { c: VectorView32 }
+    interface VectorTernaryOptions64<T extends DoubleStorage = Float64Array> extends VectorBinaryOptions64<T> { c: VectorView64 }
+    interface VectorUnaryOptions32<T extends FloatStorage = Float32Array> extends AsyncOptions { a: VectorView32; out?: VectorView32<T> }
+    interface VectorUnaryOptions64<T extends DoubleStorage = Float64Array> extends AsyncOptions { a: VectorView64; out?: VectorView64<T> }
+    type Reduction = "sum" | "mean" | "min" | "max" | "sumSquares"
+    namespace vector {
+      function add<T extends FloatStorage>(options: VectorBinaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function add(options: Omit<VectorBinaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function add<T extends FloatStorage>(options: VectorBinaryOptions32<T>): Promise<Float32Array | T>
+      function add<T extends DoubleStorage>(options: VectorBinaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function add(options: Omit<VectorBinaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function add<T extends DoubleStorage>(options: VectorBinaryOptions64<T>): Promise<Float64Array | T>
+      function subtract<T extends FloatStorage>(options: VectorBinaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function subtract(options: Omit<VectorBinaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function subtract<T extends FloatStorage>(options: VectorBinaryOptions32<T>): Promise<Float32Array | T>
+      function subtract<T extends DoubleStorage>(options: VectorBinaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function subtract(options: Omit<VectorBinaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function subtract<T extends DoubleStorage>(options: VectorBinaryOptions64<T>): Promise<Float64Array | T>
+      function multiply<T extends FloatStorage>(options: VectorBinaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function multiply(options: Omit<VectorBinaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function multiply<T extends FloatStorage>(options: VectorBinaryOptions32<T>): Promise<Float32Array | T>
+      function multiply<T extends DoubleStorage>(options: VectorBinaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function multiply(options: Omit<VectorBinaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function multiply<T extends DoubleStorage>(options: VectorBinaryOptions64<T>): Promise<Float64Array | T>
+      function divide<T extends FloatStorage>(options: VectorBinaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function divide(options: Omit<VectorBinaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function divide<T extends FloatStorage>(options: VectorBinaryOptions32<T>): Promise<Float32Array | T>
+      function divide<T extends DoubleStorage>(options: VectorBinaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function divide(options: Omit<VectorBinaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function divide<T extends DoubleStorage>(options: VectorBinaryOptions64<T>): Promise<Float64Array | T>
+      function multiplyAdd<T extends FloatStorage>(options: VectorTernaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function multiplyAdd(options: Omit<VectorTernaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function multiplyAdd<T extends FloatStorage>(options: VectorTernaryOptions32<T>): Promise<Float32Array | T>
+      function multiplyAdd<T extends DoubleStorage>(options: VectorTernaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function multiplyAdd(options: Omit<VectorTernaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function multiplyAdd<T extends DoubleStorage>(options: VectorTernaryOptions64<T>): Promise<Float64Array | T>
+      function abs<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function abs(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function abs<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function abs<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function abs(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function abs<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function square<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function square(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function square<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function square<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function square(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function square<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function sqrt<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function sqrt(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function sqrt<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function sqrt<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function sqrt(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function sqrt<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function exp<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function exp(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function exp<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function exp<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function exp(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function exp<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function log<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function log(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function log<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function log<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function log(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function log<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function sin<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function sin(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function sin<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function sin<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function sin(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function sin<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function cos<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function cos(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function cos<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function cos<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function cos(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function cos<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function tanh<T extends FloatStorage>(options: VectorUnaryOptions32<T> & { out: VectorView32<T> }): Promise<T>
+      function tanh(options: Omit<VectorUnaryOptions32, "out"> & { out?: undefined }): Promise<Float32Array>
+      function tanh<T extends FloatStorage>(options: VectorUnaryOptions32<T>): Promise<Float32Array | T>
+      function tanh<T extends DoubleStorage>(options: VectorUnaryOptions64<T> & { out: VectorView64<T> }): Promise<T>
+      function tanh(options: Omit<VectorUnaryOptions64, "out"> & { out?: undefined }): Promise<Float64Array>
+      function tanh<T extends DoubleStorage>(options: VectorUnaryOptions64<T>): Promise<Float64Array | T>
+      function reduce(options: AsyncOptions & { a: VectorView32; operation: Reduction }): Promise<number>
+      function reduce(options: AsyncOptions & { a: VectorView64; operation: Reduction }): Promise<number>
+    }
+    interface LinearSolution32 { solution: Float32Array; rows: number; columns: number; info: number }
+    interface LinearSolution64 { solution: Float64Array; rows: number; columns: number; info: number }
+    interface LeastSquaresSolution32 extends LinearSolution32 { rank: number; singularValues: Float32Array }
+    interface LeastSquaresSolution64 extends LinearSolution64 { rank: number; singularValues: Float64Array }
+    namespace linearAlgebra {
+      function solve(options: AsyncOptions & { a: MatrixView32; b: MatrixView32 }): Promise<LinearSolution32>
+      function solve(options: AsyncOptions & { a: MatrixView64; b: MatrixView64 }): Promise<LinearSolution64>
+      function leastSquares(options: AsyncOptions & { a: MatrixView32; b: MatrixView32; rcond?: number }): Promise<LeastSquaresSolution32>
+      function leastSquares(options: AsyncOptions & { a: MatrixView64; b: MatrixView64; rcond?: number }): Promise<LeastSquaresSolution64>
+    }
+    type FourierNormalization = "backward" | "forward" | "orthonormal" | "none"
+    interface FourierOptions<View extends VectorView32 | VectorView64> extends AsyncOptions {
+      real: View
+      /** Defaults to backward normalization, which scales the inverse by 1 / length. */
+      normalization?: FourierNormalization
+    }
+    interface ComplexFourierOptions<View extends VectorView32 | VectorView64> extends FourierOptions<View> {
+      imaginary: View
+    }
+    interface RealInverseFourierOptions<View extends VectorView32 | VectorView64> extends ComplexFourierOptions<View> {
+      /** Original time-domain length. Each input contains floor(length / 2) + 1 bins. */
+      length: number
+    }
+    interface FourierSpectrum<ArrayType extends Float32Array | Float64Array> {
+      readonly real: ArrayType
+      readonly imaginary: ArrayType
+      /** Number of time-domain samples. */
+      readonly length: number
+    }
+    namespace fft {
+      function forward(options: ComplexFourierOptions<VectorView32>): Promise<FourierSpectrum<Float32Array>>
+      function forward(options: ComplexFourierOptions<VectorView64>): Promise<FourierSpectrum<Float64Array>>
+      function inverse(options: ComplexFourierOptions<VectorView32>): Promise<FourierSpectrum<Float32Array>>
+      function inverse(options: ComplexFourierOptions<VectorView64>): Promise<FourierSpectrum<Float64Array>>
+      /** Returns bins from DC through floor(length / 2). */
+      function realForward(options: FourierOptions<VectorView32>): Promise<FourierSpectrum<Float32Array>>
+      function realForward(options: FourierOptions<VectorView64>): Promise<FourierSpectrum<Float64Array>>
+      function realInverse(options: RealInverseFourierOptions<VectorView32>): Promise<Float32Array>
+      function realInverse(options: RealInverseFourierOptions<VectorView64>): Promise<Float64Array>
+      /** Checks native setup for this length. Each transform still has its own allocation budget. */
+      function supportsLength(options: AsyncOptions & { length: number; dtype?: DType; kind?: "complex" | "real" }): Promise<boolean>
+    }
+
+    function getCapabilities(): Capabilities
+  }
+}
+
+/** Native Metal compute for foreground App scripts. */
+declare global {
+  namespace Metal {
+    type Bytes = Data | Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array |
+      Int32Array | Uint32Array | Float32Array | Float64Array
+    type StorageMode = "shared" | "private"
+
+    interface Size {
+      width: number
+      height?: number
+      depth?: number
+    }
+
+    interface DeviceInfo {
+      readonly name: string
+      readonly maxBufferLength: number
+      readonly maxThreadgroupMemoryLength: number
+      readonly readWriteTextureTier: 0 | 1 | 2
+      readonly maxThreadsPerThreadgroup: Readonly<Required<Size>>
+      readonly supportsNonUniformThreadgroups: boolean
+    }
+
+    interface RequestOptions {
+      signal?: AbortSignal
+    }
+
+    interface BufferOptions extends RequestOptions {
+      length: number
+      storageMode?: StorageMode
+      data?: Bytes
+    }
+
+    interface WriteOptions extends RequestOptions {
+      offset?: number
+    }
+
+    interface ReadOptions extends WriteOptions {
+      length?: number
+    }
+
+    interface CompileOptions extends RequestOptions {
+      enableFastMath?: boolean
+    }
+
+    type TextureType = "2d" | "2dArray" | "3d" | "cube" | "cubeArray"
+    interface TextureBindingInfo {
+      readonly index: number
+      readonly type: TextureType
+      readonly access: "read" | "write" | "readWrite"
+      /** True for a depth texture binding. */
+      readonly depth?: boolean
+    }
+    interface ComputePipelineInfo {
+      readonly maxTotalThreadsPerThreadgroup: number
+      readonly threadExecutionWidth: number
+      readonly staticThreadgroupMemoryLength: number
+      readonly textureBindings: readonly TextureBindingInfo[]
+    }
+
+    interface BufferBinding {
+      index: number
+      buffer: Buffer
+      offset?: number
+    }
+
+    interface BytesBinding {
+      index: number
+      data: Bytes
+    }
+
+    interface ReadTextureBinding {
+      index: number
+      texture: Texture
+    }
+
+    interface ThreadgroupMemoryBinding {
+      index: number
+      length: number
+    }
+
+    type DispatchCommand = {
+      threadsPerThreadgroup: Size
+      buffers?: readonly BufferBinding[]
+      bytes?: readonly BytesBinding[]
+      textures?: readonly ReadTextureBinding[]
+      threadgroupMemory?: readonly ThreadgroupMemoryBinding[]
+    } & (
+      { threads: Size; threadgroups?: never } |
+      { threadgroups: Size; threads?: never }
+    )
+    type DispatchOptions = RequestOptions & DispatchCommand
+
+    interface DispatchBatchOptions extends RequestOptions {
+      /** 1 to 32 ordered commands for the same pipeline. */
+      commands: readonly (DispatchCommand & { signal?: never })[]
+    }
+
+    class Device {
+      private constructor()
+      private readonly deviceBrand: never
+      static getDefault(): Device | null
+      readonly info: DeviceInfo
+      makeBuffer(options: BufferOptions): Promise<Buffer>
+      /** Makes a read-only shared view of compatible PixelBuffer storage. */
+      makeTextureView(options: { pixelBuffer: PixelBuffer; cameraFrame?: never; plane?: number } |
+        { cameraFrame: AVCaptureVideoFrame; pixelBuffer?: never; plane?: number }): Texture
+      compileLibrary(source: string, options?: CompileOptions): Promise<Library>
+      loadLibrary(source: string | Bytes, options?: RequestOptions): Promise<Library>
+    }
+
+    class Buffer {
+      private constructor()
+      private readonly bufferBrand: never
+      readonly length: number
+      readonly storageMode: StorageMode
+      write(data: Bytes, options?: WriteOptions): Promise<void>
+      read(options?: ReadOptions): Promise<Uint8Array>
+      dispose(): void
+    }
+
+    class Library {
+      private constructor()
+      private readonly libraryBrand: never
+      readonly functionNames: readonly string[]
+      makeComputePipeline(name: string, options?: RequestOptions): Promise<ComputePipeline>
+      dispose(): void
+    }
+
+    class Texture {
+      private constructor()
+      private readonly textureBrand: never
+      readonly width: number
+      readonly height: number
+      readonly pixelFormat: "bgra8Unorm" | "r16Float" | "r8Unorm" | "rg8Unorm"
+      readonly plane: number
+      dispose(): void
+    }
+
+    class ComputePipeline {
+      private constructor()
+      private readonly pipelineBrand: never
+      readonly info: ComputePipelineInfo
+      dispatch(options: DispatchOptions): Promise<void>
+      /** Submits ordered commands together, then waits for GPU completion. */
+      dispatchBatch(options: DispatchBatchOptions): Promise<void>
+      dispose(): void
+    }
+  }
+}
+
+/** RealityKit scenes and resources for foreground App scripts. */
+declare global {
+  namespace RealityKit {
+    type Vector2 = readonly [number, number]
+    type Vector3 = readonly [number, number, number]
+    type Vector4 = readonly [number, number, number, number]
+    type RGBA = Vector4
+    type Transform = { position?: Vector3; rotation?: Vector4; scale?: Vector3 }
+    type Point = { x: number; y: number }
+    type Bounds = { min: Vector3; max: Vector3 }
+    type ComponentKind = "model" | "light" | "collision" | "accessibility"
+    type FileLoadOptions = { trustExternalReferences: boolean; signal?: AbortSignal }
+
+    interface Capabilities {
+      available: boolean
+      reason: "host" | "executor" | "device" | null
+      backend?: "nonAR"
+      dynamicMesh?: boolean
+      shaderGraph?: boolean
+      customMaterials?: boolean
+      customMaterialPrograms?: boolean
+      surfacePicking?: boolean
+      offscreenRendering?: boolean
+      offscreenExternalTextures?: boolean
+      offscreenPostProcessing?: boolean
+      mountedPostProcessing?: boolean
+      orthographicCamera?: boolean
+      animation?: boolean
+      animationLibrary?: boolean
+      skeletalPoses?: boolean
+      deformableMesh?: boolean
+      blendShapes?: boolean
+      inverseKinematics?: boolean
+      implicitAnimation?: boolean
+      skeletalProcessing?: boolean
+      skeletonResources?: boolean
+      skeletonBlendMasks?: boolean
+      skeletalRetargeting?: boolean
+      animationGraph?: boolean
+      meshDeformationStacks?: boolean
+      customMeshDeformers?: boolean
+      physics?: boolean
+      localPhysicsSimulations?: boolean
+      physicsJoints?: boolean
+      collisionCasts?: boolean
+      particles?: boolean
+      meshInstances?: boolean
+      meshInstanceAttributes?: boolean
+      instanceCompute?: boolean
+      meshCompute?: boolean
+      lowLevelTextures?: boolean
+      externalTextures?: boolean
+      lowLevelTextureCompute?: boolean
+      videoMaterial?: boolean
+      videoPlayer?: boolean
+      videoSampleBuffers?: boolean
+      entityAudio?: boolean
+      spatialAudioConfiguration?: boolean
+      characterController?: boolean
+      rootMotion?: boolean
+      imageBasedLighting?: boolean
+      maximumResourceBytes?: number
+      maximumObjects?: number
+    }
+    function getCapabilities(): Capabilities
+
+    class Scene {
+      private constructor()
+      private readonly sceneBrand: never
+      static create(): Scene
+      readonly roots: readonly Entity[]
+      add(entity: Entity, options?: { preserveWorldTransform?: boolean }): void
+      query(options?: { name?: string; component?: ComponentKind | "physicsBody" | "characterController" }): Entity[]
+      setTransforms(updates: readonly { entity: Entity; transform: Transform }[]): void
+      raycast(options: RaycastOptions): CollisionCastHit[]
+      convexCast(options: ConvexCastOptions): CollisionCastHit[]
+      setAudioReverb(preset?: AudioReverbPreset): void
+      physicsJoints(): PhysicsJointInfo[]
+      dispose(): void
+    }
+
+    type Light =
+      | { type: "directional"; intensity?: number; color?: RGBA; shadows?: boolean }
+      | { type: "point"; intensity?: number; color?: RGBA; attenuationRadius?: number }
+      | { type: "spot"; intensity?: number; color?: RGBA; attenuationRadius?: number; innerAngle?: number; outerAngle?: number; shadows?: boolean }
+
+    type CollisionFilter = { group?: number; mask?: number }
+    type Collider = (
+      | { shape: "box"; size: Vector3 }
+      | { shape: "sphere"; radius: number }
+      | { shape: "capsule"; radius: number; height: number }
+    ) & { offset?: Vector3; rotation?: Vector4 }
+    type CollisionOptions = {
+      mode?: "default" | "trigger" | "colliding"
+      filter?: CollisionFilter
+      /** iOS 18 or later. */
+      static?: boolean
+      /** iOS 18 or later. */
+      fullContactInformation?: boolean
+    }
+    type CollisionInfo = {
+      shapeCount: number
+      mode: NonNullable<CollisionOptions["mode"]>
+      filter: Required<CollisionFilter>
+      static?: boolean
+      fullContactInformation?: boolean
+    }
+    type CollisionContact = {
+      point: Vector3
+      normal: Vector3
+      impulse: number
+      impulseDirection: Vector3
+      penetrationDistance: number
+    }
+    type CollisionEvent = { entityA: Entity; entityB: Entity; other: Entity } & (
+      | { phase: "ended" }
+      | {
+          phase: "began" | "updated"
+          position: Vector3
+          impulse: number
+          impulseDirection?: Vector3
+          penetrationDistance?: number
+          contacts?: CollisionContact[]
+        }
+    )
+    type PhysicsBodyMode = "static" | "kinematic" | "dynamic"
+    type PhysicsMaterial = { staticFriction?: number; dynamicFriction?: number; restitution?: number }
+    type PhysicsAxis = "x" | "y" | "z"
+    type PhysicsBodyOptions = {
+      mode?: PhysicsBodyMode
+      material?: PhysicsMaterial
+      inertia?: Vector3
+      centerOfMass?: Vector3
+      inertiaRotation?: Vector4
+      lockTranslation?: readonly PhysicsAxis[]
+      lockRotation?: readonly PhysicsAxis[]
+      continuousCollisionDetection?: boolean
+      /** iOS 18 or later. */
+      gravity?: boolean
+      /** iOS 18 or later. */
+      linearDamping?: number
+      /** iOS 18 or later. */
+      angularDamping?: number
+    } & ({ mass?: number; density?: never } | { density: number; mass?: never })
+    type PhysicsMotion = { linearVelocity: Vector3; angularVelocity: Vector3 }
+    type PhysicsBodyInfo = {
+      mode: PhysicsBodyMode | "unknown"
+      mass: number
+      inertia: Vector3
+      centerOfMass: Vector3
+      inertiaRotation: Vector4
+      material: Required<PhysicsMaterial> | null
+      supportsForceActions: boolean
+      continuousCollisionDetection: boolean
+      lockTranslation: readonly [boolean, boolean, boolean]
+      lockRotation: readonly [boolean, boolean, boolean]
+      motion: PhysicsMotion | null
+      gravity?: boolean
+      linearDamping?: number
+      angularDamping?: number
+    }
+    type PhysicsAction =
+      | { kind: "force" | "linearImpulse"; vector: Vector3; point?: Vector3; relativeTo?: Entity }
+      | { kind: "torque" | "angularImpulse"; vector: Vector3; relativeTo?: Entity }
+      | { kind: "clear" }
+      | { kind: "resetTransform"; transform?: Transform; recursive?: boolean }
+    type PhysicsSimulationOptions = {
+      gravity?: Vector3
+      reportKinematicVsStatic?: boolean
+      reportKinematicVsKinematic?: boolean
+      positionIterations?: number
+      velocityIterations?: number
+      clock?: AnimationClock
+    }
+    type PhysicsSimulationInfo = Required<Omit<PhysicsSimulationOptions, "clock">>
+    type CollisionCastOptions = { query?: "all" | "nearest" | "any"; mask?: number; relativeTo?: Entity }
+    type RaycastOptions = CollisionCastOptions & (
+      | { from: Vector3; to: Vector3; origin?: never; direction?: never; length?: never }
+      | { origin: Vector3; direction: Vector3; length?: number; from?: never; to?: never }
+    )
+    type ConvexCastOptions = CollisionCastOptions & {
+      collider: Collider
+      from: Vector3
+      to: Vector3
+      fromOrientation?: Vector4
+      toOrientation?: Vector4
+    }
+    type CollisionCastHit = {
+      entity: Entity
+      position: Vector3
+      normal: Vector3
+      distance: number
+      shapeIndex?: number
+      triangle?: { faceIndex: number; uv: Vector2 }
+    }
+
+    type PhysicsJointEndpoint = { entity: Entity } & (
+      | { pin: string; position?: never; rotation?: never }
+      | { pin?: never; position?: Vector3; rotation?: Vector4 }
+    )
+    type PhysicsJointRange = readonly [number, number]
+    type PhysicsJointMotionLimit = "fixed" | "unlimited" | PhysicsJointRange
+    type PhysicsJointMotionAxes = Partial<Record<PhysicsAxis, PhysicsJointMotionLimit>>
+    type PhysicsJointOptions = { first: PhysicsJointEndpoint; second: PhysicsJointEndpoint } & (
+      | { kind: "fixed"; checksForInternalCollisions?: false }
+      | { kind: "revolute"; angularLimit?: PhysicsJointRange; checksForInternalCollisions?: boolean }
+      | { kind: "prismatic"; linearLimit?: PhysicsJointRange; checksForInternalCollisions?: boolean }
+      | { kind: "spherical"; angularLimitYZ?: readonly [number, number]; checksForInternalCollisions?: boolean }
+      | { kind: "distance"; distanceLimit: PhysicsJointRange; tolerance?: number; checksForInternalCollisions?: boolean }
+      | { kind: "custom"; linear?: PhysicsJointMotionAxes; angular?: PhysicsJointMotionAxes; checksForInternalCollisions?: boolean }
+    )
+    type PhysicsJointEndpointInfo = { pin: string; entity?: Entity; position: Vector3; rotation: Vector4 }
+    type PhysicsJointInfo = {
+      kind: PhysicsJointOptions["kind"] | "unknown"
+      active: boolean
+      checksForInternalCollisions: boolean
+      first: PhysicsJointEndpointInfo
+      second: PhysicsJointEndpointInfo
+      angularLimit?: PhysicsJointRange
+      linearLimit?: PhysicsJointRange
+      angularLimitYZ?: readonly [number, number]
+      distanceLimit?: PhysicsJointRange
+      tolerance?: number
+      linear?: Readonly<Record<PhysicsAxis, PhysicsJointMotionLimit | null>>
+      angular?: Readonly<Record<PhysicsAxis, PhysicsJointMotionLimit | null>>
+    }
+    /** An installed native constraint between two rigid bodies on iOS 18 or later. */
+    class PhysicsJoint {
+      private constructor()
+      private readonly physicsJointBrand: never
+      static create(options: PhysicsJointOptions): PhysicsJoint
+      readonly info: PhysicsJointInfo & { installed: boolean; restoreError?: string }
+      dispose(): void
+    }
+
+    type AudioLevel = number | "silent"
+    type AudioCalibration = { kind: "relative" | "absolute"; dBSPL: number }
+    type AudioResourceOptions = {
+      loops?: boolean
+      /** iOS 18 or later. */
+      randomizeStart?: boolean
+      /** iOS 18 or later. */
+      normalize?: boolean
+      /** iOS 18 or later. */
+      calibration?: AudioCalibration
+      /** iOS 18 or later. */
+      mixGroup?: string
+      signal?: AbortSignal
+    }
+    type AudioFileOptions = AudioResourceOptions & { loadingStrategy?: "preload" | "stream" }
+    type AudioResourceInfo = (
+      | { kind: "file"; name: string; loadingStrategy: "preload" | "stream"; loops: boolean; duration?: number }
+      | { kind: "buffer"; loops?: boolean; duration?: number }
+      | { kind: "fileGroup"; count: number }
+      | { kind: "unknown" }
+    )
+    type AudioPlaybackOptions = { gain?: AudioLevel; speed?: number }
+    type AudioPlaybackInfo = {
+      state: "prepared" | "playing" | "paused" | "stopped" | "completed"
+      isPlaying: boolean
+      speed: number
+      gain: AudioLevel
+    }
+    type AudioSourceOptions =
+      | { kind: "spatial"; gain?: AudioLevel; directLevel?: AudioLevel; reverbLevel?: AudioLevel; beamFocus?: number; rolloff?: number }
+      | { kind: "ambient" | "channel"; gain?: AudioLevel }
+    type AudioMixGroupOptions = { name: string; gain?: AudioLevel; speed?: number; muted?: boolean }
+    type AudioReverbPreset = "anechoic" | "outside" | "concertHall" | "veryLargeRoom" | "largeRoom" | "largeRoomTreated"
+      | "mediumRoomDry" | "mediumRoomTreated" | "smallRoomBright" | "smallRoom" | "verySmallRoomBright"
+
+    class AudioResource {
+      private constructor()
+      private readonly audioResourceBrand: never
+      static load(path: string, options?: AudioFileOptions): Promise<AudioResource>
+      static fromPCM(buffer: AVAudioPCMBuffer, options?: AudioResourceOptions): Promise<AudioResource>
+      /** Creates a group of file resources on iOS 18 or later. */
+      static fileGroup(resources: readonly AudioResource[]): AudioResource
+      readonly info: AudioResourceInfo
+      dispose(): void
+    }
+
+    class AudioPlayback {
+      private constructor()
+      private readonly audioPlaybackBrand: never
+      readonly info: AudioPlaybackInfo
+      play(): void
+      pause(): void
+      stop(): void
+      setGain(gain: AudioLevel): void
+      setSpeed(speed: number): void
+      fade(options: { gain: AudioLevel; duration: number }): void
+      /** Seeks to a position in seconds on iOS 18 or later. */
+      seek(time: number): void
+      onCompleted(callback: (info: AudioPlaybackInfo) => void): Subscription
+      dispose(): void
+    }
+
+    type ParticlePreset = "fireworks" | "impact" | "magic" | "rain" | "snow" | "sparks"
+    type ParticleEmitterShape = "point" | "plane" | "box" | "sphere" | "cone" | "cylinder" | "torus"
+    type ParticleBirthLocation = "surface" | "volume" | { type: "vertices"; count: readonly [number, number, number] }
+    type ParticleBirthDirection = "world" | "local" | "normal"
+    type ParticleSpawnOccasion = "onBirth" | "onUpdate" | "onDeath"
+    type ParticleSimulationState = "play" | "pause" | "stop"
+    type ParticleAction = ParticleSimulationState | "burst" | "restart"
+    type ParticleBillboardMode = "billboard" | "billboardYAligned" | { type: "free"; axis: Vector3; variation?: number }
+    type ParticleOpacityCurve = "linearFadeOut" | "linearFadeIn" | "gradualFadeInOut" | "quickFadeInOut" | "easeFadeIn" | "easeFadeOut" | "constant"
+    type ParticleSortOrder = "increasingDepth" | "decreasingDepth" | "increasingID" | "decreasingID" | "increasingAge" | "decreasingAge" | "unsorted"
+    type ParticleBlendMode = "alpha" | "opaque" | "additive"
+    type ParticleColorValue = { type: "single"; color: RGBA } | { type: "random"; a: RGBA; b: RGBA }
+    type ParticleColor =
+      | { type: "constant"; value: ParticleColorValue }
+      | { type: "evolving"; start: ParticleColorValue; end: ParticleColorValue }
+
+    interface ParticleVariableDuration {
+      duration: number
+      variation?: number
+    }
+
+    type ParticleTiming =
+      | { type: "once"; warmUp?: number; emit: ParticleVariableDuration }
+      | { type: "repeating"; warmUp?: number; emit: ParticleVariableDuration; idle?: ParticleVariableDuration }
+
+    interface ParticleImageSequenceOptions {
+      rowCount?: number
+      columnCount?: number
+      initialFrame?: number
+      initialFrameVariation?: number
+      frameRate?: number
+      frameRateVariation?: number
+      animationMode?: "playOnce" | "looping" | "autoReverse"
+    }
+
+    interface ParticleEmitterOptions {
+      birthRate?: number
+      birthRateVariation?: number
+      dampingFactor?: number
+      acceleration?: Vector3
+      spreadingAngle?: number
+      size?: number
+      sizeVariation?: number
+      billboardMode?: ParticleBillboardMode
+      mass?: number
+      massVariation?: number
+      lifeSpan?: number
+      lifeSpanVariation?: number
+      angle?: number
+      angleVariation?: number
+      angularSpeed?: number
+      angularSpeedVariation?: number
+      opacityCurve?: ParticleOpacityCurve
+      sizeMultiplierAtEndOfLifespan?: number
+      sizeMultiplierAtEndOfLifespanPower?: number
+      color?: ParticleColor
+      colorEvolutionPower?: number
+      noiseStrength?: number
+      noiseScale?: number
+      noiseAnimationSpeed?: number
+      attractionStrength?: number
+      attractionCenter?: Vector3
+      vortexStrength?: number
+      vortexDirection?: Vector3
+      isLightingEnabled?: boolean
+      stretchFactor?: number
+      sortOrder?: ParticleSortOrder
+      blendMode?: ParticleBlendMode
+      /** Null clears the texture. An omitted value preserves the current texture. */
+      image?: Texture | null
+      /** Null clears the sequence. An omitted value preserves the current sequence. */
+      imageSequence?: ParticleImageSequenceOptions | null
+    }
+
+    interface ParticleOptions {
+      /** Starts from the chosen native preset before applying these options. */
+      preset?: ParticlePreset
+      emitterShape?: ParticleEmitterShape
+      birthLocation?: ParticleBirthLocation
+      birthDirection?: ParticleBirthDirection
+      emitterShapeSize?: Vector3
+      speed?: number
+      speedVariation?: number
+      emissionDirection?: Vector3
+      radialAmount?: number
+      torusInnerRadius?: number
+      spawnOccasion?: ParticleSpawnOccasion
+      spawnVelocityFactor?: number
+      spawnSpreadFactor?: number
+      spawnSpreadFactorVariation?: number
+      spawnInheritsParentColor?: boolean
+      simulationState?: ParticleSimulationState
+      particlesInheritTransform?: boolean
+      fieldSimulationSpace?: "local" | "global"
+      isEmitting?: boolean
+      burstCount?: number
+      burstCountVariation?: number
+      timing?: ParticleTiming
+      mainEmitter?: ParticleEmitterOptions
+      /** Null removes the spawned emitter. */
+      spawnedEmitter?: ParticleEmitterOptions | null
+    }
+
+    interface ParticleEmitterInfo extends Required<Omit<ParticleEmitterOptions, "color" | "image" | "imageSequence">> {
+      color: ParticleColor | null
+      hasImage: boolean
+      /** The live script texture handle, when available. */
+      image: Texture | null
+      imageSequence: Required<ParticleImageSequenceOptions> | null
+    }
+
+    interface ParticleInfo extends Required<Omit<ParticleOptions, "preset" | "mainEmitter" | "spawnedEmitter">> {
+      mainEmitter: ParticleEmitterInfo
+      spawnedEmitter: ParticleEmitterInfo | null
+    }
+
+    type VideoSource = AVPlayer | VideoPlaybackController | AVSampleBufferDisplayLayer
+    type VideoMaterialOptions = {
+      readsDepth?: boolean
+      writesDepth?: boolean
+      faceCulling?: "back" | "front" | "none"
+      triangleFillMode?: "fill" | "lines"
+    }
+    type VideoPlayerInfo = {
+      status: "loading" | "ready"
+      viewingMode: "mono" | null
+      videoSize: readonly [number, number]
+      screenSize: readonly [number, number]
+    }
+    type VideoPlayerEvent = VideoPlayerInfo & { kind: "size" | "status" | "viewingMode" }
+
+    type InstanceDataOptions = {
+      capacity: number
+      count?: number
+      transforms?: FloatStream
+    }
+    type InstanceDataInfo = {
+      readonly capacity: number
+      readonly count: number
+      readonly revision: string
+    }
+    type InstanceDataUpdate = {
+      start?: number
+      count?: number
+      transforms?: FloatStream
+      expectedRevision?: string
+    }
+    interface InstanceDataComputeOptions {
+      pipeline: Metal.ComputePipeline
+      dispatch: Metal.DispatchOptions & { signal?: never }
+      sourceBufferIndex?: number
+      targetBufferIndex: number
+      /** First transform slot to publish, relative to the full capacity. Defaults to zero. */
+      start?: number
+      /** Number of transform slots to publish. Defaults to the remaining capacity. */
+      length?: number
+      /** Active instance count after publication. Defaults to the current count. */
+      count?: number
+      expectedRevision?: string
+      signal?: AbortSignal
+    }
+    class InstanceData {
+      private constructor()
+      private readonly instanceDataBrand: never
+      static create(options: InstanceDataOptions): InstanceData
+      readonly info: InstanceDataInfo
+      update(options: InstanceDataUpdate): string
+      /** Runs Metal compute on instance transforms on iOS 26 or later. Resolves with the new instance revision. */
+      compute(options: InstanceDataComputeOptions): Promise<string>
+      copyTransforms(options?: { start?: number; count?: number }): Float32Array
+      dispose(): void
+    }
+    type MeshInstancePart = {
+      modelID: string
+      partID: string
+      index: number
+      materialIndex: number
+      count: number | null
+      capacity: number | null
+    }
+    type MeshInstancePartPage = { parts: MeshInstancePart[]; nextOffset: number | null }
+    type MeshInstancePartBinding = {
+      modelID: string
+      partID: string
+      instances: InstanceData
+      bounds?: Bounds
+    }
+    type MeshInstancesOptions =
+      | { instances: InstanceData; modelID?: string; bounds?: Bounds; parts?: never }
+      | { parts: readonly MeshInstancePartBinding[]; instances?: never; modelID?: never; bounds?: never }
+
+    type LowLevelTextureType = "2d" | "2dArray" | "3d" | "cube" | "cubeArray"
+    type LowLevelTexturePixelFormat =
+      | "r8Unorm" | "r8Uint" | "rg8Unorm"
+      | "rgba8Unorm" | "rgba8Unorm_srgb" | "bgra8Unorm" | "bgra8Unorm_srgb"
+      | "r16Float" | "rg16Float" | "rgba16Float" | "r32Float" | "rg32Float" | "rgba32Float"
+    type LowLevelTextureUsage = "shaderRead" | "shaderWrite" | "renderTarget" | "pixelFormatView"
+    type LowLevelTextureSwizzle = "red" | "green" | "blue" | "alpha" | "zero" | "one"
+    type LowLevelTextureOptions = {
+      width: number
+      height?: number
+      depth?: number
+      type?: LowLevelTextureType
+      pixelFormat?: LowLevelTexturePixelFormat
+      mipmapLevelCount?: number
+      arrayLength?: number
+      usage?: readonly LowLevelTextureUsage[]
+      swizzle?: readonly [LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle]
+      signal?: AbortSignal
+    }
+    type LowLevelTextureInfo = {
+      readonly type: LowLevelTextureType
+      readonly pixelFormat: LowLevelTexturePixelFormat
+      readonly width: number
+      readonly height: number
+      readonly depth: number
+      readonly mipmapLevelCount: number
+      readonly arrayLength: number
+      readonly sliceCount: number
+      readonly byteCount: number
+      readonly usage: readonly LowLevelTextureUsage[]
+      readonly swizzle: readonly [LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle]
+      readonly revision: string
+    }
+    type LowLevelTextureRegion = {
+      slice?: number
+      level?: number
+      x?: number
+      y?: number
+      z?: number
+      width?: number
+      height?: number
+      depth?: number
+      expectedRevision?: string
+      signal?: AbortSignal
+    }
+    interface LowLevelTextureComputeOptions {
+      textureIndex: number
+      inputs?: readonly { index: number; texture: LowLevelTexture }[]
+      dispatch: Metal.DispatchOptions & { signal?: never }
+      expectedRevision?: string
+      signal?: AbortSignal
+    }
+    interface ExternalTextureInfo {
+      readonly width: number
+      readonly height: number
+      readonly pixelFormat: "bgra8Unorm"
+      readonly revision: string
+      readonly storage: "snapshot"
+      readonly source: "pixelBuffer" | "camera"
+      readonly timestamp?: MediaTime
+      readonly rotationAngle?: number
+      readonly mirrored?: boolean
+    }
+    class ExternalTexture {
+      private constructor()
+      private readonly externalTextureBrand: never
+      /** Makes an independent BGRA snapshot on iOS 27 or later. */
+      static create(source: PixelBuffer | AVCaptureVideoFrame, options?: { signal?: AbortSignal }): Promise<ExternalTexture>
+      readonly info: ExternalTextureInfo
+      readonly texture: Texture
+      replace(source: PixelBuffer | AVCaptureVideoFrame, options?: { expectedRevision?: string; signal?: AbortSignal }): Promise<string>
+      dispose(): void
+    }
+    class LowLevelTexture {
+      private constructor()
+      private readonly lowLevelTextureBrand: never
+      /** Creates a zero-initialized texture. Available on iOS 18 or later. */
+      static create(options: LowLevelTextureOptions): Promise<LowLevelTexture>
+      readonly info: LowLevelTextureInfo
+      /** A material texture that follows committed updates. */
+      readonly texture: Texture
+      update(data: Uint8Array | Data, options?: LowLevelTextureRegion & { bytesPerRow?: number }): Promise<string>
+      read(options?: LowLevelTextureRegion): Promise<Uint8Array>
+      compute(pipeline: Metal.ComputePipeline, options: LowLevelTextureComputeOptions): Promise<string>
+      dispose(): void
+    }
+
+    type CharacterControllerOptions = {
+      radius?: number
+      height?: number
+      skinWidth?: number
+      slopeLimit?: number
+      stepLimit?: number
+      up?: Vector3
+      filter?: CollisionFilter
+    }
+    type CharacterControllerInfo = Required<Omit<CharacterControllerOptions, "filter">> & {
+      filter: Required<CollisionFilter>
+      isOnGround: boolean | null
+      velocity: Vector3 | null
+    }
+    type CharacterMove = {
+      side: boolean
+      top: boolean
+      bottom: boolean
+      collisions: { entity: Entity; position: Vector3; normal: Vector3; moveDirection: Vector3; moveDistance: number }[]
+    }
+
+    class Entity {
+      private constructor()
+      private readonly entityBrand: never
+      static create(options?: { name?: string; transform?: Transform; physics?: boolean }): Entity
+      static load(path: string, options: FileLoadOptions & { flatten?: boolean }): Promise<Entity>
+      readonly info: {
+        name: string
+        enabled: boolean
+        transform: Required<Transform>
+        components: string[]
+        parent: Entity | null
+        children: Entity[]
+      }
+      setName(name: string): void
+      setEnabled(enabled: boolean): void
+      setTransform(transform: Transform): void
+      matrix(relativeTo?: Entity): number[]
+      convertPosition(position: Vector3, relativeTo?: Entity): Vector3
+      bounds(recursive?: boolean): Bounds
+      add(entity: Entity, options?: { preserveWorldTransform?: boolean }): void
+      remove(options?: { preserveWorldTransform?: boolean }): void
+      clone(recursive?: boolean): Entity
+      setModel(mesh: Mesh, materials: readonly Material[]): void
+      materialCount(): number
+      material(slot: number): Material | null
+      setMaterial(slot: number, material: Material): void
+      setLight(light: Light): void
+      setCollision(shape: (Collider | { shape: "mesh"; offset?: Vector3; rotation?: Vector4 }) & CollisionOptions): void
+      setColliders(options: CollisionOptions & { shapes: readonly Collider[] }): void
+      collisionInfo(): CollisionInfo | null
+      onCollision(callback: (event: CollisionEvent) => void): Subscription
+      setParticles(options: ParticleOptions): void
+      particlesInfo(): ParticleInfo | null
+      particleAction(action: ParticleAction): void
+      removeParticles(): void
+      setMeshInstances(options: MeshInstancesOptions): void
+      meshInstanceParts(options?: { modelID?: string; offset?: number; limit?: number }): MeshInstancePartPage
+      removeMeshInstances(): void
+      setVideoPlayer(source: VideoSource): void
+      videoPlayerInfo(): VideoPlayerInfo | null
+      removeVideoPlayer(): void
+      onVideoPlayerChange(callback: (event: VideoPlayerEvent) => void): Subscription
+      prepareAudio(resource: AudioResource, options?: AudioPlaybackOptions): AudioPlayback
+      playAudio(resource: AudioResource, options?: AudioPlaybackOptions): AudioPlayback
+      stopAllAudio(): void
+      setAudioSource(options: AudioSourceOptions): void
+      audioSource(): AudioSourceOptions | null
+      removeAudioSource(): void
+      audioLibrary(): { name: string; resource: AudioResource }[]
+      setAudioLibrary(entries: readonly { name: string; resource: AudioResource }[]): void
+      removeAudioLibrary(): void
+      setAudioMixGroup(options: AudioMixGroupOptions): void
+      audioMixGroup(name: string): Required<AudioMixGroupOptions> | null
+      fadeAudioMixGroup(options: { name: string; gain: AudioLevel; duration: number }): void
+      removeAudioMixGroup(name: string): void
+      setPhysicsBody(options?: PhysicsBodyOptions): void
+      physicsBodyInfo(): PhysicsBodyInfo | null
+      physicsJoints(): PhysicsJointInfo[]
+      removePhysicsBody(): void
+      setPhysicsMotion(options: Partial<PhysicsMotion>): void
+      applyPhysicsAction(action: PhysicsAction): void
+      /** Installs a local physics simulation on iOS 18 or later. */
+      setPhysicsSimulation(options?: PhysicsSimulationOptions): void
+      physicsSimulationInfo(): PhysicsSimulationInfo | null
+      removePhysicsSimulation(): void
+      setCharacterController(options?: CharacterControllerOptions): void
+      characterControllerInfo(): CharacterControllerInfo | null
+      moveCharacter(options: { delta: Vector3; deltaTime: number; relativeTo?: Entity }): CharacterMove
+      teleportCharacter(options: { position: Vector3; relativeTo?: Entity }): void
+      removeCharacterController(): void
+      setAccessibility(options: { label: string; value?: string }): void
+      animations(options?: { recursive?: boolean }): AnimationEntry[]
+      /** Sets the named animation library on iOS 18 or later. Autoplay requires iOS 27. */
+      setAnimationLibrary(entries: readonly { key: string; clip: AnimationClip }[], options?: { defaultKey?: string; autoplay?: boolean }): void
+      playAnimation(clip: AnimationClip, options?: AnimationPlayOptions): AnimationPlayback
+      stopAnimations(recursive?: boolean): void
+      animationParameter<K extends AnimationParameterType>(name: string, valueType: K): AnimationValues[K] | null
+      setAnimationParameter<K extends AnimationParameterType>(name: string, valueType: K, value: AnimationValues[K]): void
+      /** Reads the graph on this entity, including graphs loaded with an asset. Requires iOS 27 or later. */
+      animationGraph(): AnimationGraphInstance | null
+      /** Installs the graph on a model with a compatible skeleton. Requires iOS 27 or later. */
+      setAnimationGraph(graph: AnimationGraph): AnimationGraphInstance
+      removeAnimationGraph(): void
+      setOpacity(opacity: number): void
+      setBillboard(blendFactor?: number): void
+      /** Animates changes on iOS 26 or later. */
+      animate(changes: { transform?: Transform; opacity?: number }, options?: { duration?: number; curve?: AnimationCurve }): void
+      deformationInfo(): DeformationInfo
+      /** Lists native model, instance and part names for deformation targets on iOS 27 or later. */
+      deformationTargets(): MeshDeformationTargets
+      deformationStacks(): MeshDeformationStackInfo[]
+      setDeformationStacks(stacks: readonly MeshDeformationStack[]): void
+      removeDeformationStacks(): void
+      skeletons(): SkeletonInfo[]
+      getPose(options?: PoseSelection & { space?: "local" | "model" }): SkeletalPose
+      setPose(joints: readonly PoseUpdate[], options?: PoseSelection): void
+      blendShapes(): BlendShapeGroup[]
+      setBlendShapeWeights(weights: FloatStream | readonly { name: string; value: number }[], options?: { groupID?: string }): void
+      setIK(rig: IKRig): void
+      updateIKTargets(updates: readonly IKTargetUpdate[]): void
+      ikState(): IKSolverState[]
+      resetIK(solver?: number): void
+      removeIK(): void
+      /** Selects how root motion is applied on iOS 27 or later. */
+      setRootMotionPolicy(policy: "automatic" | "report" | "applyAndReport"): void
+      onRootMotion(callback: (event: { transform: Required<Transform>; deltaTime: number }) => void): Subscription
+      removeComponent(component: ComponentKind): void
+      dispose(): void
+    }
+
+    type AnimationCurve = "linear" | "easeIn" | "easeOut" | "easeInOut"
+    interface AnimationTiming {
+      name?: string
+      blendLayer?: number
+      repeatMode?: "none" | "repeat" | "cumulative" | "autoReverse"
+      fillMode?: "none" | "forwards" | "backwards" | "both"
+      trimStart?: number
+      trimEnd?: number
+      trimDuration?: number
+      delay?: number
+      offset?: number
+      speed?: number
+    }
+    type MaterialAnimationProperty = "baseColorTint" | "roughnessScale" | "metallicScale" | "specularScale" | "sheenTint"
+      | "clearcoatScale" | "clearcoatRoughnessScale" | "anisotropyLevelScale" | "anisotropyAngleScale" | "emissiveColor"
+      | "emissiveIntensity" | "opacityThreshold" | "textureOffset" | "secondaryTextureOffset" | "customValue"
+    type AnimationTarget = { path?: readonly string[] } & (
+      | { kind: "transform" | "jointTransforms" | "opacity" | "billboardBlendFactor" | "rootMotion" }
+      | { kind: "parameter" | "skeletalPose" | "blendShapeWeights"; name: string }
+      | { kind: "ikTarget" | "ikLookAtTarget"; name: string; path: readonly [string, ...string[]] }
+      | { kind: "material"; index: number; name: MaterialAnimationProperty }
+    )
+    interface AnimationValues {
+      number: number
+      vector2: Vector2
+      vector3: Vector3
+      vector4: Vector4
+      quaternion: Vector4
+      transform: Transform
+      joints: readonly Transform[]
+      weights: readonly number[]
+    }
+    type AnimationValueType = keyof AnimationValues
+    type AnimationParameterType = Exclude<AnimationValueType, "joints" | "weights">
+    type AnimationTrackOptions<K extends AnimationValueType> = AnimationTiming & {
+      valueType: K
+      target: AnimationTarget
+      additive?: boolean
+    } & (K extends "joints" | "weights" ? { names: readonly string[] } : { names?: never })
+    type FromToByOptions = {
+      [K in AnimationValueType]: AnimationTrackOptions<K> & {
+        from?: AnimationValues[K]
+        to?: AnimationValues[K]
+        by?: AnimationValues[K]
+        duration?: number
+        curve?: AnimationCurve
+      }
+    }[AnimationValueType]
+    type SampledAnimationOptions = {
+      [K in AnimationValueType]: AnimationTrackOptions<K> & {
+        frames: readonly AnimationValues[K][]
+        frameInterval?: number
+        interpolation?: "linear" | "hold"
+      }
+    }[AnimationValueType]
+    interface AnimationEntry { owner: Entity; clip: AnimationClip; key: string | null; isDefault: boolean }
+    interface AnimationPlayOptions {
+      transitionDuration?: number
+      blendLayerOffset?: number
+      separateAnimatedValue?: boolean
+      startsPaused?: boolean
+      clock?: AnimationClock
+      /** iOS 18 or later. */
+      handoff?: "default" | "compose" | "replace" | "snapshotAndReplace" | "stop"
+      applyToAllLayers?: boolean
+    }
+    type AnimationEndReason = "completed" | "stopped" | "terminated" | "entityRemoved" | "modelChanged"
+      | "rendererDetached" | "bindingChanged" | "accessRevoked" | "disposed"
+    interface AnimationEnd {
+      reason: AnimationEndReason
+      time: number | null
+      duration: number | null
+      speed: number
+      blendFactor: number
+    }
+    type AnimationPlaybackState = Omit<AnimationEnd, "reason"> & {
+      status: "playing" | "paused" | AnimationEndReason
+      reason?: AnimationEndReason
+    }
+    type RootMotionAxis = "translationX" | "translationY" | "translationZ" | "rotationX" | "rotationY" | "rotationZ"
+    type SkeletalProcessingOperation =
+      | { kind: "removeJoint"; jointName: string }
+      | { kind: "additiveFromFirstSample" | "additiveFromRestPose" }
+      | { kind: "additiveFromClip"; clip: AnimationClip }
+      | { kind: "extractRootMotion"; jointName: string; axes?: readonly RootMotionAxis[]; lockPosition?: Transform }
+    type SkeletonJointSelector = string | readonly string[]
+    interface SkeletonJointDefinition {
+      name: string
+      parentIndex?: number | null
+      restPoseTransform?: Transform
+    }
+    interface SkeletonJointInfo {
+      name: string
+      nativeName: string
+      path: readonly string[]
+      parentIndex: number | null
+      restPoseTransform: Required<Transform>
+    }
+    interface SkeletonBlendMask {
+      name: string
+      jointWeights: readonly { joint: SkeletonJointSelector; weight: number }[]
+    }
+    interface SkeletonEvaluationOptions {
+      blendMasks?: readonly SkeletonBlendMask[]
+      ikRigs?: readonly IKRig[]
+    }
+    interface SkeletonResourceInfo {
+      name: string
+      joints: readonly SkeletonJointInfo[]
+      blendMasks: readonly { name: string; jointWeights: readonly { joint: readonly string[]; weight: number }[] }[]
+      ikRigCount: number
+    }
+    /** A reusable skeleton and animation-evaluation resource on iOS 27 or later. */
+    class SkeletonResource {
+      private constructor()
+      private readonly skeletonResourceBrand: never
+      static create(options: { name: string; joints: readonly SkeletonJointDefinition[] }): SkeletonResource
+      static fromEntity(entity: Entity, options?: { skeletonID?: string }): SkeletonResource
+      readonly info: SkeletonResourceInfo
+      /** Returns a copy. Omitted fields preserve the current evaluation settings. */
+      withEvaluation(options: SkeletonEvaluationOptions): SkeletonResource
+      dispose(): void
+    }
+    interface SkeletalRetargetingOptions {
+      sourceTransform?: Transform
+      targetTransform?: Transform
+      jointOffsets?: readonly { joint: SkeletonJointSelector; rotation: Vector4 }[]
+    }
+    /** Reusable native automatic joint matching on iOS 27 or later. */
+    class RetargetingConfiguration {
+      private constructor()
+      private readonly retargetingConfigurationBrand: never
+      static automatchBiped(source: SkeletonResource, target: SkeletonResource, options?: SkeletalRetargetingOptions): RetargetingConfiguration
+      static automatchQuadruped(source: SkeletonResource, target: SkeletonResource, options?: SkeletalRetargetingOptions): RetargetingConfiguration
+      readonly info: {
+        mode: "biped" | "quadruped"
+        sourceSkeletonName: string
+        targetSkeletonName: string
+      }
+      dispose(): void
+    }
+    type MeshDeformationTarget =
+      | { kind: "all" }
+      | { kind: "model" | "instance"; name: string; part?: string }
+    type MeshDeformationStage =
+      | { kind: "blendShapes" | "subdivision" | "renormalize" | "bounds" }
+      | { kind: "skinning"; tangentFrame?: boolean }
+      | { kind: "custom"; deformer: MeshDeformer }
+    interface MeshDeformationStack {
+      targets: readonly MeshDeformationTarget[]
+      stages: readonly MeshDeformationStage[]
+    }
+    interface MeshDeformationTargets {
+      models: readonly {
+        name: string
+        parts: readonly {
+          name: string; vertexCount: number; hasSkin: boolean; hasTangentFrame: boolean
+          hasSubdivisionTopology: boolean; blendShapes: readonly string[]
+        }[]
+      }[]
+      instances: readonly { name: string; model: string }[]
+    }
+    interface MeshDeformationStackInfo {
+      source: "script" | "imported"
+      targets: readonly { kind: MeshDeformationTarget["kind"]; name: string | null; part: string | null; description: string }[]
+      stages: readonly (
+        Exclude<MeshDeformationStage, { kind: "custom" }>
+        | { kind: "custom"; mode: "cpu" | "gpu" }
+        | { kind: "native"; nativeType: string; mode: "cpu" | "gpu" }
+      )[]
+    }
+    interface MeshDisplacement {
+      translation?: Vector3
+      /** Packed XYZ Float32 offsets, one triple per vertex on each target part. */
+      offsets?: Float32Array
+    }
+    /** A reusable custom stage for native mesh deformation on iOS 27 or later. */
+    class MeshDeformer {
+      private constructor()
+      private readonly meshDeformerBrand: never
+      static cpuDisplacement(options?: MeshDisplacement): MeshDeformer
+      static loadMetal(options: {
+        path: string; functionName: string; parameterCount?: number; signal?: AbortSignal
+      }): Promise<MeshDeformer>
+      readonly info:
+        | { mode: "cpu"; translation: Vector3; vertexCount: number | null }
+        | { mode: "gpu"; functionName: string; parameterCount: number }
+      /** Updates all uses of this CPU stage. The vertex count stays fixed. */
+      setDisplacement(options: MeshDisplacement): void
+      /** Updates all uses of this Metal stage with its declared number of floats. */
+      setParameters(values: Float32Array): void
+      dispose(): void
+    }
+    interface AnimationGraphOptions {
+      /** UTF-8 RealityKit AnimationGraph definition JSON. */
+      definition: Data
+      skeleton: SkeletonResource
+      /** Node IDs are safe integers or decimal strings for full 64-bit precision. */
+      clips?: readonly { nodeID: number | string; clip: AnimationClip }[]
+      signal?: AbortSignal
+    }
+    interface AnimationGraphValidation {
+      valid: boolean
+      diagnostics: readonly string[]
+    }
+    interface AnimationGraphParameterValues {
+      bool: boolean
+      float: number
+      int: number
+      vector3: Vector3
+      rotation: Vector4
+      option: string
+    }
+    type AnimationGraphParameterType = keyof AnimationGraphParameterValues
+    type AnimationGraphParameterUpdate = {
+      [K in AnimationGraphParameterType]: { name: string; type: K; value: AnimationGraphParameterValues[K] }
+    }[AnimationGraphParameterType]
+    interface AnimationGraphParameterInfo {
+      type: AnimationGraphParameterType | "trigger"
+      readOnly: boolean
+      options: readonly string[]
+    }
+    interface AnimationGraphNodeState {
+      /** A signed decimal string preserving the native 64-bit value. */
+      id: string
+      name: string
+      wasReset: boolean
+    }
+    interface AnimationGraphState {
+      mounted: boolean
+      ready: boolean
+      activeNodes: readonly AnimationGraphNodeState[]
+      activeStateMachineNodes: readonly (AnimationGraphNodeState & {
+        currentState: string; previousState: string; lastTransition: string
+      })[]
+      activeClipNodes: readonly (AnimationGraphNodeState & { currentCycle: number | null })[]
+      activeTags: readonly { id: string; name: string }[]
+    }
+    /** A reusable native animation graph on iOS 27 or later. */
+    class AnimationGraph {
+      private constructor()
+      private readonly animationGraphBrand: never
+      static validate(options: AnimationGraphOptions): Promise<AnimationGraphValidation>
+      static compile(options: AnimationGraphOptions): Promise<AnimationGraph>
+      readonly info: {
+        source: "imported" | "compiled"
+        parameterNames: readonly string[]
+        /** The JSON declarations, or null for an imported graph. */
+        parameters: Readonly<Record<string, AnimationGraphParameterInfo>> | null
+        canAttach: boolean
+      }
+      dispose(): void
+    }
+    /** The graph inputs and latest evaluation of one entity on iOS 27 or later. */
+    class AnimationGraphInstance {
+      private constructor()
+      private readonly animationGraphInstanceBrand: never
+      readonly graph: AnimationGraph
+      readonly state: AnimationGraphState
+      parameter<K extends AnimationGraphParameterType>(name: string, type: K): AnimationGraphParameterValues[K] | null
+      setParameters(updates: readonly AnimationGraphParameterUpdate[]): void
+      /** Fires a Trigger parameter for the next graph evaluation. */
+      trigger(name: string): void
+      dispose(): void
+    }
+    type SkeletalProcessingOptions = {
+      name?: string
+      operations?: readonly SkeletalProcessingOperation[]
+    } & (
+      | { retargeting: RetargetingConfiguration; skeleton?: never; retargetTo?: never; mapping?: never }
+      | { retargeting?: never; skeleton?: SkeletonResource | { entity: Entity; skeletonID?: string };
+          retargetTo?: SkeletonResource | { entity: Entity; skeletonID?: string }; mapping?: "biped" | "quadruped" }
+    )
+    class AnimationClip {
+      private constructor()
+      private readonly animationClipBrand: never
+      static fromToBy(options: FromToByOptions): AnimationClip
+      static sampled(options: SampledAnimationOptions): AnimationClip
+      static orbit(options: AnimationTiming & { target: AnimationTarget; axis?: Vector3; startTransform?: Transform; clockwise?: boolean; orientToPath?: boolean; rotations?: number; duration?: number; additive?: boolean }): AnimationClip
+      static group(clips: readonly AnimationClip[]): AnimationClip
+      static sequence(clips: readonly AnimationClip[]): AnimationClip
+      static blend(sources: readonly { clip: AnimationClip; weight?: number; parameter?: string }[], options?: AnimationTiming & { additive?: boolean }): AnimationClip
+      /** Creates a native entity action on iOS 18 or later. */
+      static action(options: AnimationTiming & { duration?: number } & (
+        { kind: "enabled"; enabled: boolean } |
+        { kind: "spin"; axis?: Vector3; revolutions?: number; curve?: AnimationCurve; additive?: boolean }
+      )): AnimationClip
+      view(options: AnimationTiming): AnimationClip
+      /** Processes a sampled joint animation on iOS 27 or later. */
+      processSkeletal(options: SkeletalProcessingOptions): AnimationClip
+      repeat(options?: { count?: number; duration?: never } | { duration: number; count?: never }): AnimationClip
+      readonly info: { name: string | null; duration: number | null; imported: boolean; sampledSkeletal: boolean }
+      dispose(): void
+    }
+    class AnimationPlayback {
+      private constructor()
+      private readonly playbackBrand: never
+      readonly state: AnimationPlaybackState
+      pause(): void
+      resume(): void
+      seek(seconds: number): void
+      setSpeed(speed: number): void
+      setBlendFactor(blendFactor: number): void
+      stop(options?: { fadeOut?: number }): void
+      waitForEnd(options?: { signal?: AbortSignal }): Promise<AnimationEnd>
+      on(event: "started" | "looped", callback: (state: AnimationPlaybackState) => void): Subscription
+      on(event: "completed" | "terminated", callback: (result: AnimationEnd) => void): Subscription
+      dispose(): void
+    }
+    class AnimationClock {
+      private constructor()
+      private readonly animationClockBrand: never
+      static create(options?: { time?: number; rate?: number }): AnimationClock
+      readonly state: { time: number | null; rate: number }
+      setTime(seconds: number): void
+      setRate(rate: number): void
+      dispose(): void
+    }
+
+    interface DeformationInfo {
+      poseIDs: string[]
+      skeletonIDs: string[]
+      hasLegacyJoints: boolean
+      hasBlendShapes: boolean
+      hasIK: boolean
+    }
+    interface SkeletonJoint {
+      name: string
+      parentIndex: number | null
+      inverseBindPoseMatrix: number[] | null
+      restPoseTransform: Required<Transform> | null
+    }
+    interface SkeletonInfo { id: string; joints: SkeletonJoint[]; legacy: boolean }
+    interface PoseSelection { poseID?: string; skeletonID?: string }
+    interface PoseUpdate { name: string; transform: Transform }
+    interface SkeletalPose {
+      id: string | null
+      joints: { name: string; transform: Required<Transform>; matrix: number[] | null }[]
+    }
+    interface BlendShapeGroup { id: string; weightNames: string[]; weights: number[] }
+    interface DeformableMeshDescriptor {
+      name?: string
+      skeletons?: readonly {
+        id: string
+        joints: readonly { name: string; parentIndex?: number | null; inverseBindPoseMatrix: readonly number[]; restPoseTransform?: Transform }[]
+      }[]
+      parts: readonly {
+        id: string
+        materialIndex?: number
+        positions: FloatStream
+        indices: UInt32Stream
+        normals?: FloatStream
+        tangents?: FloatStream
+        bitangents?: FloatStream
+        uv0?: FloatStream
+        skin?: { skeletonID: string; influencesPerVertex: number; jointIndices: UInt32Stream; weights: FloatStream }
+        blendShapes?: readonly { name: string; offsets: FloatStream }[]
+      }[]
+    }
+    interface IKConstraint {
+      name: string
+      jointName: string
+      kind: "point" | "orient" | "parent" | "lookAtAdditive" | "lookAtAbsolute" | "poleVector"
+      offset?: Transform
+      positionWeight?: Vector3
+      orientationWeight?: Vector3
+      positionDepth?: number
+      orientationDepth?: number
+      targetAxis?: Vector3
+    }
+    interface IKRigOptions {
+      skeletonID?: string
+      maxIterations?: number
+      globalFKWeight?: number
+      globalLimitsWeight?: number
+      joints?: readonly {
+        name: string
+        active?: boolean
+        fkWeightPerAxis?: Vector3
+        rotationStiffness?: Vector3
+        limits?: { weight?: number; boneAxis?: "x" | "y" | "z"; minimumAngles: Vector3; maximumAngles: Vector3 }
+      }[]
+      constraints: readonly IKConstraint[]
+    }
+    interface IKTargetUpdate {
+      solver?: number
+      constraint: string
+      space?: "model" | "world"
+      target?: Transform
+      lookAtTargetPosition?: Vector3
+      offset?: Transform
+      animationOverridePosition?: number
+      animationOverrideRotation?: number
+    }
+    interface IKSolverState {
+      index: number
+      maxIterations: number
+      globalFKWeight: number
+      joints: { name: string; fkWeightPerAxis: Vector3; rotationStiffness: Vector3 }[]
+      constraints: { name: string; jointName: string | null; target: Required<Transform>; offset: Required<Transform>;
+        lookAtTargetPosition: Vector3; animationOverridePosition: number; animationOverrideRotation: number }[]
+    }
+    class IKRig {
+      private constructor()
+      private readonly ikRigBrand: never
+      /** Creates a rig for a model skeleton on iOS 18 or later. */
+      static create(entity: Entity, options: IKRigOptions): IKRig
+      /** Creates a rig from a standalone skeleton on iOS 27 or later. */
+      static create(skeleton: SkeletonResource, options: Omit<IKRigOptions, "skeletonID">): IKRig
+      dispose(): void
+    }
+
+    type Primitive =
+      | { type: "box"; size: Vector3; cornerRadius?: number; splitFaces?: boolean }
+      | { type: "sphere"; radius: number }
+      | { type: "plane"; width: number; height: number; vertical?: boolean; cornerRadius?: number }
+      | { type: "cone" | "cylinder"; height: number; radius: number }
+      | { type: "text"; text: string; extrusionDepth?: number; fontSize?: number }
+    type FloatStream = Float32Array | Data
+    type UInt32Stream = Uint32Array | Data
+    type IndexType = "uint16" | "uint32"
+    type MeshTopology = "point" | "line" | "lineStrip" | "triangle" | "triangleStrip"
+    type VertexSemantic = "position" | "normal" | "tangent" | "bitangent" | "color" | "unspecified" | `uv${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}`
+    type VertexFormat = "float" | "float2" | "float3" | "float4" | "half2" | "half4" | "uchar4Normalized" | "char4Normalized" | "ushort2Normalized" | "ushort4Normalized"
+    interface MeshPart extends Bounds {
+      indexOffset?: number
+      indexCount: number
+      topology?: MeshTopology
+      materialIndex?: number
+    }
+    interface StaticMeshDescriptor {
+      name?: string
+      positions: FloatStream
+      normals?: FloatStream
+      tangents?: FloatStream
+      bitangents?: FloatStream
+      uv0?: FloatStream
+      primitives:
+        | { type: "triangles"; indices: UInt32Stream }
+        | { type: "polygons"; sizes: Uint8Array | Data; indices: UInt32Stream }
+        | { type: "trianglesAndQuads"; triangles: UInt32Stream; quads: UInt32Stream }
+      materialIndices?: number | UInt32Stream
+    }
+    interface DynamicMeshCommon {
+      vertexCapacity?: number
+      indexCapacity?: number
+      parts: readonly MeshPart[]
+    }
+    type DynamicMeshIndices =
+      | { indexType: "uint16"; indices: Uint16Array | Data }
+      | { indexType: "uint32"; indices: UInt32Stream }
+    type DynamicMeshDescriptor = DynamicMeshCommon & DynamicMeshIndices & (
+      | {
+          positions: FloatStream
+          normals?: FloatStream
+          tangents?: FloatStream
+          bitangents?: FloatStream
+          uv0?: FloatStream
+          colors?: FloatStream
+        }
+      | {
+          vertexCount: number
+          indexCount: number
+          vertexCapacity: number
+          indexCapacity: number
+          attributes: readonly { semantic: VertexSemantic; format: VertexFormat; layoutIndex?: number; offset: number }[]
+          /** iOS 27 or later. Required with per-instance layouts. */
+          instanceCapacity?: number
+          layouts: readonly {
+            bufferIndex: number
+            bufferOffset?: number
+            bufferStride: number
+            /** iOS 27 or later for per-instance stepping. Defaults to perVertex. */
+            stepFunction?: "perVertex" | "perInstance"
+            /** Instances sharing a row in a per-instance layout. Defaults to one. */
+            stepRate?: number
+          }[]
+          vertexBuffers: readonly (Uint8Array | Float32Array | Data)[]
+        }
+    )
+    interface MeshUpdate {
+      vertexBuffers?: readonly { bufferIndex: number; byteOffset?: number; data: Uint8Array | Float32Array | Data }[]
+      indices?: { byteOffset?: number; data: Uint8Array | Uint16Array | Uint32Array | Data }
+      parts?: readonly MeshPart[]
+      vertexCount?: number
+      indexCount?: number
+      expectedRevision?: string
+    }
+    type MeshComputeBinding =
+      | { kind: "vertices"; bufferIndex: number; index: number }
+      | { kind: "indices"; index: number }
+    type MeshComputeWrite = MeshComputeBinding & {
+      /** Byte range published from the output stream. Defaults to the full stream. */
+      byteOffset?: number
+      byteLength?: number
+    }
+    interface MeshComputeOptions {
+      pipeline: Metal.ComputePipeline
+      dispatch: Metal.DispatchOptions & { signal?: never }
+      reads?: readonly MeshComputeBinding[]
+      writes: readonly MeshComputeWrite[]
+      textures?: readonly { index: number; texture: LowLevelTexture }[]
+      vertexCount?: number
+      indexCount?: number
+      parts?: readonly MeshPart[]
+      expectedRevision?: string
+      signal?: AbortSignal
+    }
+    class Mesh {
+      private constructor()
+      private readonly meshBrand: never
+      static primitive(options: Primitive): Mesh
+      /** Builds a mesh with skinning or blend shape offsets on iOS 18 or later. */
+      static deformable(options: DeformableMeshDescriptor): Mesh
+      static generate(options: StaticMeshDescriptor): Mesh
+      /** Creates a mesh with fixed buffer capacities on iOS 18 or later. */
+      static dynamic(options: DynamicMeshDescriptor): Mesh
+      readonly info: { dynamic: boolean; revision: string; byteCount: number; materialSlotCount: number; instanceCapacity: number }
+      update(options: MeshUpdate): string
+      /** Runs Metal compute on dynamic mesh buffers on iOS 18 or later. Resolves with the new mesh revision. */
+      compute(options: MeshComputeOptions): Promise<string>
+      dispose(): void
+    }
+
+    type TextureSemantic = "color" | "normal" | "scalar" | "raw" | "hdrColor"
+    interface TextureOptions { semantic?: TextureSemantic; mipmaps?: boolean }
+    class Texture {
+      private constructor()
+      private readonly textureBrand: never
+      static fromImage(image: UIImage, options?: TextureOptions): Texture
+      static load(path: string, options?: TextureOptions): Texture
+      dispose(): void
+    }
+    interface Sampler {
+      sAddressMode?: "clampToEdge" | "repeat" | "mirrorRepeat" | "clampToZero"
+      tAddressMode?: "clampToEdge" | "repeat" | "mirrorRepeat" | "clampToZero"
+      minFilter?: "nearest" | "linear"
+      magFilter?: "nearest" | "linear"
+      mipFilter?: "notMipmapped" | "nearest" | "linear"
+      maxAnisotropy?: number
+    }
+    interface TextureBinding { texture: Texture; uvIndex?: number; sampler?: Sampler }
+    interface UVTransform { offset?: Vector2; scale?: Vector2; rotation?: number }
+    interface MaterialOptions {
+      kind: "unlit" | "simple" | "pbr"
+      baseColor?: RGBA
+      baseColorTexture?: TextureBinding
+      metallic?: number
+      roughness?: number
+      opacity?: number
+      opacityThreshold?: number
+      specular?: number
+      clearcoat?: number
+      clearcoatRoughness?: number
+      emissiveIntensity?: number
+      metallicTexture?: TextureBinding
+      roughnessTexture?: TextureBinding
+      normalTexture?: TextureBinding
+      ambientOcclusionTexture?: TextureBinding
+      emissiveTexture?: TextureBinding
+      opacityTexture?: TextureBinding
+      specularTexture?: TextureBinding
+      clearcoatTexture?: TextureBinding
+      clearcoatRoughnessTexture?: TextureBinding
+      emissiveColor?: RGBA
+      faceCulling?: "none" | "front" | "back"
+      writesDepth?: boolean
+      readsDepth?: boolean
+      primaryUV?: UVTransform
+      secondaryUV?: UVTransform
+    }
+    type ShaderValue =
+      | { type: "float" | "int"; value: number }
+      | { type: "bool"; value: boolean }
+      | { type: "color" | "float4"; value: Vector4 }
+      | { type: "float2"; value: Vector2 }
+      | { type: "float3"; value: Vector3 }
+      | { type: "matrix2" | "matrix3" | "matrix4"; value: readonly number[] }
+      | { type: "texture"; value: Texture }
+    type ShaderParameter = Exclude<ShaderValue, { type: "texture" } | { type: "color" | "float4" }>
+      | { type: "color" | "float4"; value: readonly number[] }
+      | { type: "texture"; width: number; height: number }
+      | { type: "unknown" }
+    type CustomMaterialLightingModel = "lit" | "unlit" | "clearcoat"
+    type CustomMaterialBlendMode = "opaque" | "alpha" | "additive"
+    type CustomMaterialSwizzle = readonly [
+      LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle, LowLevelTextureSwizzle
+    ]
+    type CustomTextureInput = Texture | { texture: Texture; swizzle?: CustomMaterialSwizzle }
+    interface CustomShaderFunction {
+      library: Metal.Library
+      name: string
+      constants?: Readonly<Record<string, number | boolean>>
+    }
+    interface CustomMaterialScalar {
+      scale?: number
+      texture?: CustomTextureInput | null
+    }
+    interface CustomMaterialParameters {
+      baseColor?: { tint?: RGBA; texture?: CustomTextureInput | null }
+      emissiveColor?: { color?: RGBA; texture?: CustomTextureInput | null }
+      metallic?: CustomMaterialScalar
+      roughness?: CustomMaterialScalar
+      specular?: CustomMaterialScalar
+      clearcoat?: CustomMaterialScalar
+      clearcoatRoughness?: CustomMaterialScalar
+      normal?: CustomTextureInput | null
+      ambientOcclusion?: CustomTextureInput | null
+      clearcoatNormal?: CustomTextureInput | null
+      blending?: "opaque" | { opacity: CustomMaterialScalar }
+      opacityThreshold?: number | null
+      faceCulling?: "none" | "front" | "back"
+      primaryUV?: UVTransform
+      secondaryUV?: UVTransform
+      triangleFillMode?: "fill" | "lines"
+      readsDepth?: boolean
+      writesDepth?: boolean
+      custom?: { value?: Vector4; texture?: CustomTextureInput | null }
+    }
+    type CustomMaterialOptions = { parameters?: CustomMaterialParameters } & (
+      { surface: CustomShaderFunction; geometry?: CustomShaderFunction; lightingModel?: CustomMaterialLightingModel; from?: never } |
+      { from: Material; surface: CustomShaderFunction; geometry?: CustomShaderFunction; lightingModel?: never } |
+      { from: Material; surface?: never; geometry: CustomShaderFunction; lightingModel?: never }
+    )
+    interface CustomMaterialInfo {
+      readonly lightingModel: CustomMaterialLightingModel | "unknown"
+      readonly value: Vector4
+      readonly revision: string
+    }
+    interface CustomMaterialProgramOptions {
+      surface: CustomShaderFunction
+      geometry?: CustomShaderFunction
+      lightingModel?: CustomMaterialLightingModel
+      blendMode?: CustomMaterialBlendMode
+      signal?: AbortSignal
+    }
+    class CustomMaterialProgram {
+      private constructor()
+      private readonly customMaterialProgramBrand: never
+      static create(options: CustomMaterialProgramOptions): Promise<CustomMaterialProgram>
+      readonly info: {
+        readonly lightingModel: CustomMaterialLightingModel
+        readonly blendMode: CustomMaterialBlendMode
+        readonly surface: string
+        readonly geometry: string | null
+      }
+      dispose(): void
+    }
+    class Material {
+      private constructor()
+      private readonly materialBrand: never
+      static create(options: MaterialOptions): Material
+      static video(source: VideoSource, options?: VideoMaterialOptions): Material
+      static loadShaderGraph(path: string, name: string, options: FileLoadOptions): Promise<Material>
+      static custom(options: CustomMaterialOptions): Material
+      static fromCustomProgram(program: CustomMaterialProgram, options?: { parameters?: CustomMaterialParameters }): Material
+      customInfo(): CustomMaterialInfo
+      updateCustom(parameters: CustomMaterialParameters, options?: { expectedRevision?: string }): string
+      parameterNames(): string[]
+      parameter(name: string): ShaderParameter | null
+      withParameter(name: string, value: ShaderValue): Material
+      dispose(): void
+    }
+
+    type Camera = {
+      position?: Vector3; target?: Vector3; up?: Vector3; near?: number; far?: number
+    } & ({ projection?: "perspective"; fieldOfView?: number } | { projection: "orthographic"; scale?: number })
+    interface CollisionHit {
+      entity: Entity
+      position: Vector3
+      normal: Vector3
+      distance: number
+    }
+    interface SurfaceHit {
+      entity: Entity
+      position: Vector3
+      normal: Vector3
+      meshPart: string
+      instance: number
+      primitive: number
+      barycentric: Vector3 | null
+    }
+    interface OffscreenSettings {
+      background?: RGBA | "outputTexture"
+      toneMapping?: boolean
+      antialiasing?: "none" | "multisample4X"
+      edr?: { headroom?: number } | null
+    }
+    interface OffscreenPostProcessOptions {
+      pipeline: Metal.ComputePipeline
+      /** Defaults to 0. The kernel reads the rendered color texture here. */
+      sourceColorIndex?: number
+      /** Defaults to 1. The kernel writes output pixels here. Unwritten pixels preserve the original frame. */
+      targetColorIndex?: number
+      uniforms?: readonly { index: number; data: Metal.Bytes }[]
+    }
+    interface OffscreenRenderOptions {
+      width: number
+      height: number
+      pixelFormat?: "bgra8Unorm" | "rgba16Float"
+      viewport?: { originX?: number; originY?: number; width?: number; height?: number }
+      initialPixels?: Uint8Array | Data
+      deltaTime?: number
+      dataType?: "uint8Array" | "data"
+      signal?: AbortSignal
+    }
+    interface OffscreenExternalTextureOptions extends OffscreenRenderOptions {
+      /** Draws the source on a vertical plane for this frame. Width and height are in scene units. */
+      surface: { width: number; height: number; transform?: Transform; sampler?: Sampler }
+    }
+    interface OffscreenFrame<Bytes extends Uint8Array | Data = Uint8Array | Data> {
+      readonly width: number
+      readonly height: number
+      readonly bytesPerRow: number
+      readonly pixelFormat: "bgra8Unorm" | "rgba16Float"
+      readonly frameIndex: string
+      readonly data: Bytes
+    }
+    class OffscreenRenderer {
+      private constructor()
+      private readonly offscreenRendererBrand: never
+      /** Available on iOS 18 or later. */
+      static create(scene: Scene, options?: OffscreenSettings & { camera?: Camera }): OffscreenRenderer
+      setCamera(camera: Camera): void
+      configure(options: OffscreenSettings): void
+      /** Runs a Metal color pass over the complete rendered target. Pass null to clear it. */
+      setPostProcess(options: OffscreenPostProcessOptions | null): void
+      update(deltaTime: number): void
+      setEnvironment(image: UIImage | null, options?: { intensityExponent?: number; signal?: AbortSignal }): Promise<void>
+      render(options: OffscreenRenderOptions & { dataType: "data" }): Promise<OffscreenFrame<Data>>
+      render(options: OffscreenRenderOptions & { dataType?: "uint8Array" }): Promise<OffscreenFrame<Uint8Array>>
+      render(options: OffscreenRenderOptions): Promise<OffscreenFrame>
+      /** Samples an IOSurface-backed BGRA8 source directly on iOS 27 or later. */
+      renderWithExternalTexture(source: PixelBuffer | AVCaptureVideoFrame, options: OffscreenExternalTextureOptions & { dataType: "data" }): Promise<OffscreenFrame<Data>>
+      renderWithExternalTexture(source: PixelBuffer | AVCaptureVideoFrame, options: OffscreenExternalTextureOptions & { dataType?: "uint8Array" }): Promise<OffscreenFrame<Uint8Array>>
+      renderWithExternalTexture(source: PixelBuffer | AVCaptureVideoFrame, options: OffscreenExternalTextureOptions): Promise<OffscreenFrame>
+      dispose(): void
+    }
+    /** Metal color pass for a mounted RealityView. The writable output texture uses linear RGBA16Float. */
+    interface MountedPostProcessOptions extends OffscreenPostProcessOptions {
+      /** Texture index (0–127) of the read-only depth2d<float> input for the current scene frame. */
+      sourceDepthIndex?: number
+      /** Metal constant buffer index (0–30) for the current frame's float4x4 projection and float elapsedTime in seconds. The block occupies 80 bytes. */
+      frameUniformIndex?: number
+    }
+    type MountedPostProcessInfo = { state: "disabled" | "pending" } | {
+      state: "applied" | "bypassed" | "unavailable"
+      width: number
+      height: number
+      sourcePixelFormatCode: number
+      targetPixelFormatCode: number
+      /** Native depth pixel format of an applied frame that used scene depth. */
+      readonly sourceDepthPixelFormatCode?: number
+      /** The applied frame's native projection, as 16 column-major values, when frame uniforms were requested. */
+      readonly projection?: readonly number[]
+      /** The applied frame's native elapsed scene time in seconds, when frame uniforms were requested. */
+      readonly elapsedTime?: number
+    }
+    class Renderer {
+      private constructor()
+      private readonly rendererBrand: never
+      static create(scene: Scene, options?: { camera?: Camera; background?: RGBA; orbit?: boolean }): Renderer
+      readonly id: string
+      readonly viewport: { width: number; height: number; scale: number } | null
+      setCamera(camera: Camera): void
+      setAudioListener(entity?: Entity): void
+      resetCamera(): void
+      setBackground(color: RGBA): void
+      setPostProcess(options: MountedPostProcessOptions | null): void
+      postProcessInfo(): MountedPostProcessInfo
+      setEnvironment(image: UIImage | null, options?: { intensityExponent?: number; skybox?: boolean; signal?: AbortSignal }): Promise<void>
+      pause(): void
+      resume(): void
+      orbit(horizontal: number, vertical: number): void
+      pan(x: number, y: number): void
+      zoom(factor: number): void
+      project(position: Vector3): Point | null
+      ray(point: Point): { origin: Vector3; direction: Vector3 } | null
+      pick(point: Point): CollisionHit | null
+      pickSurface(point: Point, options?: { length?: number; signal?: AbortSignal }): Promise<SurfaceHit | null>
+      snapshot(options?: { hdr?: boolean; signal?: AbortSignal }): Promise<UIImage>
+      on(event: "update", callback: (event: { deltaTime: number; timestamp: number }) => void): Subscription
+      on(event: "tap", callback: (event: { point: Point }) => void): Subscription
+      dispose(): void
+    }
+    class Subscription {
+      private constructor()
+      private readonly subscriptionBrand: never
+      dispose(): void
+    }
+  }
 }

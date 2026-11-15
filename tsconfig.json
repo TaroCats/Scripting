@@ -31,7 +31,8 @@
   },
   "include": [
     "./dts/*.d.ts",
-    "scripts"
+    "scripts",
+    "skills"
   ],
   "exclude": [
     "node_modules",
