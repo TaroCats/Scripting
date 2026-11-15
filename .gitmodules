@@ -1,0 +1,3 @@
+[submodule ".trae/skills/scripting-app-development"]
+	path = .trae/skills/scripting-app-development
+	url = https://github.com/ScriptingApp/scripting-app-development
