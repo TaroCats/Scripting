@@ -2,7 +2,7 @@
   "name": "亲邻开门工具",
   "icon": "door.left.hand.open",
   "color": "#0A84FF",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "remoteResource": {
     "url": "https://github.com/TaroCats/Scripting/releases/download/qinlin-door/qinlin-door.zip",
     "autoUpdateInterval": 3600
