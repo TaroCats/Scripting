@@ -1007,3 +1007,52 @@ App 读到     3 个   A座大堂 / B座大堂 / B座一楼后门
 
 - **App 回前台会重读 `ql_doors`**：小组件里的「同步」也会写这个 key，App 不重读就会一直显示内存里的旧列表，看起来就像数据不一致
 - **刷新改成三个 API 全打**：`reloadAll` + `reloadUserWidgets` + `reloadTestWidgets`，用户小组件与测试小组件是不同 kind，只打一个曾经出现过"就是不更新"
+
+---
+
+## 附二十：小组件排序永远是原始顺序 → 改用 App Group 文件通道
+
+诊断结论：**桌面小组件里 `loadDoorPrefs()` 读到的是空对象**。
+
+同一份 `ql_doors` + `ql_door_prefs` 经同一个 `arrangeDoors()` 出来必然一致，所以"小组件永远是服务端顺序"
+只有一个解释：它根本读不到 App 写的偏好。扩展进程读不到主 App 的私有 Storage（Keychain 同理）——
+这也一并解释了之前"点小组件没反馈"（Intent 写的日志 App 看不到）。
+
+### 改成 App Group 共享文件
+
+`FileManager.appGroupDocumentsDirectory` 是文档明确保证的通道：
+「存储于该目录的文件不会显示在系统「文件」App 中，但 **Widget 中运行的脚本可访问这些文件**」。
+
+`core/snapshot.ts` 里维护一个 JSON 快照：
+
+```ts
+type WidgetSnapshot = {
+  updatedAt: number       // App 最后一次推送时间
+  build: string           // BUILD_TAG
+  doors: DoorKey[]
+  prefs: DoorPrefs        // ← 排序 + 收藏
+  lastResult: { ts, ok, text } | null   // 小组件最后一次开门结果
+  diag: WidgetDiag | null               // 小组件最后一次渲染指纹
+  session: Session | null               // 会话兜底（Keychain 读不到时用）
+}
+```
+
+写读分工：
+
+| 谁 | 做什么 |
+|---|---|
+| App | 启动 / 同步门禁 / 改排序收藏 / 登录 / 续期 → `writeSnapshot()` |
+| widget.tsx | `readSnapshot()` 优先，读不到再退回 Storage；渲染前 `writeWidgetSnapshot(diag)` 回写指纹 |
+| Intent | 开门结果 `recordResult()` 写回快照（App 侧看不到扩展的日志，这是唯一可靠的反馈通道） |
+
+### 会话兜底
+
+扩展可能也读不到 Keychain，所以快照里带一份 `session`。Intent 取会话的顺序：
+`loadSession()`（Keychain）→ 快照 `session` → 若快照里带 `userId` 就先换一个新的 sessionId 再用。
+写入侧注意：`writeWidgetSnapshot()` **不覆盖** `session`，否则扩展读到 null 会把 App 写的那份抹掉。
+
+### 验证
+
+用两个独立的 Storage/Keychain 模拟"App 进程"和"扩展进程"跑了一遍：
+扩展侧 Storage 与 Keychain 都是空的，仅凭共享文件就读到了正确的收藏顺序（收藏项置顶）、
+会话，并且 Intent 回写结果不会破坏门禁顺序。`tsc --noEmit` 零错误。

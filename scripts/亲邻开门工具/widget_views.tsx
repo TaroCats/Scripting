@@ -9,6 +9,7 @@
 import { Button, HStack, Image, Link, Spacer, Text, VStack } from "scripting"
 import { OpenDoorIntent, SyncDoorsIntent } from "./app_intents"
 import type { DoorKey } from "./core/protocol"
+import type { SnapshotResult } from "./core/snapshot"
 import type { Session } from "./core/session"
 import type { LogEntry } from "./widget_shared"
 
@@ -19,7 +20,10 @@ export type WidgetData = {
   /** 列表第一项：小尺寸 / 锁屏用 */
   selected: DoorKey | null
   favorites: string[]
+  /** 本地日志（App 与小组件同进程时才有内容） */
   lastLog: LogEntry | null
+  /** App Group 快照里记下的最后一次开门结果，跨进程唯一可靠的反馈来源 */
+  lastResult: SnapshotResult | null
   /** 打开 App 的 scripting:// 链接（替代根级 widgetURL） */
   appURL: string
 }
@@ -44,9 +48,19 @@ function hhmm(ts: number): string {
 
 /** 把 [小组件] ✅ 开门成功 · A座大堂 压缩成 ✅ 开门成功 · A座大堂 14:32 */
 function lastResult(data: WidgetData): string | null {
+  // 快照里的结果是跨进程唯一可靠的（扩展读不到 App 的日志）
+  if (data.lastResult) {
+    const r = data.lastResult
+    return `${r.ok ? "✅" : "❌"} ${r.text} · ${hhmm(r.ts)}`
+  }
   if (!data.lastLog) return null
   const body = data.lastLog.text.replace(/^\[小组件\]\s*/, "")
   return `${body} · ${hhmm(data.lastLog.ts)}`
+}
+
+/** 最近一次操作的时间戳（毫秒），没有就 null */
+function lastResultTs(data: WidgetData): number | null {
+  return data.lastResult?.ts ?? data.lastLog?.ts ?? null
 }
 
 /** 最近一次操作的时间（分钟），用于判断要不要在小尺寸里显示反馈 */
@@ -141,8 +155,9 @@ export function SmallWidget({ data }: { data: WidgetData }) {
   const ready = Boolean(door && data.session)
   const fav = Boolean(door && data.favorites.includes(door.doorControlId))
   const result = lastResult(data)
+  const ts = lastResultTs(data)
   // 只在刚点过（30 分钟内）时显示结果，避免长期占位
-  const fresh = data.lastLog != null && minutesSince(data.lastLog.ts) <= 30
+  const fresh = ts != null && minutesSince(ts) <= 30
   return (
     <VStack alignment="leading" padding={12} spacing={6}>
       <Header data={data} />

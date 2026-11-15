@@ -9,7 +9,8 @@
  */
 import { AccessoryWidgetBackground, Script, Text, Widget, ZStack } from "scripting"
 import { arrangeDoors, loadDoorPrefs } from "./core/door_prefs"
-import { BUILD_TAG, K, type WidgetDiag } from "./core/protocol"
+import { BUILD_TAG, type WidgetDiag } from "./core/protocol"
+import { readSnapshot, writeWidgetSnapshot } from "./core/snapshot"
 import { loadSession } from "./core/session"
 import {
   buildReloadDate,
@@ -54,27 +55,30 @@ function Root({ data }: { data: WidgetData }) {
 }
 
 function runWidget() {
-  // ensureSession 里会联网，渲染阶段只读本地会话；真正续期在 intent 里做
-  const session = loadSession()
-  const prefs = loadDoorPrefs()
+  // 数据来源优先 App Group 文件：实测扩展进程读不到 App 的私有 Storage（偏好永远是空的，
+  // 于是排序永远退回服务端顺序）。文件读不到才退回本地 Storage。
+  const snap = readSnapshot()
+  // 会话同理：Keychain 读不到时用快照里的（同容器，不进系统「文件」App）
+  const session = loadSession() ?? snap?.session ?? null
+  const fromFile = Boolean(snap && snap.doors.length > 0)
+  const prefs = fromFile && snap ? snap.prefs : loadDoorPrefs()
+  const rawDoors = fromFile && snap ? snap.doors : loadDoors()
   // 顺序完全由 App 里的「排序 + 收藏」决定：收藏在前，组内按手动顺序
-  const doors = arrangeDoors(loadDoors(), prefs)
+  const doors = arrangeDoors(rawDoors, prefs)
   const logs = loadLogs()
 
-  // 渲染指纹：App 的「我的 → 数据快照」会把它读出来。
-  // 时间戳不更新 = 小组件根本没重跑；BUILD_TAG 不是最新 = 桌面跑的是旧代码。
-  try {
-    const diag: WidgetDiag = {
-      ts: Date.now(),
-      count: doors.length,
-      ids: doors.map(d => d.doorControlId),
-      names: doors.map(d => d.doorControlName),
-      orderLen: prefs.order.length,
-      faveLen: prefs.favorites.length,
-      version: BUILD_TAG,
-    }
-    Storage.set(K.widgetDiag, diag)
-  } catch { /* 诊断写不进去不影响出图 */ }
+  const diag: WidgetDiag = {
+    ts: Date.now(),
+    count: doors.length,
+    ids: doors.map(d => d.doorControlId),
+    names: doors.map(d => d.doorControlName),
+    orderLen: prefs.order.length,
+    faveLen: prefs.favorites.length,
+    version: BUILD_TAG,
+    source: fromFile ? "file" : "storage",
+  }
+  // 写在 present 之前：即使出图阶段抛错，这条也会落盘，App 里能看到
+  writeWidgetSnapshot(diag, doors, prefs)
 
   const data: WidgetData = {
     session,
@@ -82,6 +86,7 @@ function runWidget() {
     selected: doors[0] ?? null,
     favorites: prefs.favorites,
     lastLog: logs[0] ?? null,
+    lastResult: snap?.lastResult ?? null,
     appURL: Script.createRunURLScheme(Script.name, { from: "widget", tab: "door" }),
   }
 

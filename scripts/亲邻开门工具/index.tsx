@@ -55,6 +55,7 @@ import {
   toggleFavorite,
   type DoorPrefs,
 } from "./core/door_prefs"
+import { readSnapshot, writeSnapshot } from "./core/snapshot"
 import { clearSession, isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
 
 /** 深拷贝 —— Storage.get 返回的对象可能被运行时冻结，写入前必须复制 */
@@ -135,7 +136,9 @@ function flushLiveOrder(): boolean {
     cur.order.length === order.length &&
     cur.order.every((id, i) => id === order[i])
   if (same) return false
-  saveDoorPrefs({ order, favorites: liveFavorites ?? cur.favorites })
+  const next = { order, favorites: liveFavorites ?? cur.favorites }
+  saveDoorPrefs(next)
+  writeSnapshot({ doors: loadDoors(), prefs: next })
   return true
 }
 
@@ -250,6 +253,8 @@ function DoorListTab(props: {
 
   function commit(next: DoorPrefs, message?: string) {
     saveDoorPrefs(next)
+    // App Group 快照才是小组件读的通道，必须跟着写
+    writeSnapshot({ doors: props.doors, prefs: next })
     widgetDirty = true
     lastSig.current = null
     setVer(v => v + 1)
@@ -405,8 +410,9 @@ function App(props: { initialLog: string }) {
   const [loadingDoors, setLoadingDoors] = useState(false)
   // 「我的 → 数据快照」的刷新计数器
   const [, setDiagTick] = useState(0)
-  /** 小组件上一次渲染时读到的数据（widget.tsx 写入） */
-  const diag = Storage.get<WidgetDiag>(K.widgetDiag) as WidgetDiag | null
+  /** 小组件上一次渲染时读到的数据（widget.tsx 写进 App Group 快照） */
+  const snap = readSnapshot()
+  const diag: WidgetDiag | null = snap?.diag ?? (Storage.get<WidgetDiag>(K.widgetDiag) as WidgetDiag | null)
   const [logs, setLogs] = useState<LogEntry[]>(() => {
     const saved = loadLogs()
     if (props.initialLog) {
@@ -464,6 +470,7 @@ function App(props: { initialLog: string }) {
     // 同步会覆盖服务端顺序，这里把用户排序/收藏套回去（新增的门禁落到未收藏组末尾）
     const np = normalizePrefs(next.map(d => d.doorControlId), prefs)
     saveDoorPrefs(np)
+    writeSnapshot({ doors: next, prefs: np })
     widgetDirty = true
     const first = arrangeDoors(next, np)[0]
     if (first && !next.some(d => d.doorControlId === selectedDoorId)) {
@@ -503,6 +510,11 @@ function App(props: { initialLog: string }) {
     }
     AppEvents.scenePhase.addListener(onPhase)
     return () => AppEvents.scenePhase.removeListener(onPhase)
+  }, [])
+
+  // 启动先把门禁/偏好写进 App Group 快照：小组件读的是那份文件，不是 Storage
+  useEffect(() => {
+    writeSnapshot({ doors: loadDoors(), prefs: loadDoorPrefs() })
   }, [])
 
   /**
@@ -552,6 +564,7 @@ function App(props: { initialLog: string }) {
       setSession(saveSession({ token: sessionId, sessionId, phone }))
       setCode("")
       say("登录成功")
+      writeSnapshot({ doors: loadDoors(), prefs: loadDoorPrefs() })
       await refreshDoors()
     } catch (e) {
       say(`登录失败：${e instanceof Error ? e.message : String(e)}`)
@@ -575,6 +588,7 @@ function App(props: { initialLog: string }) {
       setSession(s)
       setManualSid("")
       say(`登录成功（${Math.round(r.expires / 60)} 分钟）`)
+      writeSnapshot({ doors: loadDoors(), prefs: loadDoorPrefs() })
       await refreshDoors(s)
     } catch (e) {
       say(`登录失败：${e instanceof Error ? e.message : String(e)}`)
@@ -617,6 +631,8 @@ function App(props: { initialLog: string }) {
         phone: cur.phone, userId: cur.userId, ttlSec: r.expires,
       })
       setSession(s)
+      // 会话快照要跟着更新，否则小组件只能拿到过期的那个
+      writeSnapshot({ doors: loadDoors(), prefs: loadDoorPrefs() })
       log("会话已自动续期")
       return s
     } catch (e) {
@@ -1026,13 +1042,23 @@ function App(props: { initialLog: string }) {
                 </Text>
               )}
               <Button
-                title="重新读取数据"
+                title="重写快照并刷新小组件"
                 systemImage="arrow.triangle.2.circlepath"
                 action={() => {
-                  setDoors(loadDoors())
+                  const ds = loadDoors()
+                  setDoors(ds)
+                  writeSnapshot({ doors: ds, prefs: loadDoorPrefs() })
+                  reloadWidgets()
                   setDiagTick(t => t + 1)
                 }}
               />
+              <HStack>
+                <Text>共享快照</Text>
+                <Spacer />
+                <Text font="caption">
+                  {snap ? `${fmtTime(snap.updatedAt)} · build ${snap.build}` : "还没写过"}
+                </Text>
+              </HStack>
             </Section>
 
             <Section

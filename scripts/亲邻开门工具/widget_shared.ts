@@ -12,6 +12,7 @@ import {
 } from "./core/api"
 import { DEFAULT_CONFIG, K, type ApiConfig, type DoorKey } from "./core/protocol"
 import { loadDoorPrefs, normalizePrefs, saveDoorPrefs } from "./core/door_prefs"
+import { readSnapshot, recordResult, writeSnapshot } from "./core/snapshot"
 import { isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
 
 export type LogEntry = { ts: number; text: string }
@@ -95,6 +96,32 @@ export async function ensureSession(cfg: ApiConfig): Promise<Session | null> {
 /** 会话失效时由调用方负责登出，避免在这里重复写清理逻辑 */
 export type OpResult = { ok: boolean; text: string; expired?: boolean }
 
+/**
+ * 取可用会话：Keychain 优先；扩展进程读不到 Keychain 时退回 App Group 快照里的会话。
+ * 快照会话多半已经到期（30 分钟），有 userId 就顺手换一个新的。
+ */
+async function sessionForWidget(cfg: ApiConfig): Promise<Session | null> {
+  const direct = await ensureSession(cfg)
+  if (direct) return direct
+  const saved = readSnapshot()?.session
+  if (!saved) return null
+  if (saved.userId) {
+    try {
+      const r = await loginByUserId(saved.userId, { cfg })
+      return {
+        ...saved,
+        token: r.sessionId,
+        sessionId: r.sessionId,
+        loginAt: Date.now(),
+        expiresAt: Date.now() + r.expires * 1000,
+      }
+    } catch {
+      // 换不到就用旧会话再试一次，失败会走 401 分支给出明确文案
+    }
+  }
+  return saved
+}
+
 /** 小组件只能走远程通道；结果同步写入 App 日志 */
 export async function openDoorFromWidget(params: {
   doorControlId: string
@@ -105,10 +132,11 @@ export async function openDoorFromWidget(params: {
   // 而不是按钮没反应。排查小组件交互时这两行是唯一线索。
   appendLog(`[小组件] … 收到开门请求 · ${params.doorControlName}`)
   const cfg = loadConfig()
-  const session = await ensureSession(cfg)
+  const session = await sessionForWidget(cfg)
   if (!session) {
     const text = "未登录，请打开 App 登录"
     appendLog(`[小组件] ${text}`)
+    recordResult(false, text)
     return { ok: false, text }
   }
   try {
@@ -119,15 +147,19 @@ export async function openDoorFromWidget(params: {
     const name = env.data?.doorControlName ?? params.doorControlName
     const verdict = interpretState(env.data?.openDoorState)
     appendLog(`[小组件] ${verdict.ok ? "✅" : "❌"} ${verdict.text} · ${name}`)
+    // 扩展进程写的日志 App 看不到，结果必须落到共享快照里，桌面才有反馈
+    recordResult(verdict.ok, `${verdict.text} · ${name}`)
     return { ok: verdict.ok, text: `${verdict.text} · ${name}` }
   } catch (e) {
     if (e instanceof SessionExpiredError) {
       const text = "会话已失效，请打开 App 重新登录"
       appendLog(`[小组件] ❌ ${text}`)
+      recordResult(false, text)
       return { ok: false, text, expired: true }
     }
     const text = e instanceof Error ? e.message : String(e)
     appendLog(`[小组件] ❌ 开门异常：${text}`)
+    recordResult(false, text)
     return { ok: false, text }
   }
 }
@@ -135,7 +167,7 @@ export async function openDoorFromWidget(params: {
 /** 同步门禁列表（SyncDoorsIntent 使用） */
 export async function syncDoors(): Promise<OpResult> {
   const cfg = loadConfig()
-  const session = await ensureSession(cfg)
+  const session = await sessionForWidget(cfg)
   if (!session) {
     const text = "未登录，请打开 App 登录"
     appendLog(`[小组件] ${text}`)
@@ -152,7 +184,10 @@ export async function syncDoors(): Promise<OpResult> {
     }))
     Storage.set(K.doors, doors)
     // 服务端顺序会覆盖本地顺序，这里把 App 里排好的顺序/收藏套回去
-    saveDoorPrefs(normalizePrefs(doors.map(d => d.doorControlId), loadDoorPrefs()))
+    const np = normalizePrefs(doors.map(d => d.doorControlId), loadDoorPrefs())
+    saveDoorPrefs(np)
+    // 共享快照才是小组件真正读的地方，必须同步写
+    writeSnapshot({ doors, prefs: np })
     const text = `已同步 ${list.length} 个门禁`
     appendLog(`[小组件] ${text}`)
     return { ok: true, text }

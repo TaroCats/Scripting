@@ -190,7 +190,7 @@ export const DEFAULT_BLE_SETTINGS: BleSettings = {
  * 小组件会把渲染时的标记写进 `ql_widget_diag`，App 里能直接看到
  * "桌面上那个小组件跑的是哪一版代码"——排查"改了却完全没变化"时，这一条最省事。
  */
-export const BUILD_TAG = "2026-11-16-a"
+export const BUILD_TAG = "2026-11-16-b"
 
 /** 本地缓存键 */
 export const K = {  config: "ql_config",
@@ -217,4 +217,6 @@ export type WidgetDiag = {
   faveLen: number
   /** 脚本版本，确认小组件跑的是不是当前版本 */
   version: string
+  /** 数据来源：App Group 文件 / 本地 Storage 兜底 */
+  source: "file" | "storage"
 }
