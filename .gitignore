@@ -1,3 +1,19 @@
+# macOS
 .DS_Store
-*/.DS_Store
-.DS_Store
+**/.DS_Store
+
+# 顺手把 macOS 其他垃圾文件也挡掉
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.AppleDouble
+.LSOverride
+
+# Windows / 编辑器常见垃圾
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+.idea/
+.vscode/
