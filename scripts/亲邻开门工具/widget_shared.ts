@@ -101,6 +101,9 @@ export async function openDoorFromWidget(params: {
   doorControlName: string
   macAddress: string
 }): Promise<OpResult> {
+  // 先落一条"收到请求"：如果日志里有这行却没有结果行，说明点击确实生效但请求卡住了，
+  // 而不是按钮没反应。排查小组件交互时这两行是唯一线索。
+  appendLog(`[小组件] … 收到开门请求 · ${params.doorControlName}`)
   const cfg = loadConfig()
   const session = await ensureSession(cfg)
   if (!session) {

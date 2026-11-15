@@ -9,6 +9,7 @@
  */
 import { AccessoryWidgetBackground, Script, Text, Widget, ZStack } from "scripting"
 import { arrangeDoors, loadDoorPrefs } from "./core/door_prefs"
+import { BUILD_TAG, K, type WidgetDiag } from "./core/protocol"
 import { loadSession } from "./core/session"
 import {
   buildReloadDate,
@@ -30,8 +31,12 @@ function Root({ data }: { data: WidgetData }) {
     return <Text>{data.selected?.doorControlName ?? "亲邻开门"}</Text>
   }
 
+  // 注意：这里**不能**在根容器上挂 widgetURL。
+  // 根级 widgetURL 会让整块区域变成"打开 App"的点击目标，把内部 Button 的
+  // AppIntent 抢掉，表现就是点小组件按钮毫无反应。打开 App 的入口改由各视图里的
+  // <Link url={data.appURL}> 承担（见 widget_views.tsx）。
   return (
-    <ZStack widgetURL={Script.createRunURLScheme(Script.name, { from: "widget" })}>
+    <ZStack>
       {Widget.family === "accessoryRectangular" || Widget.family === "accessoryCircular" ? (
         <AccessoryWidgetBackground />
       ) : null}
@@ -56,12 +61,28 @@ function runWidget() {
   const doors = arrangeDoors(loadDoors(), prefs)
   const logs = loadLogs()
 
+  // 渲染指纹：App 的「我的 → 数据快照」会把它读出来。
+  // 时间戳不更新 = 小组件根本没重跑；BUILD_TAG 不是最新 = 桌面跑的是旧代码。
+  try {
+    const diag: WidgetDiag = {
+      ts: Date.now(),
+      count: doors.length,
+      ids: doors.map(d => d.doorControlId),
+      names: doors.map(d => d.doorControlName),
+      orderLen: prefs.order.length,
+      faveLen: prefs.favorites.length,
+      version: BUILD_TAG,
+    }
+    Storage.set(K.widgetDiag, diag)
+  } catch { /* 诊断写不进去不影响出图 */ }
+
   const data: WidgetData = {
     session,
     doors,
     selected: doors[0] ?? null,
     favorites: prefs.favorites,
     lastLog: logs[0] ?? null,
+    appURL: Script.createRunURLScheme(Script.name, { from: "widget", tab: "door" }),
   }
 
   Widget.present(<Root data={data} />, { policy: "after", date: buildReloadDate(session) })

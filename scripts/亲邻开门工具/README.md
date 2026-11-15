@@ -863,3 +863,147 @@ TabView
 跑了 13 项自测：空偏好、收藏置顶、取消收藏回落到末尾、两组内分别拖动、
 存取往返、冻结对象不被污染、同步校正（删旧/加新）、新门禁落位、服务端顺序被用户顺序覆盖 —— 全部通过。
 另外 `tsc --noEmit` 对 14 个文件零错误。
+
+---
+
+## 附十六：两个线上问题（排序后跳页 / 小组件点了没反应）
+
+### 1. 拖动顺序或收藏后自动跳回「开门」页
+
+三个原因叠在一起，全部堵掉：
+
+| 原因 | 处理 |
+|---|---|
+| `commitPrefs` 里同步调 `Widget.reloadAll()` | 从交互路径里彻底移除，改成只由「刷新小组件」按钮显式触发 |
+| `prefs` 存在 `App` 里，每次拖动/收藏都重渲染 `TabView` | 把整页拆成独立组件 `DoorListTab`，偏好由它自己从 `Storage` 读写，父组件不参与 |
+| `tab` 只是 `useState(0)`，任何重挂载都回落到 0 | 当前 Tab 落盘到 `ql_tab`，重挂载后原地恢复 |
+
+顺带：从小组件点进来（`?from=widget`）时强制落在「开门」页，符合直觉。
+
+### 2. 小组件点击无反应、无反馈
+
+**根因**：根容器 `<ZStack widgetURL={...}>` 把整块区域变成了「打开 App」的热区，内部 `Button` 的
+`AppIntent` 被抢掉。官方交互小组件示例里从不这么写 —— 它是每一行包一个 `<Link url={...}>`。
+
+改法：
+
+- 删掉根级 `widgetURL`，打开 App 改由各视图里的 `<Link url={data.appURL}>` 负责
+  （标题、门禁名字区域、锁屏视图都是 Link）
+- 开门按钮保持独立 `Button intent={...}`，和 Link 是兄弟节点，两个热区互不干扰
+- **补反馈**：中/大尺寸显示「最近一次结果 + 时间」，小尺寸在 30 分钟内点过也会显示一行
+- Intent 入口先写一条 `[小组件] … 收到开门请求 · 门名`，再写结果。
+  日志里有"收到"却没有结果 = 点击生效但请求卡住；两条都没有 = 按钮真没被点到，这条能直接分诊
+
+验证：`tsc --noEmit` 零错误。真机行为（按钮热区、Link 跳转）只能在主屏幕确认。
+
+---
+
+## 附十七：小组件"少了前两个门禁 / 顺序不对"
+
+**不是排序算错了，是小组件的时间线是旧快照。**
+
+排查过程（也留个记录，免得下次又怀疑排序）：
+
+1. `arrangeDoors()` 是纯函数，App 列表和小组件用的是**同一个**输入（`ql_doors` + `ql_door_prefs`），
+   不存在"两边各算各的"。用 8 个门禁跑了全链路模拟：初次同步 / 收藏两个 / 拖动 / 删掉一个 / id 是 number
+   的旧数据 —— 顺序全部符合预期，**没有任何一项被丢弃**。
+2. 真正的原因在刷新时机：上一版为了修"拖动后跳回开门页"，把 `Widget.reloadAll()` 从交互路径里删掉了。
+   WidgetKit 只会在时间线到期（30 分钟）或显式请求时重跑 `widget.tsx`，
+   所以 App 里改了顺序、或者同步时 `commonlyUsedDoor` 被 `unshift` 到列表最前面（正好是最前两项），
+   小组件还停在旧快照上 —— 看起来就是"前两个没了、顺序乱了"。
+
+修法：
+
+| 触发时机 | 行为 |
+|---|---|
+| App 退到后台（`AppEvents.scenePhase === "background"`）且有待推送的改动 | `Widget.reloadAll()`，用户正好要看桌面 |
+| 点「刷新小组件」按钮 | 立即 `Widget.reloadAll()` |
+| 小组件里点开门 / 同步 | Intent 内的 `Widget.reloadAll()`（原本就有） |
+
+为什么不在改动的瞬间刷：拖动排序过程中刷会打断手势，也是上一版跳页的诱因之一。
+
+顺带做了两件数据卫生：
+
+- `arrangeDoors()` / `normalizePrefs()` 的 id 一律 `String()` 后比较 —— 旧数据里 `doorControlId`
+  是 number 时，rank 全部 miss，排序会整体错位
+- 新增 `healPrefs()`：启动时若发现 `order` 没覆盖全部门禁（早期版本只写"操作过的那个"），
+  直接按服务端顺序整体重建，收藏保留。正常数据永远是全覆盖的，不会误伤
+
+---
+
+## 附十八：`ForEach.count is deprecated` 报错
+
+运行时日志：
+
+```
+[ERROR] ForEach.count is deprecated, use ForEach.data instead
+```
+
+`count + itemBuilder` 那套已经废弃（还能跑，但会刷 ERROR）。门禁列表改成 data 模式：
+
+```tsx
+const favRows = useObservable<DoorListRow[]>(() => favList.map(makeRow))
+const otherRows = useObservable<DoorListRow[]>(() => otherList.map(makeRow))
+
+<ForEach data={favRows} editActions="move" builder={r => rowView(r)} />
+```
+
+data 模式没有 `onMove` 回调 —— 系统拖拽是**直接改 Observable 数组**的，所以：
+
+1. 订阅两个 Observable，数组一变就把 `favIds + otherIds` 写回 `ql_door_prefs`
+2. 写之前比对 Storage，内容一样就跳过，避免自己写自己
+3. 外部变化（收藏开关 / 同步 / 选中项）用一个签名字符串判断，变了才 `setValue` 重建两个数组
+
+兜底：`DoorListTab` 每次渲染把屏幕上的顺序写到模块级 `liveOrder`，
+App 退到后台或点「刷新小组件」时先 `flushLiveOrder()` 落盘再刷新 —— 不完全赌框架的 Observable 回调。
+
+（`editActions` 只给 `"move"`，所以不会出现滑动删除；拖动仍需点右上角「编辑」进编辑模式。）
+
+---
+
+## 附十九：小组件数据对不上时的排查（数据快照）
+
+现象：App 里是 `A座大堂 / B座大堂 / B座一楼后门`，桌面小组件却是
+`B座负一楼电梯 / B座大堂 / B座负一楼电梯（新）`，点「刷新小组件」也没变。
+
+这类"两边数据完全不同"不能用排序逻辑解释（同一份 `ql_doors` + `ql_door_prefs` 经同一个
+`arrangeDoors()` 出来必然一致），只能是**某一侧根本不是这份数据**。所以这版加了可验证的诊断：
+
+### 1. `BUILD_TAG`
+
+`core/protocol.ts` 里的 `BUILD_TAG`，每次改小组件相关代码都要动它。
+
+### 2. 小组件渲染指纹 `ql_widget_diag`
+
+`widget.tsx` 在 `Widget.present` **之前**写一条：
+
+```ts
+{ ts, count, ids, names, orderLen, faveLen, version: BUILD_TAG }
+```
+
+写在渲染前，所以即使出图阶段抛错，这条也会落盘。
+
+### 3. App「我的 → 数据快照」
+
+同屏对比三行：
+
+```
+App 读到     3 个   A座大堂 / B座大堂 / B座一楼后门
+偏好顺序     3 项 · 收藏 0
+小组件渲染   11/16 01:05 · 3 个   B座负一楼电梯 / ...
+小组件版本   2026-11-16-a          ← 绿色=当前版本，橙色=旧代码
+```
+
+判读表：
+
+| 看到什么 | 结论 | 怎么办 |
+|---|---|---|
+| 时间是几分钟前 | 小组件在跑，且读到的就是这份数据 | 数据真的在存储里不同，见下一行 |
+| 时间不更新 / 显示"还没渲染过" | 桌面那个小组件**没在跑本脚本** | 长按删掉，重新从「亲邻开门工具」添加 |
+| 版本号橙色 | 桌面跑的是旧代码 | 更新脚本后重新添加小组件 |
+| 名称和 App 那行不同、时间却是新的 | 两个进程读到的不是同一份 Storage | 改走 App Group 文件通道 |
+
+### 4. 顺手修的两个真问题
+
+- **App 回前台会重读 `ql_doors`**：小组件里的「同步」也会写这个 key，App 不重读就会一直显示内存里的旧列表，看起来就像数据不一致
+- **刷新改成三个 API 全打**：`reloadAll` + `reloadUserWidgets` + `reloadTestWidgets`，用户小组件与测试小组件是不同 kind，只打一个曾经出现过"就是不更新"

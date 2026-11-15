@@ -185,14 +185,36 @@ export const DEFAULT_BLE_SETTINGS: BleSettings = {
   timeoutMs: 12000,
 }
 
+/**
+ * 构建标记。每次改动与小组件数据/渲染相关的代码都改一下这个串，
+ * 小组件会把渲染时的标记写进 `ql_widget_diag`，App 里能直接看到
+ * "桌面上那个小组件跑的是哪一版代码"——排查"改了却完全没变化"时，这一条最省事。
+ */
+export const BUILD_TAG = "2026-11-16-a"
+
 /** 本地缓存键 */
-export const K = {
-  config: "ql_config",
+export const K = {  config: "ql_config",
   ble: "ql_ble",
   doors: "ql_doors",
   /** 用户手动排序 + 收藏（与 doors 分开存，同步门禁不会覆盖它） */
   doorPrefs: "ql_door_prefs",
+  /** 小组件每次渲染时写下的"我读到了什么"，用于排查 App / 小组件看到的数据不一致 */
+  widgetDiag: "ql_widget_diag",
   phone: "ql_phone",
   kcToken: "ql_token",
   kcSessionId: "ql_session_id",
 } as const
+
+/** 小组件渲染快照指纹 */
+export type WidgetDiag = {
+  ts: number
+  /** 本次渲染读到的门禁数量 */
+  count: number
+  ids: string[]
+  names: string[]
+  /** 渲染时用到的偏好规模，判断 prefs 是否也被读到了 */
+  orderLen: number
+  faveLen: number
+  /** 脚本版本，确认小组件跑的是不是当前版本 */
+  version: string
+}

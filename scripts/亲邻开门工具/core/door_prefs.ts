@@ -54,13 +54,13 @@ export function saveDoorPrefs(prefs: DoorPrefs): void {
  * 每次同步门禁后都要调一次，否则换小区/新增门禁会漏项。
  */
 export function normalizePrefs(ids: string[], prefs: DoorPrefs): DoorPrefs {
-  const alive = new Set(ids)
-  const favSet = new Set(prefs.favorites.filter(id => alive.has(id)))
+  const alive = new Set(ids.map(String))
+  const favSet = new Set(prefs.favorites.map(String).filter(id => alive.has(id)))
   const order: string[] = []
-  for (const id of prefs.order) {
+  for (const id of prefs.order.map(String)) {
     if (alive.has(id) && !order.includes(id)) order.push(id)
   }
-  for (const id of ids) {
+  for (const id of ids.map(String)) {
     if (!order.includes(id)) order.push(id)
   }
   return { order, favorites: order.filter(id => favSet.has(id)) }
@@ -69,10 +69,12 @@ export function normalizePrefs(ids: string[], prefs: DoorPrefs): DoorPrefs {
 /** 按偏好重排门禁数组（不改原数组） */
 export function arrangeDoors<T extends { doorControlId: string }>(doors: T[], prefs: DoorPrefs): T[] {
   const rank = new Map<string, number>()
-  prefs.order.forEach((id, i) => rank.set(id, i))
-  const favSet = new Set(prefs.favorites)
-  const weight = (d: T) => (favSet.has(d.doorControlId) ? 0 : 1)
-  const at = (d: T) => rank.get(d.doorControlId) ?? Number.MAX_SAFE_INTEGER
+  prefs.order.forEach((id, i) => rank.set(String(id), i))
+  const favSet = new Set(prefs.favorites.map(String))
+  // id 一律按字符串比较：Storage 里存的是 string，但接口/旧数据可能是 number，
+  // 一旦类型对不上，rank 全部 miss，排序就会整体错位（表现是"顺序不对、前几项跑没了"）
+  const weight = (d: T) => (favSet.has(String(d.doorControlId)) ? 0 : 1)
+  const at = (d: T) => rank.get(String(d.doorControlId)) ?? Number.MAX_SAFE_INTEGER
   return doors.slice().sort((a, b) => {
     const wa = weight(a)
     const wb = weight(b)
@@ -101,6 +103,24 @@ export function toggleFavorite(prefs: DoorPrefs, fullIds: string[], doorControlI
   }
   // 收藏：插到收藏组末尾（置顶到列表前段）
   return { order: [...favOrder, doorControlId, ...restOrder], favorites: [...favOrder, doorControlId] }
+}
+
+/**
+ * 修复早期版本留下的半截 order。
+ *
+ * 第一版 `toggleFavorite` 只把「操作过的门禁」写进 `order`，于是 `order` 里只有一两个 id，
+ * 其余门禁排名垫底（`arrangeDoors` 里 unknown → MAX_SAFE_INTEGER），
+ * 表现就是列表/小组件前几项忽然消失、顺序错乱。
+ *
+ * 判断依据：`order` 没有覆盖全部门禁 ⇒ 视为坏数据，用服务端顺序整体重建（收藏保留）。
+ * 正常数据永远是全覆盖的，所以不会误伤。
+ */
+export function healPrefs(ids: string[], prefs: DoorPrefs): DoorPrefs {
+  const all = ids.map(String)
+  const known = new Set(prefs.order.map(String))
+  if (all.every(id => known.has(id))) return normalizePrefs(all, prefs)
+  const favSet = new Set(prefs.favorites.map(String).filter(id => all.includes(id)))
+  return { order: all, favorites: all.filter(id => favSet.has(id)) }
 }
 
 /** ForEach.onMove 的标准重排实现 */
