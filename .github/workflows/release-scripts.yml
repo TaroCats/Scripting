@@ -1,0 +1,193 @@
+name: Release Scripts
+
+# scripts/ 下有项目更新时自动：
+#   1. 识别被改动的脚本项目
+#   2. 递增该项目 script.json 的 version（默认 patch，可用提交信息里的 [minor] / [major] 覆盖）
+#   3. 打包出可安装的 <项目>.scripting 与 <项目>.zip
+#   4. 提交版本号变更并创建 Release（标签 <项目>-v<版本>，产物在 Release 附件中）
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 只发布指定项目（scripts 下的目录名），留空表示发布全部项目
+        required: false
+        type: string
+      bump:
+        description: 版本号递增方式
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-scripts
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 检测变更的脚本项目
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          INPUT_PROJECT: ${{ inputs.project }}
+        run: |
+          set -euo pipefail
+          projects_file="$RUNNER_TEMP/projects.txt"
+          : > "$projects_file"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -n "${INPUT_PROJECT:-}" ]; then
+              printf '%s\n' "$INPUT_PROJECT" > "$projects_file"
+            else
+              for dir in scripts/*/; do
+                [ -d "$dir" ] || continue
+                basename "$dir"
+              done | sort > "$projects_file"
+            fi
+          else
+            base="$BEFORE_SHA"
+            if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+              base="$(git rev-parse "${AFTER_SHA}^" 2>/dev/null || true)"
+            fi
+            if [ -n "$base" ]; then
+              changed="$(git -c core.quotePath=false diff --name-only "$base" "$AFTER_SHA" -- scripts || true)"
+            else
+              changed="$(git -c core.quotePath=false ls-files scripts)"
+            fi
+            printf '%s\n' "$changed" | awk -F/ 'NF > 1 && $1 == "scripts" { print $2 }' | sort -u > "$projects_file"
+          fi
+
+          # 只保留真正包含 script.json 的项目目录
+          filtered="$RUNNER_TEMP/projects.filtered.txt"
+          : > "$filtered"
+          while IFS= read -r project; do
+            [ -n "$project" ] || continue
+            if [ -f "scripts/$project/script.json" ]; then
+              printf '%s\n' "$project" >> "$filtered"
+            else
+              echo "跳过 scripts/${project}：缺少 script.json"
+            fi
+          done < "$projects_file"
+          mv "$filtered" "$projects_file"
+
+          count="$(wc -l < "$projects_file" | tr -d '[:space:]')"
+          echo "待发布项目：$count 个"
+          cat "$projects_file"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: 递增版本号并打包
+        if: steps.detect.outputs.count != '0'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+          BUMP_INPUT: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          bump="${BUMP_INPUT:-patch}"
+          if [ "$EVENT_NAME" = "push" ]; then
+            case "$HEAD_MESSAGE" in
+              *"[major]"*) bump=major ;;
+              *"[minor]"*) bump=minor ;;
+            esac
+          fi
+          echo "版本号递增方式：$bump"
+
+          versions_file="$RUNNER_TEMP/versions.tsv"
+          : > "$versions_file"
+          mkdir -p dist
+
+          while IFS= read -r project; do
+            [ -n "$project" ] || continue
+            script_json="scripts/$project/script.json"
+
+            current="$(node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv.at(-1),"utf8"));process.stdout.write(String(j.version??""))' "$script_json")"
+            next="$(node -e 'const cur=process.argv.at(-2)||"";const type=process.argv.at(-1);const m=/^(\d+)\.(\d+)\.(\d+)/.exec(cur);let major=0,minor=0,patch=0;if(m){major=+m[1];minor=+m[2];patch=+m[3]}if(type==="major"){major+=1;minor=0;patch=0}else if(type==="minor"){minor+=1;patch=0}else{patch+=1}process.stdout.write(`${major}.${minor}.${patch}`)' "$current" "$bump")"
+            node -e 'const fs=require("fs");const file=process.argv.at(-2);const next=process.argv.at(-1);let source=fs.readFileSync(file,"utf8");const pattern=/("version"\s*:\s*")[^"]*(")/;if(pattern.test(source)){source=source.replace(pattern,`$1${next}$2`)}else{source=source.replace(/^\{/,`{\n  "version": "${next}",`)}fs.writeFileSync(file,source)' "$script_json" "$next"
+
+            base="dist/$project"
+            rm -rf "$base"
+            mkdir -p "$base"
+            # .scripting 与 .zip 内容一致：项目根目录下的文件直接位于压缩包根层
+            (
+              cd "scripts/$project"
+              zip -r -X -q "$GITHUB_WORKSPACE/$base/$project.scripting" . -x '.DS_Store' '*/.DS_Store' '__MACOSX/*'
+            )
+            cp "$base/$project.scripting" "$base/$project.zip"
+
+            printf '%s\t%s\n' "$project" "$next" >> "$versions_file"
+            echo "已打包 dist/${project}/${project}.scripting（${current} -> ${next}）"
+          done < "$RUNNER_TEMP/projects.txt"
+
+      - name: 提交版本号变更
+        if: steps.detect.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- 'scripts/*/script.json'
+          if git diff --cached --quiet; then
+            echo "script.json 无变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "chore(release): 更新脚本版本号 [skip ci]"
+          git push || { git pull --rebase --autostash && git push; }
+
+      - name: 发布到 Releases
+        if: steps.detect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r project version; do
+            [ -n "$project" ] || continue
+            tag="$project-v$version"
+            base="dist/$project"
+            notes="$base/notes.md"
+
+            zip_url="$(node -e 'process.stdout.write(encodeURI(process.argv.at(-1)))' "https://github.com/$REPO/releases/download/$tag/$project.zip")"
+            {
+              echo "## $project v$version"
+              echo
+              echo "- 安装：把 \`$project.scripting\` 传到 iPhone，轻点文件即可由 Scripting 导入"
+              echo "- 远程更新 ZIP：$zip_url"
+              echo
+              echo "构建自 \`${AFTER_SHA:0:7}\`。"
+            } > "$notes"
+
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "$base/$project.scripting" "$base/$project.zip" --clobber
+              gh release edit "$tag" --notes-file "$notes"
+            else
+              gh release create "$tag" "$base/$project.scripting" "$base/$project.zip" \
+                --title "$project v$version" \
+                --notes-file "$notes" \
+                --latest=false
+            fi
+
+            echo "- $project v$version → https://github.com/$REPO/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/versions.tsv"
