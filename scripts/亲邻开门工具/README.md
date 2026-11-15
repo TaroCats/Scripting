@@ -67,8 +67,13 @@
 亲邻开门工具/
 ├── script.json
 ├── index.tsx            单页 UI：账号 / 门禁 / 蓝牙 / 协议 / 日志
+├── widget.tsx           小组件入口（present 前一次性读好数据）
+├── widget_views.tsx     各尺寸小组件视图
+├── widget_shared.ts     小组件 / AppIntent 共用数据层（只走远程开门）
+├── app_intents.tsx      小组件点击意图
 └── core/
     ├── protocol.ts      端点常量（全部来自二进制字符串）+ 配置类型
+    ├── door_prefs.ts    门禁排序 / 收藏（与 doors 分开存，同步不覆盖）
     ├── aes.ts           AES-128-ECB + PKCS5（宿主只给 AES-GCM）
     ├── crypto.ts        MD5 签名 + 请求体加密
     ├── session.ts       Keychain 会话（first_unlock_this_device）
@@ -806,3 +811,55 @@ buildEncryptedFrame(keyHex, dataHex, xorHex?)
 3. `FC26A` 前缀随机串如何参与密钥生成
 
 这三项不影响远程开门；蓝牙要真正跑通，还需确认业务数据的字节布局。
+
+---
+
+## 附十五：门禁列表排序 + 收藏（小组件按此顺序展示）
+
+### 为什么单独存一份偏好
+
+`queryUserDoorByCache` 每次同步都会把服务端顺序写进 `ql_doors`，用户拖出来的顺序会被直接冲掉。
+所以排序和收藏落在 **`ql_door_prefs`**（`core/door_prefs.ts`）：
+
+```ts
+type DoorPrefs = { order: string[]; favorites: string[] }
+```
+
+同步门禁后调 `normalizePrefs(ids, prefs)`：已经消失的 id 剔除，新增的门禁接到未收藏组末尾。
+App 和小组件（`widget_shared.syncDoors`）都走这一步，不会因为换小区/新增门禁漏项。
+
+### 展示规则（App / 小组件 / AppIntent 共用 `arrangeDoors()`）
+
+1. **收藏组在前**，组内按用户顺序
+2. 未收藏组在后，组内按用户顺序
+3. 从没记录过的新门禁排在未收藏组末尾，保持服务端给的相对顺序
+
+### App 侧：新增「门禁」Tab
+
+```
+TabView
+├── ① 开门    大圆钮（门禁菜单已按新顺序排列，★ 前缀标出收藏项）
+├── ② 门禁    排序 + 收藏（本版新增）
+├── ③ 日志
+└── ④ 我的
+```
+
+- 每行左侧 ☆/★ 切换收藏，点一下立即置顶
+- 右上角「编辑」进入系统拖拽模式，收藏组和未收藏组各自拖，不会互相串位
+  （分成两个 `ForEach` 就是为了避免"拖过界又被弹回去"）
+- 底部：同步门禁列表 / 恢复默认顺序（收藏保留）
+- 每次改完都调 `Widget.reloadAll()`，小组件立刻跟着变
+
+### 小组件侧
+
+- 中尺寸取前 3 项、大尺寸取前 5 项，按 `arrangeDoors()` 的顺序依次展示
+- 收藏项前有黄色 ★
+- 小尺寸与锁屏（`accessoryRectangular` / `accessoryCircular`）显示**列表第一项**
+  —— 也就是"第一个收藏"，这就是收藏的实务含义：把常用的钉到小组件上
+
+### 验证
+
+`core/door_prefs.ts` 是纯函数，用 stub `Storage`（写入后 `Object.freeze`，模拟运行时冻结对象）
+跑了 13 项自测：空偏好、收藏置顶、取消收藏回落到末尾、两组内分别拖动、
+存取往返、冻结对象不被污染、同步校正（删旧/加新）、新门禁落位、服务端顺序被用户顺序覆盖 —— 全部通过。
+另外 `tsc --noEmit` 对 14 个文件零错误。

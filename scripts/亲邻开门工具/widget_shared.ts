@@ -11,6 +11,7 @@ import {
   SessionExpiredError,
 } from "./core/api"
 import { DEFAULT_CONFIG, K, type ApiConfig, type DoorKey } from "./core/protocol"
+import { loadDoorPrefs, normalizePrefs, saveDoorPrefs } from "./core/door_prefs"
 import { isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
 
 export type LogEntry = { ts: number; text: string }
@@ -139,16 +140,16 @@ export async function syncDoors(): Promise<OpResult> {
   }
   try {
     const list = await fetchUserDoors({ cfg, session })
-    Storage.set(
-      K.doors,
-      list.map(d => ({
-        doorControlId: d.doorControlId,
-        doorControlName: d.doorControlName,
-        macAddress: d.macAddress,
-        hasBluetoothModule: d.hasBluetoothModule,
-        online: d.online,
-      }))
-    )
+    const doors: DoorKey[] = list.map(d => ({
+      doorControlId: d.doorControlId,
+      doorControlName: d.doorControlName,
+      macAddress: d.macAddress,
+      hasBluetoothModule: d.hasBluetoothModule,
+      online: d.online,
+    }))
+    Storage.set(K.doors, doors)
+    // 服务端顺序会覆盖本地顺序，这里把 App 里排好的顺序/收藏套回去
+    saveDoorPrefs(normalizePrefs(doors.map(d => d.doorControlId), loadDoorPrefs()))
     const text = `已同步 ${list.length} 个门禁`
     appendLog(`[小组件] ${text}`)
     return { ok: true, text }

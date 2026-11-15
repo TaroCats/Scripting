@@ -1,6 +1,8 @@
 import {
   Button,
   Circle,
+  EditButton,
+  ForEach,
   HStack,
   Image,
   List,
@@ -20,6 +22,7 @@ import {
   Widget,
   type WidgetFamily,
   ZStack,
+  useMemo,
   useObservable,
   useState,
 } from "scripting"
@@ -38,6 +41,15 @@ import {
   type BleSettings,
   type DoorKey,
 } from "./core/protocol"
+import {
+  arrangeDoors,
+  loadDoorPrefs,
+  moveWithin,
+  normalizePrefs,
+  saveDoorPrefs,
+  toggleFavorite,
+  type DoorPrefs,
+} from "./core/door_prefs"
 import { clearSession, isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
 
 /** 深拷贝 —— Storage.get 返回的对象可能被运行时冻结，写入前必须复制 */
@@ -111,6 +123,9 @@ function App(props: { initialLog: string }) {
   const [ble, setBle] = useState<BleSettings>(loadBle())
   const [session, setSession] = useState<Session | null>(loadSession())
   const [doors, setDoors] = useState<DoorKey[]>(loadDoors())
+  const [prefs, setPrefs] = useState<DoorPrefs>(loadDoorPrefs())
+  /** 展示用顺序：收藏在前，组内按用户拖动的顺序 */
+  const arrangedDoors = useMemo(() => arrangeDoors(doors, prefs), [doors, prefs])
   const [selectedDoorId, setSelectedDoorId] = useState<string>(
     (Storage.get<string>("ql_selected_door") as string) ?? ""
   )
@@ -176,13 +191,57 @@ function App(props: { initialLog: string }) {
   function persistDoors(next: DoorKey[]) {
     setDoors(next)
     Storage.set(K.doors, next)
-    // 自动选中第一个
-    if (next.length > 0 && !next.some(d => d.doorControlId === selectedDoorId)) {
-      setSelectedDoorId(next[0].doorControlId)
+    // 同步会覆盖服务端顺序，这里把用户排序/收藏套回去（新增的门禁落到未收藏组末尾）
+    const np = normalizePrefs(next.map(d => d.doorControlId), prefs)
+    setPrefs(np)
+    saveDoorPrefs(np)
+    const first = arrangeDoors(next, np)[0]
+    if (first && !next.some(d => d.doorControlId === selectedDoorId)) {
+      setSelectedDoorId(first.doorControlId)
+      Storage.set("ql_selected_door", first.doorControlId)
     }
   }
 
-  const selectedDoor = doors.find(d => d.doorControlId === selectedDoorId) ?? doors[0]
+  function commitPrefs(next: DoorPrefs) {
+    setPrefs(next)
+    saveDoorPrefs(next)
+    // 排序/收藏是小组件的直接输入，改完立刻刷一次时间线
+    try { Widget.reloadAll() } catch { /* 预览等场景下不可用，忽略 */ }
+  }
+
+  function onToggleFavorite(doorControlId: string) {
+    const ids = arrangedDoors.map(d => d.doorControlId)
+    commitPrefs(toggleFavorite(prefs, ids, doorControlId))
+  }
+
+  function onReorder(segment: "fav" | "other", indices: number[], newOffset: number) {
+    const favSet = new Set(prefs.favorites)
+    const favs = arrangedDoors.filter(d => favSet.has(d.doorControlId))
+    const others = arrangedDoors.filter(d => !favSet.has(d.doorControlId))
+    const nextFavs = segment === "fav" ? moveWithin(favs, indices, newOffset) : favs
+    const nextOthers = segment === "other" ? moveWithin(others, indices, newOffset) : others
+    commitPrefs({
+      order: [...nextFavs, ...nextOthers].map(d => d.doorControlId),
+      favorites: prefs.favorites,
+    })
+  }
+
+  function onResetOrder() {
+    const ids = doors.map(d => d.doorControlId)
+    commitPrefs({ order: ids, favorites: prefs.favorites })
+    say("已按服务端顺序重排（收藏保留）")
+  }
+
+  const favDoors = useMemo(
+    () => arrangedDoors.filter(d => prefs.favorites.includes(d.doorControlId)),
+    [arrangedDoors, prefs]
+  )
+  const otherDoors = useMemo(
+    () => arrangedDoors.filter(d => !prefs.favorites.includes(d.doorControlId)),
+    [arrangedDoors, prefs]
+  )
+
+  const selectedDoor = arrangedDoors.find(d => d.doorControlId === selectedDoorId) ?? arrangedDoors[0]
 
   function phoneValid(): boolean {
     return /^1\d{10}$/.test(phone)
@@ -367,6 +426,39 @@ function App(props: { initialLog: string }) {
     }
   }
 
+  /** 门禁列表行：左侧 ☆/★ 切换收藏，右侧显示在线状态与当前选中项 */
+  function doorRow(d: DoorKey) {
+    const fav = prefs.favorites.includes(d.doorControlId)
+    const isSelected = selectedDoor?.doorControlId === d.doorControlId
+    return (
+      <HStack key={d.doorControlId} spacing={10}>
+        <Button buttonStyle="plain" action={() => onToggleFavorite(d.doorControlId)}>
+          <Image
+            systemName={fav ? "star.fill" : "star"}
+            font="body"
+            foregroundStyle={fav ? "systemYellow" : "tertiaryLabel"}
+            frame={{ width: 32, height: 32 }}
+          />
+        </Button>
+        <VStack alignment="leading" spacing={2}>
+          <Text font="body" lineLimit={1}>{d.doorControlName}</Text>
+          <Text font="caption2" foregroundStyle="tertiaryLabel" lineLimit={1}>
+            {`${d.doorControlId} · ${d.online === "offline" ? "离线" : "在线"}${d.hasBluetoothModule === false ? " · 远程" : " · 蓝牙"}`}
+          </Text>
+        </VStack>
+        <Spacer />
+        {isSelected ? (
+          <Image systemName="checkmark.circle.fill" font="caption" foregroundStyle="systemBlue" />
+        ) : null}
+        <Image
+          systemName="circle.fill"
+          font="caption2"
+          foregroundStyle={d.online === "offline" ? "systemRed" : "systemGreen"}
+        />
+      </HStack>
+    )
+  }
+
   // ── 未登录：登录页 ──
   if (!session) {
     return (
@@ -487,7 +579,7 @@ function App(props: { initialLog: string }) {
             <VStack alignment="center" spacing={12}>
               <Spacer />
               <HStack spacing={32}>
-                {doors.length > 0 ? (
+                {arrangedDoors.length > 0 ? (
                   <Menu
                     title={selectedDoor?.doorControlName ?? "选择门禁"}
                     systemImage="chevron.up.chevron.down"
@@ -495,10 +587,10 @@ function App(props: { initialLog: string }) {
                     controlSize="small"
                     frame={{ height: 28 }}
                   >
-                    {doors.map(d => (
+                    {arrangedDoors.map(d => (
                       <Button
                         key={d.doorControlId}
-                        title={`${d.doorControlName}${d.online === "offline" ? "（离线）" : ""}`}
+                        title={`${prefs.favorites.includes(d.doorControlId) ? "★ " : ""}${d.doorControlName}${d.online === "offline" ? "（离线）" : ""}`}
                         action={() => {
                           setSelectedDoorId(d.doorControlId)
                           Storage.set("ql_selected_door", d.doorControlId)
@@ -528,7 +620,81 @@ function App(props: { initialLog: string }) {
         </NavigationStack>
       </Tab>
 
-      {/* ② 日志 */}
+      {/* ② 门禁 —— 排序 + 收藏，小组件按这个顺序依次展示 */}
+      <Tab title="门禁" systemImage="list.bullet">
+        <NavigationStack>
+          <List
+            navigationTitle="门禁列表"
+            navigationBarTitleDisplayMode="large"
+            toast={{
+              message: toastMsg,
+              isPresented: toastVisible,
+              duration: 2.5,
+              position: "bottom",
+            }}
+            toolbar={{
+              topBarTrailing: [<EditButton key="edit" />],
+            }}
+          >
+            <Section
+              header={<SectionTitle icon="star.fill" title="收藏（置顶）" tint="systemYellow" />}
+              footer={
+                <Text font="caption" foregroundStyle="tertiaryLabel">
+                  {favDoors.length > 0
+                    ? `收藏 ${favDoors.length} 项，按顺序排在最前；小尺寸小组件显示第一项。`
+                    : "点左侧 ☆ 收藏常用门禁，收藏后自动置顶，并优先出现在小组件里。"}
+                </Text>
+              }
+            >
+              {favDoors.length > 0 ? (
+                <ForEach
+                  count={favDoors.length}
+                  itemBuilder={i => doorRow(favDoors[i])}
+                  onMove={(indices, newOffset) => onReorder("fav", indices, newOffset)}
+                />
+              ) : (
+                <Text font="caption" foregroundStyle="secondaryLabel">（暂无收藏）</Text>
+              )}
+            </Section>
+
+            <Section
+              header={<SectionTitle icon="door.left.hand.open" title="其他门禁" />}
+              footer={
+                <Text font="caption" foregroundStyle="tertiaryLabel">
+                  点右上角「编辑」后拖动排序。顺序与收藏只存在本机，同步门禁不会覆盖；新增的门禁会追加到本组末尾。
+                </Text>
+              }
+            >
+              {otherDoors.length > 0 ? (
+                <ForEach
+                  count={otherDoors.length}
+                  itemBuilder={i => doorRow(otherDoors[i])}
+                  onMove={(indices, newOffset) => onReorder("other", indices, newOffset)}
+                />
+              ) : (
+                <Text font="caption" foregroundStyle="secondaryLabel">
+                  {arrangedDoors.length > 0 ? "（全部门禁都已收藏）" : "（暂无门禁，先同步一次）"}
+                </Text>
+              )}
+            </Section>
+
+            <Section footer={
+              <Text font="caption" foregroundStyle="tertiaryLabel">
+                小组件（中/大尺寸）按「收藏 → 其他」的顺序依次展示；小尺寸与锁屏显示列表第一项。
+              </Text>
+            }>
+              <Button
+                title={loadingDoors ? "同步中…" : "同步门禁列表"}
+                systemImage="arrow.clockwise"
+                action={refreshDoors}
+              />
+              <Button title="恢复默认顺序" role="destructive" action={onResetOrder} />
+            </Section>
+          </List>
+        </NavigationStack>
+      </Tab>
+
+      {/* ③ 日志 */}
       <Tab title="日志" systemImage="text.alignleft">
         <NavigationStack>
           <List
@@ -572,7 +738,7 @@ function App(props: { initialLog: string }) {
         </NavigationStack>
       </Tab>
 
-      {/* ③ 我的 */}
+      {/* ④ 我的 */}
       <Tab title="我的" systemImage="person.crop.circle">
         <NavigationStack>
           <List

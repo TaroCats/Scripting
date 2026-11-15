@@ -9,8 +9,11 @@ import type { LogEntry } from "./widget_shared"
 
 export type WidgetData = {
   session: Session | null
+  /** 已按 App 里的排序 + 收藏排好序（收藏在前） */
   doors: DoorKey[]
+  /** 列表第一项：小尺寸 / 锁屏用 */
   selected: DoorKey | null
+  favorites: string[]
   lastLog: LogEntry | null
 }
 
@@ -51,7 +54,7 @@ function EmptyHint({ data }: { data: WidgetData }) {
   )
 }
 
-function DoorRow(props: { door: DoorKey; showOnline?: boolean }) {
+function DoorRow(props: { door: DoorKey; showOnline?: boolean; fav?: boolean }) {
   const d = props.door
   return (
     <HStack spacing={10}>
@@ -65,7 +68,10 @@ function DoorRow(props: { door: DoorKey; showOnline?: boolean }) {
         />
       </Button>
       <VStack alignment="leading" spacing={1}>
-        <Text font="subheadline" bold lineLimit={1}>{d.doorControlName}</Text>
+        <HStack spacing={4}>
+          {props.fav ? <Image systemName="star.fill" font="caption2" foregroundStyle="systemYellow" /> : null}
+          <Text font="subheadline" bold lineLimit={1}>{d.doorControlName}</Text>
+        </HStack>
         <Text font="caption2" foregroundStyle="tertiaryLabel" lineLimit={1}>
           {d.online === "offline" ? "设备离线" : d.hasBluetoothModule === false ? "远程门禁" : "支持蓝牙"}
         </Text>
@@ -85,12 +91,16 @@ function DoorRow(props: { door: DoorKey; showOnline?: boolean }) {
 export function SmallWidget({ data }: { data: WidgetData }) {
   const door = data.selected
   const ready = Boolean(door && data.session)
+  const fav = Boolean(door && data.favorites.includes(door.doorControlId))
   return (
     <VStack alignment="leading" padding={12} spacing={6}>
       <Header data={data} />
-      <Text font="title3" bold lineLimit={1}>
-        {door?.doorControlName ?? "未设置门禁"}
-      </Text>
+      <HStack spacing={4}>
+        {fav ? <Image systemName="star.fill" font="caption" foregroundStyle="systemYellow" /> : null}
+        <Text font="title3" bold lineLimit={1}>
+          {door?.doorControlName ?? "未设置门禁"}
+        </Text>
+      </HStack>
       <Spacer />
       {ready && door ? (
         <Button intent={intentOf(door)} buttonStyle="plain">
@@ -124,7 +134,14 @@ export function MediumWidget({ data }: { data: WidgetData }) {
         </Button>
       </HStack>
       {doors.length > 0 ? (
-        doors.map(d => <DoorRow key={d.doorControlId} door={d} showOnline />)
+        doors.map(d => (
+          <DoorRow
+            key={d.doorControlId}
+            door={d}
+            showOnline
+            fav={data.favorites.includes(d.doorControlId)}
+          />
+        ))
       ) : (
         <EmptyHint data={data} />
       )}
@@ -146,7 +163,14 @@ export function LargeWidget({ data }: { data: WidgetData }) {
       </HStack>
       {doors.length > 0 ? (
         <VStack alignment="leading" spacing={10} frame={{ maxWidth: "infinity" }}>
-          {doors.map(d => <DoorRow key={d.doorControlId} door={d} showOnline />)}
+          {doors.map(d => (
+            <DoorRow
+              key={d.doorControlId}
+              door={d}
+              showOnline
+              fav={data.favorites.includes(d.doorControlId)}
+            />
+          ))}
         </VStack>
       ) : (
         <EmptyHint data={data} />

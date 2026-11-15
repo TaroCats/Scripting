@@ -190,6 +190,8 @@ export const K = {
   config: "ql_config",
   ble: "ql_ble",
   doors: "ql_doors",
+  /** 用户手动排序 + 收藏（与 doors 分开存，同步门禁不会覆盖它） */
+  doorPrefs: "ql_door_prefs",
   phone: "ql_phone",
   kcToken: "ql_token",
   kcSessionId: "ql_session_id",

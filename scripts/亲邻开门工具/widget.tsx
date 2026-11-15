@@ -8,12 +8,12 @@
  * 小组件只支持远程开门，蓝牙开门请回到主 App。
  */
 import { AccessoryWidgetBackground, Script, Text, Widget, ZStack } from "scripting"
+import { arrangeDoors, loadDoorPrefs } from "./core/door_prefs"
 import { loadSession } from "./core/session"
 import {
   buildReloadDate,
   loadDoors,
   loadLogs,
-  loadSelectedDoorId,
 } from "./widget_shared"
 import {
   CircularWidget,
@@ -51,15 +51,16 @@ function Root({ data }: { data: WidgetData }) {
 function runWidget() {
   // ensureSession 里会联网，渲染阶段只读本地会话；真正续期在 intent 里做
   const session = loadSession()
-  const doors = loadDoors()
-  const selectedId = loadSelectedDoorId()
-  const selected = doors.find(d => d.doorControlId === selectedId) ?? doors[0] ?? null
+  const prefs = loadDoorPrefs()
+  // 顺序完全由 App 里的「排序 + 收藏」决定：收藏在前，组内按手动顺序
+  const doors = arrangeDoors(loadDoors(), prefs)
   const logs = loadLogs()
 
   const data: WidgetData = {
     session,
     doors,
-    selected,
+    selected: doors[0] ?? null,
+    favorites: prefs.favorites,
     lastLog: logs[0] ?? null,
   }
 
