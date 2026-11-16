@@ -1,46 +1,45 @@
 {
-  "version" : "1.1.0",
-  "intentInputTypes" : [
-
-  ],
-  "author" : {
-    "homepage" : null,
-    "name" : "TARO",
-    "email" : "i@taro.cat"
+  "version": "1.1.1",
+  "intentInputTypes": [],
+  "author": {
+    "homepage": null,
+    "name": "TARO",
+    "email": "i@taro.cat"
   },
-  "remoteResource" : null,
-  "localizedDescriptions" : {
-    "en" : "Magpie quota and gateway panel: provider allowances on your Home Screen.",
-    "ru" : "",
-    "es" : "",
-    "de" : "",
-    "it" : "",
-    "fr" : "",
-    "ja" : "",
-    "pt" : "",
-    "zh" : "magpie 供应商余量与网关面板，桌面/锁屏小组件一屏看完。"
+  "remoteResource": {
+    "url": "https://github.com/TaroCats/Scripting/releases/download/magpanel/magpanel.zip",
+    "autoUpdateInterval": 3600
   },
-  "permissions" : null,
-  "icon" : "chart.bar.xaxis",
-  "runInApp" : false,
-  "color" : "rgba(243, 159, 68,1)",
-  "localizedNames" : {
-    "en" : "MagPanel",
-    "ru" : "",
-    "es" : "",
-    "de" : "",
-    "it" : "",
-    "fr" : "",
-    "ja" : "",
-    "pt" : "",
-    "zh" : "MagPanel"
+  "localizedDescriptions": {
+    "en": "Magpie quota and gateway panel: provider allowances on your Home Screen.",
+    "ru": "",
+    "es": "",
+    "de": "",
+    "it": "",
+    "fr": "",
+    "ja": "",
+    "pt": "",
+    "zh": "magpie 供应商余量与网关面板，桌面/锁屏小组件一屏看完。"
   },
-  "remoteDefinitionId" : null,
-  "contributors" : [
-
-  ],
-  "name" : "MagPanel",
-  "entry" : "index.tsx",
-  "description" : "magpie 供应商余量与网关状态小组件；在 App 内配置网关地址、key 与显示内容。",
-  "iconImage" : null
+  "permissions": null,
+  "icon": "chart.bar.xaxis",
+  "runInApp": false,
+  "color": "rgba(243, 159, 68,1)",
+  "localizedNames": {
+    "en": "MagPanel",
+    "ru": "",
+    "es": "",
+    "de": "",
+    "it": "",
+    "fr": "",
+    "ja": "",
+    "pt": "",
+    "zh": "MagPanel"
+  },
+  "remoteDefinitionId": null,
+  "contributors": [],
+  "name": "MagPanel",
+  "entry": "index.tsx",
+  "description": "magpie 供应商余量与网关状态小组件；在 App 内配置网关地址、key 与显示内容。",
+  "iconImage": null
 }
