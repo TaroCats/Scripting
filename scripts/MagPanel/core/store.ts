@@ -15,6 +15,8 @@ import type { PanelConfig, PanelSnapshot } from "./types"
 
 export const DEFAULT_CONFIG: PanelConfig = {
   baseURL: "http://127.0.0.1:3425",
+  title: "magpie",
+  showTitleIcon: true,
   token: "",
   showGateway: true,
   showIcons: true,
@@ -81,6 +83,8 @@ export function normalizeConfig(raw: Partial<PanelConfig> | null): PanelConfig {
   const baseURL = String(src.baseURL ?? DEFAULT_CONFIG.baseURL).trim() || DEFAULT_CONFIG.baseURL
   return {
     baseURL,
+    title: (String(src.title ?? DEFAULT_CONFIG.title).trim() || DEFAULT_CONFIG.title).slice(0, 24),
+    showTitleIcon: src.showTitleIcon !== false,
     token: String(src.token ?? "").trim(),
     showGateway: src.showGateway !== false,
     showIcons: src.showIcons !== false,

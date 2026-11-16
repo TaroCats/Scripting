@@ -139,27 +139,87 @@ export function providerShort(provider: string, fallback = ""): string {
 
 const WINDOW_LABELS: Record<string, string> = {
   allowance: "额度",
-  "chat requests": "对话",
+  usage: "用量",
+  quota: "配额",
+  credits: "积分",
+  "extra credits": "额外积分",
+  "total credits": "积分合计",
+  "add-on credits": "附加积分",
+  "dedicated credits": "专属积分",
+  "shared credits": "共享积分",
+  "monthly credits": "月度积分",
+  "purchased credits": "已购积分",
+  "prepaid credits": "预付积分",
+  "promotional credits": "赠送积分",
+  "promotional credit": "赠送积分",
+  "free model tokens": "免费模型令牌",
+  "free models": "免费模型",
+  "chat requests": "对话请求",
+  "chat completions": "对话补全",
   completions: "补全",
   "premium requests": "高级请求",
-  month: "月",
-  weekly: "周",
+  requests: "请求数",
+  ondemand: "按量",
+  "on demand": "按量",
+  images: "图片",
+  image: "图片",
+  daily: "每日",
+  weekly: "每周",
+  monthly: "每月",
   week: "周",
-  daily: "日",
   day: "日",
+  month: "月",
+  "search requests": "搜索请求",
+  searches: "搜索",
+  tokens: "令牌",
 }
 
-/** 窗口名中文化：5 hours → 5 小时 */
+/** 数字 + 时间单位：5 hours / 7 days / 30 minutes / 5-hour window */
+function translateSpan(raw: string): string | null {
+  const key = raw.toLowerCase().trim()
+  const m = key.match(/^(\d+)\s*-?\s*(hour|hours|day|days|minute|minutes|week|weeks|month|months?)(\s+window)?$/)
+  if (!m) return null
+  const n = m[1]
+  const unit = m[2]
+  const zh = unit.startsWith("hour")
+    ? "小时"
+    : unit.startsWith("day")
+      ? "天"
+      : unit.startsWith("minute")
+        ? "分钟"
+        : unit.startsWith("week")
+          ? "周"
+          : "个月"
+  return `${n} ${zh}${m[3] ? "窗口" : ""}`
+}
+
+/** 窗口名中文化：5 hours → 5 小时，Total credits → 积分合计，"xxx tokens (est.)" → xxx 令牌（估算） */
 export function windowLabel(name: string): string {
   const raw = (name || "").trim()
   if (!raw) return "额度"
   const key = raw.toLowerCase()
-  if (WINDOW_LABELS[key]) return WINDOW_LABELS[key]
-  const hours = key.match(/^(\d+)\s*hours?$/)
-  if (hours) return `${hours[1]} 小时`
-  const days = key.match(/^(\d+)\s*days?$/)
-  if (days) return `${days[1]} 天`
-  const mins = key.match(/^(\d+)\s*minutes?$/)
-  if (mins) return `${mins[1]} 分钟`
+
+  const exact = WINDOW_LABELS[key]
+  if (exact) return exact
+
+  const span = translateSpan(raw)
+  if (span) return span
+
+  // "xxx credits"：前缀能翻就翻，翻不了保留原文（大小写照抄，别把 Kiro 写成 kiro）
+  const credits = raw.match(/^(.+?)\s+credits?$/i)
+  if (credits) {
+    const head = credits[1].trim()
+    const zh = WINDOW_LABELS[head.toLowerCase()] ?? head
+    return /[\u4e00-\u9fa5]/.test(zh) ? `${zh}积分` : `${zh} 积分`
+  }
+
+  // "xxx tokens" / "xxx tokens (est.)"：模型名保留，单位中文化
+  const tokens = raw.match(/^(.*?)\s*tokens?\s*(\(est\.\))?$/i)
+  if (tokens) {
+    const head = tokens[1].trim()
+    const est = tokens[2] ? "（估算）" : ""
+    return head ? `${head} 令牌${est}` : `令牌${est}`
+  }
+
   return raw
 }

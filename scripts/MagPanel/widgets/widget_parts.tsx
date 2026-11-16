@@ -51,16 +51,17 @@ export function Header(props: {
   stale: boolean
   count: number
   clock: string
-  showIcons: boolean
+  title: string
+  showTitleIcon: boolean
 }) {
-  const { snapshot, stale, count, clock, showIcons } = props
+  const { snapshot, stale, count, clock, title, showTitleIcon } = props
   const broken = Boolean(snapshot.error)
   const tone: KeywordsColor = broken ? "systemRed" : stale ? "systemOrange" : "tertiaryLabel"
   return (
     <HStack spacing={4}>
-      {showIcons ? <MagpieIcon /> : <StatusDot ok={!broken && !stale} />}
+      {showTitleIcon ? <MagpieIcon /> : <StatusDot ok={!broken && !stale} />}
       <Text font="caption2" bold lineLimit={1}>
-        magpie
+        {title}
       </Text>
       <Text font="caption2" foregroundStyle="tertiaryLabel" lineLimit={1}>
         {broken ? "离线" : `${count} 卡`}

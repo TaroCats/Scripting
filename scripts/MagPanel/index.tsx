@@ -216,6 +216,8 @@ function App() {
           header={<SectionTitle icon="slider.horizontal.3" title="显示内容" />}
           footer={<Hint>这些开关只影响小组件怎么画，不改变 magpie 的配置。关掉「显示账户信息」会隐藏套餐名和账号（邮箱），小组件上只剩供应商与余量。</Hint>}
         >
+          <TextField title="小组件标题" value={cfg.title} onChanged={v => update({ title: v })} prompt="magpie" />
+          <Toggle title="标题显示喜鹊图标" value={cfg.showTitleIcon} onChanged={v => update({ showTitleIcon: v })} />
           <Toggle title="显示网关信息" value={cfg.showGateway} onChanged={v => update({ showGateway: v })} />
           <Toggle title="显示供应商图标" value={cfg.showIcons} onChanged={v => update({ showIcons: v })} />
           <Toggle title="显示账户信息" value={cfg.showAccount} onChanged={v => update({ showAccount: v })} />

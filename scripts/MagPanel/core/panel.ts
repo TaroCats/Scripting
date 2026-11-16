@@ -190,7 +190,7 @@ export function toGateway(limit: WireLimit | null, modelCount: number | null, cf
   const bits: string[] = []
   const shares: number[] = []
   if (typeof part.tokenLimit === "number" && part.tokenLimit > 0) {
-    bits.push(`${fmtTokens(part.tokens ?? 0)}/${fmtTokens(part.tokenLimit)} tok`)
+    bits.push(`${fmtTokens(part.tokens ?? 0)}/${fmtTokens(part.tokenLimit)} 令牌`)
     shares.push(clamp(((part.tokensLeft ?? part.tokenLimit - (part.tokens ?? 0)) / part.tokenLimit) * 100, 0, 100))
   }
   if (typeof part.costLimit === "number" && part.costLimit > 0) {

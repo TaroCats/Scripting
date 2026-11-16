@@ -148,6 +148,10 @@ export type SortMode = "urgent" | "source"
 
 export type PanelConfig = {
   baseURL: string
+  /** 小组件标题栏文字，默认 magpie */
+  title: string
+  /** 标题栏左侧的喜鹊图标是否显示 */
+  showTitleIcon: boolean
   /** 网关 key；本机回环可以留空 */
   token: string
   showGateway: boolean

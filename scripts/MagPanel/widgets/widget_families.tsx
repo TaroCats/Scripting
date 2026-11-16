@@ -32,7 +32,14 @@ export function SmallView({ data }: { data: WidgetData }) {
   const cards = data.cards.slice(0, 3)
   return (
     <VStack alignment="leading" spacing={7} padding={{ vertical: 12, horizontal: 14 }}>
-      <Header snapshot={data.snapshot} stale={data.stale} count={cards.length} clock={fmtClock(data.snapshot.fetchedAt)} showIcons={data.cfg.showIcons} />
+      <Header
+        snapshot={data.snapshot}
+        stale={data.stale}
+        count={cards.length}
+        clock={fmtClock(data.snapshot.fetchedAt)}
+        title={data.cfg.title}
+        showTitleIcon={data.cfg.showTitleIcon}
+      />
       {cards.length === 0 ? (
         <Empty data={data} compact />
       ) : (
@@ -48,7 +55,14 @@ export function MediumView({ data }: { data: WidgetData }) {
   const right = cards.filter((_, i) => i % 2 === 1)
   return (
     <VStack alignment="leading" spacing={8} padding={{ vertical: 12, horizontal: 14 }}>
-      <Header snapshot={data.snapshot} stale={data.stale} count={cards.length} clock={fmtClock(data.snapshot.fetchedAt)} showIcons={data.cfg.showIcons} />
+      <Header
+        snapshot={data.snapshot}
+        stale={data.stale}
+        count={cards.length}
+        clock={fmtClock(data.snapshot.fetchedAt)}
+        title={data.cfg.title}
+        showTitleIcon={data.cfg.showTitleIcon}
+      />
       {data.cfg.showGateway && data.snapshot.gateway ? <GatewayLine gateway={data.snapshot.gateway} now={data.now} compact /> : null}
       {cards.length === 0 ? (
         <Empty data={data} compact />
@@ -74,7 +88,14 @@ export function LargeView({ data }: { data: WidgetData }) {
   const cards = data.cards.slice(0, 5)
   return (
     <VStack alignment="leading" spacing={8} padding={{ vertical: 14, horizontal: 16 }}>
-      <Header snapshot={data.snapshot} stale={data.stale} count={cards.length} clock={fmtClock(data.snapshot.fetchedAt)} showIcons={data.cfg.showIcons} />
+      <Header
+        snapshot={data.snapshot}
+        stale={data.stale}
+        count={cards.length}
+        clock={fmtClock(data.snapshot.fetchedAt)}
+        title={data.cfg.title}
+        showTitleIcon={data.cfg.showTitleIcon}
+      />
       {data.cfg.showGateway && data.snapshot.gateway ? <GatewayLine gateway={data.snapshot.gateway} now={data.now} /> : null}
       {data.cfg.showGateway && data.snapshot.gateway ? <Divider /> : null}
       {cards.length === 0 ? (
