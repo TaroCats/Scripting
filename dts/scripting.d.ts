@@ -12375,7 +12375,7 @@ type ScriptMetadata = {
  * on a per-script basis (see `Script.requestAccess`). These follow their API-specific access rules.
  * VPN management methods do not request script permission.
  */
-type ScriptingApi = "calendar" | "reminders" | "alarms" | "contacts" | "location" | "homeKit" | "photos" | "health" | "clipboard" | "fileSystem" | "screenCapture" | "audioEngine" | "localDevVPN" | "vpn";
+type ScriptingApi = "scriptingAgent" | "scriptingAgentHistory" | "scriptingAgentSkills" | "scriptingAgentRun" | "calendar" | "reminders" | "alarms" | "contacts" | "location" | "homeKit" | "photos" | "health" | "clipboard" | "fileSystem" | "screenCapture" | "audioEngine" | "localDevVPN" | "vpn";
 /**
  * Access information about the script, and provides convenient methods to control the scripts.
  *

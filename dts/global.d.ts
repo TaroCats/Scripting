@@ -13108,6 +13108,109 @@ If the event’s calendar does not support availability settings, this property�
 
   type JSONSchemaType = JSONSchemaPrimitive | JSONSchemaArray | JSONSchemaObject
 
+  /**
+   * Manage Agent resources and chats from installed index, home_screen, keyboard, and intent entries.
+   * Keyboard page operations hand off to Scripting and return an accepted session ID before the App opens.
+   * Other operations run while the script remains active. Keyboard requires Full Access.
+   */
+  namespace ScriptingAgent {
+    /** Lists saved providers and public model information. */
+    function listProviders(): Promise<ScriptingAgentProviderInfo[]>
+    /** Opens a confirmation for a custom provider change. Returns null when cancelled. */
+    function setProvider(request: ScriptingAgentProviderWrite): Promise<ScriptingAgentProviderInfo | null>
+    function listWorkspaces(): Promise<ScriptingAgentWorkspaceInfo[]>
+    /** Opens a native form. Returns the saved workspace or null when cancelled. */
+    function createWorkspace(options?: ScriptingAgentWorkspaceDraft): Promise<ScriptingAgentWorkspaceInfo | null>
+    function listSkills(options?: { workspaceId?: string; includeDisabled?: boolean }): Promise<ScriptingAgentSkillInfo[]>
+    function getSkill(skillId: string): Promise<ScriptingAgentSkillDetails>
+    function createSkill(content: ScriptingAgentSkillContent): Promise<ScriptingAgentSkillDetails>
+    function updateSkill(
+      skillId: string,
+      options: { revision: string; changes: Partial<ScriptingAgentSkillContent> }
+    ): Promise<ScriptingAgentSkillDetails>
+    /** Asks for confirmation each time. Returns false when cancelled. */
+    function deleteSkill(skillId: string): Promise<boolean>
+    /** Opens a new chat. Pass autoSend to submit the initial message once the chat opens. Keyboard returns after native handoff. */
+    function openNewChat(options?: ScriptingAgentNewChatOptions): Promise<{ sessionId: string }>
+    /** Runs one Agent turn while the script remains active, without opening its chat. Background intent calls need prior permission. */
+    function run(options: ScriptingAgentRunOptions): Promise<{ sessionId: string; text: string }>
+    /** Lists saved general Agent chats, newest first. */
+    function listSessions(options?: ScriptingAgentHistoryQuery): Promise<ScriptingAgentHistoryPage>
+    /** Opens the specified general Agent chat without adding a message. Keyboard returns after native handoff. */
+    function openSession(sessionId: string): Promise<{ sessionId: string }>
+  }
+
+  type ScriptingAgentProviderInfo = { id: string; name: string; models: ScriptingAgentModelInfo[] }
+  type ScriptingAgentModelInfo = {
+    id: string
+    contextWindow: number
+    maxOutputTokens?: number             // 此配置的生成上限
+    providerInputTokenLimit?: number
+    providerOutputTokenLimit?: number
+    supportsImages?: boolean             // 模型元数据；不保证选中的端点能直收图片
+    supportsAudio?: boolean
+    supportsVideo?: boolean
+    supportsPDF?: boolean
+    supportsPromptCache?: boolean
+    chatSelectable: boolean              // 当前原生 Agent 选模器是否接纳此模型
+  }
+  type ScriptingAgentModelConfig = Omit<ScriptingAgentModelInfo, "chatSelectable"> & {
+    imageOnly?: boolean
+  }
+  type ScriptingAgentProviderConfig = {
+    name: string
+    baseURL: string
+    apiType: "openAIChatCompletions" | "openAIResponses" | "anthropicMessages" | "geminiGenerateContent" | "openRouter"
+    auth: { type: "apiKey"; apiKey: string } | { type: "none" }
+    models: ScriptingAgentModelConfig[]
+    defaultModelId?: string
+  }
+  type ScriptingAgentProviderWrite =
+    | { operation: "create"; config: ScriptingAgentProviderConfig }
+    | { operation: "update"; providerId: string; changes: Partial<ScriptingAgentProviderConfig> }
+
+  type ScriptingAgentWorkspaceDraft = { name?: string; icon?: string; color?: string }
+  type ScriptingAgentWorkspaceInfo = { id: string; name: string; icon: string; color: string; isDefault: boolean }
+  type ScriptingAgentSkillInfo = {
+    id: string
+    name: string
+    description: string
+    availableInWorkspace: boolean
+    isUserManaged: boolean
+  }
+  type ScriptingAgentSkillContent = { name: string; description: string; instructions: string }
+  type ScriptingAgentSkillDetails = ScriptingAgentSkillContent & { id: string; revision: string }
+  type ScriptingAgentInitialMessage = {
+    text?: string
+    attachments?: Array<{ type: "image"; image: UIImage } | { type: "file"; path: string }>
+  }
+  type ScriptingAgentRunOptions = {
+    workspaceId?: string
+    model?: { providerId: string; modelId?: string }
+    initialMessage: ScriptingAgentInitialMessage
+    skillIds?: string[]
+  }
+  type ScriptingAgentNewChatOptions = Omit<ScriptingAgentRunOptions, "initialMessage"> & (
+    | { autoSend?: false; initialMessage?: ScriptingAgentInitialMessage }
+    | { autoSend?: boolean; initialMessage: ScriptingAgentInitialMessage }
+  )
+  type ScriptingAgentHistoryQuery = { workspaceId?: string; limit?: number; cursor?: string }
+  type ScriptingAgentHistoryPage = { items: ScriptingAgentSessionSummary[]; nextCursor?: string }
+  type ScriptingAgentSessionSummary = {
+    id: string
+    workspaceId: string
+    title: string
+    updatedAt: number                    // Unix 毫秒；会话最近保存的内容更新时间
+    usage: {
+      inputTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
+      outputTokens: number
+      totalTokens: number
+      requestCount: number
+    } | null
+  }
+
   namespace Assistant {
 
     /**
@@ -13282,11 +13385,13 @@ If the event’s calendar does not support availability settings, this property�
 
     /**
      * Indicates whether the assistant chat page is currently presented.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     const isPresented: boolean
 
     /**
      * Indicates whether there is an active conversation with the assistant.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     const hasActiveConversation: boolean
 
@@ -13372,6 +13477,7 @@ If the event’s calendar does not support availability settings, this property�
      * @param options.provider A legacy provider selector; a built-in type uses its first configured account.
      * @param options.providerID The exact configured account ID. User can change the account in the assistant chat page.
      * @returns A promise that resolves when the conversation is created, or throws an error if the operation fails.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     function startConversation(options: {
       message: string
@@ -13386,18 +13492,21 @@ If the event’s calendar does not support availability settings, this property�
     /**
      * Stops the conversation with the assistant. This will dismiss the assistant chat page.
      * @returns A promise that resolves when the conversation is stopped, or throws an error if the operation fails.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     function stopConversation(): Promise<void>
 
     /**
      * Presents the assistant chat page. You can call this method after `startConversation` to present the assistant chat page, or represent the conversation after `dismiss` is called.
      * @returns A promise that resolves when the assistant chat page is dismissed, or throws an error if the operation fails.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     function present(): Promise<void>
 
     /**
      * Dismisses the assistant chat page. If `stopConversation` is called, this method will be called automatically.
      * @returns A promise that resolves when the assistant chat page is dismissed, or throws an error if the operation fails.
+     * @deprecated Use ScriptingAgent.openNewChat or ScriptingAgent.openSession for Agent chat.
      */
     function dismiss(): Promise<void>
   }
@@ -18931,49 +19040,39 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
   }
 
   /**
-   * Controls background keep-alive behavior for the Scripting App.
-   * 
-   * Available in the main Scripting App: `Script.env === "index"`, `"home_screen"`, or `"camera_control"`.
-   *
-   * Request `keepAlive()` while foregrounded, before starting background work.
-   * Release it with `stopKeepAlive()` when the work finishes.
-   *
-   * Multiple scripts can request keep-alive simultaneously. Repeated successful calls to `keepAlive()`
-   * from one script are idempotent. `stopKeepAlive()` releases that script's request.
-   * The shared engine stops when all owners release their requests.
-   *
-   * Note: Even if keep-alive is enabled, the system may still terminate the Scripting App
-   * under certain conditions, such as when its memory usage is too high.
-   *
-   * ⚠️ Caution:
-   * The Scripting App does not enable keep-alive automatically. Using this feature
-   * may increase device power consumption, so please use it with care.
+   * Requests background resources for a script running in the main app.
+   * Use in index, home_screen, or camera_control. Release the request when the work finishes.
+   * The system can suspend or terminate the app and network connections can fail independently.
    */
   namespace BackgroundKeeper {
-    interface State {
-      /** App-wide audio state; this is not a network-session health check. */
-      status: "idle" | "active" | "interrupted" | "inactive"
-      isActive: boolean
-      /** Whether this script owns a successful keep-alive request. Repeated calls are idempotent. */
-      requested: boolean
-      /** Fixed diagnostic reason for the last audio failure; null after success or final release. */
+    type Resource = "audio" | "location"
+    type Mode = Resource | "audioAndLocation"
+    interface ResourceState {
+      status: "idle" | "starting" | "active" | "interrupted" | "unavailable"
       lastFailure: string | null
     }
+    interface State {
+      /** App-wide audio status. */
+      status: "idle" | "active" | "interrupted" | "inactive"
+      isActive: boolean
+      /** Whether the current script holds an audio request. */
+      requested: boolean
+      lastFailure: string | null
+      /** Background mode currently held by this script. */
+      requestedMode: Mode | null
+      activeModes: Resource[]
+      modeStates: Record<Resource, ResourceState>
+    }
     function getState(): Promise<State>
-    /**
-     * Reports whether the shared audio engine and player are actually running without an interruption.
-     */
+    /** Whether App-wide background audio is active. */
     const isActive: Promise<boolean>
     /**
-     * Starts the keep-alive process.
-     * @returns A promise that resolves to a boolean value that indicates whether the keep-alive process was successfully started. Repeated successful calls from one script are idempotent. Audio failure resolves to false; access errors reject.
+     * Requests the selected mode. The default is "audio".
+     * Location requires a running Location subscription with an active listener in this script.
+     * "audioAndLocation" requires both resources. A failed switch preserves the previous request.
      */
-    function keepAlive(): Promise<boolean>
-    /**
-     * Stops the keep-alive process.
-     * It does not indicate whether the keep-alive process was successfully stopped, because other scripts may have requested keep-alive, when all requests have been removed, the keep-alive process will be stopped.
-     * @returns A promise that resolves when the function call completes. 
-     */
+    function keepAlive(mode?: Mode): Promise<boolean>
+    /** Releases this script's request. */
     function stopKeepAlive(): Promise<void>
   }
 

@@ -1,0 +1,46 @@
+{
+  "version" : "1.0.0",
+  "intentInputTypes" : [
+
+  ],
+  "author" : {
+    "homepage" : null,
+    "name" : "TARO",
+    "email" : "i@taro.cat"
+  },
+  "remoteResource" : null,
+  "localizedDescriptions" : {
+    "en" : "",
+    "ru" : "",
+    "es" : "",
+    "de" : "",
+    "it" : "",
+    "fr" : "",
+    "ja" : "",
+    "pt" : "",
+    "zh" : ""
+  },
+  "permissions" : null,
+  "icon" : "chart.line.uptrend.xyaxis",
+  "runInApp" : false,
+  "color" : "rgba(243, 159, 68,1)",
+  "localizedNames" : {
+    "en" : "",
+    "ru" : "",
+    "es" : "",
+    "de" : "",
+    "it" : "",
+    "fr" : "",
+    "ja" : "",
+    "pt" : "",
+    "zh" : ""
+  },
+  "remoteDefinitionId" : null,
+  "contributors" : [
+
+  ],
+  "name" : "MagPanel",
+  "entry" : "index.tsx",
+  "description" : null,
+  "iconImage" : null
+}
