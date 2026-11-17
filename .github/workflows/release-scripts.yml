@@ -129,17 +129,23 @@ jobs:
             # slug 必须是 ASCII：Release 附件名会被 GitHub 规范化，中文名会变成 default.xxx
             slug="$(node -e '
               const fs = require("fs");
+              const crypto = require("crypto");
               const project = process.argv.at(-1);
               const config = fs.existsSync(".github/release.config.json")
                 ? JSON.parse(fs.readFileSync(".github/release.config.json", "utf8"))
                 : {};
+              // 显式配置优先；没有配置也永远能推出 slug，新项目不需要再改这个文件：
+              //   1. 项目名能转成 ASCII（Launch → launch）就转；
+              //   2. 纯中文等转不了的，用名字的 sha256 前 8 位兜底（s-<hash>），确定性且不会撞名。
               const mapped = (config.projects || {})[project];
-              const fallback = /^[a-z0-9][a-z0-9._-]*$/.test(project) ? project : "";
+              const ascii = (project || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]+/g, "")
+                .replace(/^[^a-z0-9]+/, "")
+                .replace(/[-_.]+$/, "")
+                .slice(0, 40);
+              const fallback = ascii || ("s-" + crypto.createHash("sha256").update(project).digest("hex").slice(0, 8));
               const slug = mapped || fallback;
-              if (!slug) {
-                console.error(`「${project}」缺少 slug，请在 .github/release.config.json 的 projects 中补充`);
-                process.exit(1);
-              }
               if (!/^[a-z0-9][a-z0-9._-]*$/.test(slug)) {
                 console.error(`「${project}」的 slug 只能包含小写字母、数字、点、下划线和连字符：${slug}`);
                 process.exit(1);
