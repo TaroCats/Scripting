@@ -262,6 +262,13 @@ export const WIDGET_LAYOUTS: WidgetLayout[] = [
 /** The widest fixed arrangement; the grid layouts are capped at three columns. */
 export const MAX_GRID_COLUMNS = 3
 
+/**
+ * A panel inside a divided widget is wide and short, so its flow grid may use
+ * more columns than the fixed layouts. This is what lets a panel fill its
+ * area instead of leaving wide empty margins.
+ */
+export const MAX_PANEL_COLUMNS = 5
+
 export interface GridSpec {
   columns: number
   rows: number

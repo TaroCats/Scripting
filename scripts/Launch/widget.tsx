@@ -1,7 +1,6 @@
 import {
   Button,
   Color,
-  Divider,
   HStack,
   Image,
   Link,
@@ -25,6 +24,7 @@ import {
   FOLDERS_PATH,
   Folder,
   MAX_GRID_COLUMNS,
+  MAX_PANEL_COLUMNS,
   MAX_WIDGET_SLOTS,
   WidgetLayout,
   WidgetPanel,
@@ -354,13 +354,16 @@ function SingleAppLayout({
   config,
   width,
   height,
-  cover
+  cover,
+  flush = false
 }: {
   apps: AppItem[]
   config: Config
   width: number
   height: number
   cover: boolean
+  /** Drop the outer inset so the icon fills a panel edge to edge. */
+  flush?: boolean
 }) {
   if (apps.length === 0) return <EmptyState />
 
@@ -385,7 +388,7 @@ function SingleAppLayout({
   return (
     <VStack
       spacing={10}
-      padding={16}
+      padding={flush ? 0 : 16}
       frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
       alignment="center"
     >
@@ -412,7 +415,8 @@ function FixedGridLayout({
   height,
   columns,
   rows,
-  cover
+  cover,
+  flush = false
 }: {
   apps: AppItem[]
   config: Config
@@ -421,6 +425,8 @@ function FixedGridLayout({
   columns: number
   rows: number
   cover: boolean
+  /** Drop the outer inset so the grid fills a panel edge to edge. */
+  flush?: boolean
 }) {
   if (apps.length === 0) return <EmptyState />
 
@@ -484,7 +490,7 @@ function FixedGridLayout({
   // A panel is much smaller than the widget, so the inset and the gaps shrink
   // with it instead of eating most of the cell.
   const scale = Math.min(width, height)
-  const padding = clamp(Math.round(scale * 0.045), 4, 16)
+  const padding = flush ? 0 : clamp(Math.round(scale * 0.045), 4, 16)
   const gap = columnCount > 2 ? clamp(Math.round(scale * 0.028), 3, 10) : clamp(Math.round(scale * 0.04), 4, 14)
   // The icon has to fit both the cell width and the cell height. Without a
   // label it still keeps a small margin so neighbouring icons do not touch.
@@ -545,8 +551,8 @@ function AutoGridLayout({
   width: number
   height: number
   /**
-   * Inside a divided widget the grid sits in a narrow panel, so it centres on
-   * a fixed spacing instead of stretching its gaps across the whole width.
+   * Inside a divided widget the grid fills its panel edge to edge: no outer
+   * padding, and the leftover space becomes equal gaps on both axes.
    */
   embedded?: boolean
 }) {
@@ -559,16 +565,64 @@ function AutoGridLayout({
   const totalWidth = width
   const totalHeight = height
 
-  // At most three columns: on a large widget the raw icon-size maths would fit
-  // four or more, which shrinks every icon to an unreadable smudge.
+  if (embedded) {
+    // A panel is wide and short, so it allows more columns than the whole
+    // widget. `gap` is the minimum breathing room used to pick the grid shape;
+    // the real gaps are then widened so the grid spans the panel exactly.
+    const gap = Math.max(2, Math.min(preferredSpacing, Math.round(iconSize * 0.35)))
+    const columns = clamp(
+      Math.floor((totalWidth + gap) / (iconSize + gap)),
+      1,
+      MAX_PANEL_COLUMNS
+    )
+    const rowsThatFit = Math.max(
+      1,
+      Math.floor((totalHeight + gap) / (iconSize + gap))
+    )
+    const shown = apps.slice(0, columns * rowsThatFit)
+    const rowCount = Math.max(1, Math.ceil(shown.length / columns))
+    const gapX = Math.max(0, (totalWidth - columns * iconSize) / (columns + 1))
+    const gapY = Math.max(0, (totalHeight - rowCount * iconSize) / (rowCount + 1))
+
+    const rowGroups: AppItem[][] = []
+    for (let i = 0; i < shown.length; i += columns) {
+      rowGroups.push(shown.slice(i, i + columns))
+    }
+
+    return (
+      <VStack
+        padding={{
+          leading: gapX,
+          trailing: gapX,
+          top: gapY,
+          bottom: gapY
+        }}
+        spacing={gapY}
+        frame={{ width: totalWidth, height: totalHeight }}
+        alignment="center"
+      >
+        {rowGroups.map((row, rowIndex) => (
+          <HStack key={rowIndex} spacing={gapX} alignment="center">
+            {row.map(item => (
+              <AppIcon key={item.id} item={item} config={config} size={iconSize} />
+            ))}
+          </HStack>
+        ))}
+      </VStack>
+    )
+  }
+
+  // At most three columns for the whole widget.
   const columns = clamp(
     Math.floor((totalWidth - preferredSpacing) / (iconSize + preferredSpacing)),
     1,
     MAX_GRID_COLUMNS
   )
-  const actualSpacing = embedded
-    ? clamp(preferredSpacing, 4, Math.max(6, iconSize * 0.5))
-    : Math.max(0, (totalWidth - columns * iconSize) / (columns + 1))
+  // Distribute the leftover width as gaps so the row spans the widget evenly.
+  const actualSpacing = Math.max(
+    0,
+    (totalWidth - columns * iconSize) / (columns + 1)
+  )
 
   const rowCount = Math.max(
     1,
@@ -589,11 +643,12 @@ function AutoGridLayout({
       padding={{
         leading: actualSpacing,
         trailing: actualSpacing,
-        top: embedded ? 4 : 16,
-        bottom: embedded ? 4 : 16
+        top: 16,
+        bottom: 16
       }}
       spacing={actualSpacing}
-      alignment={embedded ? 'center' : 'leading'}
+      alignment="leading"
+      frame={{ width, height }}
     >
       <Spacer />
       {rows.map((row, rowIndex) => (
@@ -605,37 +660,6 @@ function AutoGridLayout({
       ))}
       <Spacer />
     </VStack>
-  )
-}
-
-/**
- * A compact folder heading for a panel: the folder's mark and its name, small
- * enough that three of them still leave the icons most of the space.
- */
-function PanelHeader({
-  folder,
-  compact
-}: {
-  folder: Folder
-  compact: boolean
-}) {
-  return (
-    <HStack spacing={compact ? 4 : 6} alignment="center">
-      <Image
-        systemName={folder.icon || (compact ? 'folder.fill' : 'folder')}
-        font={compact ? 9 : 11}
-        foregroundStyle={(folder.color ?? 'secondaryLabel') as Color}
-      />
-      <Text
-        font={compact ? 10 : 12}
-        fontWeight="semibold"
-        foregroundStyle={SECONDARY}
-        lineLimit={1}
-        truncationMode="tail"
-      >
-        {folder.name}
-      </Text>
-    </HStack>
   )
 }
 
@@ -664,27 +688,20 @@ function PaneledLayout({
   const count = panels.length
 
   // Three panels are tight, and so is any panel shorter than about 150pt, so
-  // the heading, icons and gaps all shrink together.
+  // the icons and gaps all shrink together.
   const slice = vertical ? height / count : width / count
   const compact = count >= 3 || slice < 150
 
-  const padding = compact ? 10 : 12
-  const spacing = compact ? 6 : 8
-  // The padding frames the whole stack; the dividers and gaps only eat into
-  // the axis the panels are stacked along.
-  const between = (count - 1) * (spacing + 1)
-  const usableWidth = width - padding * 2 - (vertical ? 0 : between)
-  const usableHeight = height - padding * 2 - (vertical ? between : 0)
+  // Panels fill the widget edge to edge: no gap, no divider, no outer padding,
+  // so the whole surface is used by the folders themselves.
+  const padding = 0
+  const usableWidth = width - padding * 2
+  const usableHeight = height - padding * 2
   const panelWidth = vertical ? usableWidth : usableWidth / count
   const panelHeight = vertical ? usableHeight / count : usableHeight
 
-  // The heading sits above the folder content, so the grid gets what is left.
-  const headerHeight = compact ? 16 : 20
-  const headerSpacing = compact ? 4 : 6
-  const contentHeight = Math.max(
-    24,
-    panelHeight - headerHeight - headerSpacing
-  )
+  // No folder heading: each panel hands its whole area to the folder's icons.
+  const contentHeight = Math.max(24, panelHeight)
 
   // Size the icons from the smaller panel dimension so a narrow column panel
   // does not end up with oversized icons.
@@ -724,14 +741,15 @@ function PaneledLayout({
       panel.folder.style?.layout ?? panel.style?.layout ?? 'auto'
     const cover =
       panel.folder.style?.cover ?? panel.style?.cover ?? false
+    // A definite frame per panel, so the grid's spacers can actually divide
+    // the slice instead of collapsing to the content's intrinsic height.
     return (
       <VStack
         key={panel.folder.id}
-        spacing={headerSpacing}
-        frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
+        spacing={0}
+        frame={{ width: panelWidth, height: contentHeight }}
         alignment="center"
       >
-        <PanelHeader folder={panel.folder} compact={compact} />
         <PanelContent
           panel={panel}
           config={panelConfig}
@@ -744,31 +762,23 @@ function PaneledLayout({
     )
   })
 
-  // Interleave separators so the panels read as distinct blocks; a bare gap
-  // alone is invisible against the widget background.
-  const separated: VirtualNode[] = []
-  panelViews.forEach((view, index) => {
-    if (index > 0) separated.push(<Divider key={`divider-${index}`} />)
-    separated.push(view)
-  })
-
   return vertical ? (
     <VStack
-      spacing={spacing}
+      spacing={0}
       padding={padding}
       frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
       alignment="center"
     >
-      {separated}
+      {panelViews}
     </VStack>
   ) : (
     <HStack
-      spacing={spacing}
+      spacing={0}
       padding={padding}
       frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
       alignment="center"
     >
-      {separated}
+      {panelViews}
     </HStack>
   )
 }
@@ -800,6 +810,7 @@ function PanelContent({
         width={width}
         height={height}
         cover={cover}
+        flush
       />
     )
   }
@@ -815,6 +826,7 @@ function PanelContent({
         columns={spec.columns}
         rows={spec.rows}
         cover={cover}
+        flush
       />
     )
   }

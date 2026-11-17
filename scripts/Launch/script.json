@@ -22,7 +22,7 @@
   },
   "runInApp": false,
   "color": "rgba(243, 159, 68,1)",
-  "version": "1.11.1",
+  "version": "1.11.3",
   "localizedDescriptions": {
     "en": "A customizable launcher widget for your favourite apps and folders. Large widgets can divide into folder panels, with single, dual and 3/4/6/9-grid or auto-grid layouts.",
     "es": "",
