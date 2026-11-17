@@ -1,0 +1,43 @@
+{
+  "iconImage" : null,
+  "remoteDefinitionId" : null,
+  "entry" : "index.tsx",
+  "description" : null,
+  "contributors" : [
+
+  ],
+  "name" : "Launch",
+  "icon" : "appclip",
+  "intentInputTypes" : [
+
+  ],
+  "localizedNames" : {
+    "en" : "Launch",
+    "zh" : "启动台"
+  },
+  "remoteResource" : {
+    "autoUpdateInterval" : 3600,
+    "url" : "https:\/\/github.com\/Honye\/scripting-scripts\/tree\/main\/scripts\/Launch",
+    "hash" : "0134d8b44cc3f2e8707be6230ca3d61d"
+  },
+  "author" : {
+    "name" : "Jackie",
+    "homepage" : "https:\/\/t.me\/iiMarkr",
+    "email" : "Honye@github.com"
+  },
+  "runInApp" : false,
+  "color" : "rgba(243, 159, 68,1)",
+  "version" : "1.7.1",
+  "localizedDescriptions" : {
+    "en" : "A customizable launcher widget for your favourite apps and folders.",
+    "es" : "",
+    "pt" : "",
+    "it" : "",
+    "ja" : "",
+    "ru" : "",
+    "de" : "",
+    "zh" : "可自定义的应用启动器小组件，支持单应用、双应用与四宫格布局。",
+    "fr" : ""
+  },
+  "permissions" : null
+}
