@@ -3,10 +3,12 @@ name: Release Scripts
 # scripts/ 下有项目更新时自动：
 #   1. 识别被改动的脚本项目
 #   2. 递增该项目 script.json 的 version（默认 patch，可用提交信息里的 [minor] / [major] 覆盖）
-#      并写入 remoteResource.url（固定 zip 地址）与 autoUpdateInterval
+#      并写入 remoteResource.url（源码目录 tree 地址）与 autoUpdateInterval
 #   3. 打包出 <slug>.scripting 与 <slug>.zip（slug 为 ASCII，见 .github/release.config.json）
 #   4. 提交版本号变更，并把产物覆盖上传到固定标签 <slug> 的 Release
-#      下载地址固定：https://github.com/<owner>/<repo>/releases/download/<slug>/<slug>.zip
+#      远程更新地址（remoteResource.url）固定为源码目录：
+#      https://github.com/<owner>/<repo>/tree/main/scripts/<项目名>
+#      （与天气与行程的既有约定一致，Release 附件不再作为更新源）
 
 on:
   push:
@@ -147,9 +149,9 @@ jobs:
 
             current="$(node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv.at(-1),"utf8"));process.stdout.write(String(j.version??""))' "$script_json")"
             next="$(node -e 'const cur=process.argv.at(-2)||"";const type=process.argv.at(-1);const m=/^(\d+)\.(\d+)\.(\d+)/.exec(cur);let major=0,minor=0,patch=0;if(m){major=+m[1];minor=+m[2];patch=+m[3]}if(type==="major"){major+=1;minor=0;patch=0}else if(type==="minor"){minor+=1;patch=0}else{patch+=1}process.stdout.write(`${major}.${minor}.${patch}`)' "$current" "$bump")"
-            remote_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${slug}/${slug}.zip"
+            remote_url="https://github.com/${GITHUB_REPOSITORY}/tree/main/scripts/$(node -e 'process.stdout.write(encodeURIComponent(process.argv.at(-1)))' "$project")"
 
-            # 写入 version 与 remoteResource（固定 zip 地址；hash 由 App 维护，URL 变化时清掉旧值）
+            # 写入 version 与 remoteResource（源码目录 tree 地址；hash 由 App 维护，URL 变化时清掉旧值）
             node -e '
               const fs = require("fs");
               const file = process.argv.at(-3);

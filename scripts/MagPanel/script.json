@@ -7,7 +7,7 @@
     "email": "i@taro.cat"
   },
   "remoteResource": {
-    "url": "https://github.com/TaroCats/Scripting/releases/download/magpanel/magpanel.zip",
+    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/MagPanel",
     "autoUpdateInterval": 3600
   },
   "localizedDescriptions": {
