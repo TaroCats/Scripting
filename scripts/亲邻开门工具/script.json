@@ -2,7 +2,7 @@
   "name": "亲邻开门工具",
   "icon": "door.left.hand.open",
   "color": "#0A84FF",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "remoteResource": {
     "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/%E4%BA%B2%E9%82%BB%E5%BC%80%E9%97%A8%E5%B7%A5%E5%85%B7",
     "autoUpdateInterval": 3600
