@@ -226,9 +226,9 @@ jobs:
             {
               echo "## ${project} v${version}"
               echo
-              echo "- 安装：下载 \`${slug}.scripting\` 到 iPhone，轻点文件即可由 Scripting 导入"
-              echo "- 远程脚本来源（固定地址，可直接填到脚本的「远程来源」）："
+              echo "- 安装：把下面的固定地址填进脚本的「远程来源」，App 自动拉取并支持更新："
               echo "  \`${tree_url}\`"
+              echo "- 也可以下载附件 \`${slug}.scripting\` 手动导入（不走自动更新）"
               echo "- 当前版本：\`${version}\`"
               echo "- 构建自 \`${AFTER_SHA:0:7}\`"
             } > "$notes"
