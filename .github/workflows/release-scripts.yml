@@ -220,13 +220,15 @@ jobs:
             tag="$slug"
             base="dist/$slug"
             notes="$base/notes.md"
+            # 远程更新地址（与 remoteResource.url 一致）：源码目录 tree
+            tree_url="https://github.com/${REPO}/tree/main/scripts/$(node -e 'process.stdout.write(encodeURIComponent(process.argv.at(-1)))' "$project")"
 
             {
               echo "## ${project} v${version}"
               echo
               echo "- 安装：下载 \`${slug}.scripting\` 到 iPhone，轻点文件即可由 Scripting 导入"
               echo "- 远程脚本来源（固定地址，可直接填到脚本的「远程来源」）："
-              echo "  \`https://github.com/${REPO}/releases/download/${tag}/${slug}.zip\`"
+              echo "  \`${tree_url}\`"
               echo "- 当前版本：\`${version}\`"
               echo "- 构建自 \`${AFTER_SHA:0:7}\`"
             } > "$notes"
@@ -241,5 +243,5 @@ jobs:
                 --latest=false
             fi
 
-            echo "- ${project} v${version} → https://github.com/${REPO}/releases/download/${tag}/${slug}.zip" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ${project} v${version} → ${tree_url}" >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/versions.tsv"
