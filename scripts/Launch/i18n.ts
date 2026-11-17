@@ -164,7 +164,10 @@ export const MESSAGE_KEYS = [
   'widgetLayoutAuto',
   'widgetLayoutSingle',
   'widgetLayoutDual',
+  'widgetLayoutTriple',
   'widgetLayoutQuad',
+  'widgetLayoutSix',
+  'widgetLayoutNine',
   'widgetLayoutFooter',
   'widgetParameterHint',
   'widgetSlots',
@@ -175,7 +178,34 @@ export const MESSAGE_KEYS = [
   'widgetSlotDefault',
   'widgetNoApps',
   'previewWidget',
-  'previewWidgetFooter'
+  'previewWidgetFooter',
+  // Folder widget layout
+  'folderWidgetLayout',
+  'folderWidgetLayoutFooter',
+  'folderWidgetCover',
+  // Divided widget panels
+  'widgetPanels',
+  'widgetPanelsFooter',
+  'widgetPanelLabel',
+  'widgetPanelDefault',
+  'widgetPanelsEmpty',
+  // Per-panel settings
+  'panelFolder',
+  'panelAppearance',
+  'panelAuto',
+  'panelReset',
+  'panelSummaryDefault',
+  'panelFromFolder',
+  'panelFolderOverrides',
+  // iCloud
+  'iCloud',
+  'iCloudOn',
+  'iCloudOff',
+  'iCloudFooter',
+  'iCloudOffFooter',
+  'iCloudBackupNow',
+  'iCloudBackupDone',
+  'iCloudBackupFailed'
 ] as const
 
 export type TranslationKey = (typeof MESSAGE_KEYS)[number]
@@ -337,11 +367,14 @@ const EN: MessageTable = {
   widgetLayoutAuto: 'Auto Grid',
   widgetLayoutSingle: 'Single App',
   widgetLayoutDual: 'Two Apps',
+  widgetLayoutTriple: 'Three Apps',
   widgetLayoutQuad: 'Four Grid',
+  widgetLayoutSix: 'Six Grid',
+  widgetLayoutNine: 'Nine Grid',
   widgetLayoutFooter:
-    'Fixed layouts scale the icon to the widget. Icon Size and Spacing apply to the Auto Grid; the rendering mode applies to every layout.',
+    'Fixed layouts scale the icon to the widget and never use more than three columns. Icon Size and Spacing apply to the Auto Grid; the rendering mode applies to every layout.',
   widgetParameterHint:
-    'Override per widget: set the widget parameter to layout=single, layout=dual, layout=quad, folder=Name, or cover=1. Combine them with &, for example layout=quad&folder=Work&cover=1.',
+    'Override per widget: set the widget parameter to layout=single, layout=dual, layout=triple, layout=quad, layout=six, layout=nine, folder=Name, cover=1, folders=Work,Play, or panelAxis=columns. Combine them with &, for example folders=Work,Play&panelAxis=columns.',
   widgetSlots: 'App Slots',
   widgetSlotLabel: 'Slot {index}',
   widgetSlotsFooter:
@@ -353,7 +386,40 @@ const EN: MessageTable = {
   widgetNoApps: 'No Apps',
   previewWidget: 'Preview Widget',
   previewWidgetFooter:
-    'The preview uses the current layout and slots. Add the widget to the Home Screen to apply them for real.'
+    'The preview uses the current layout and slots. Add the widget to the Home Screen to apply them for real.',
+  // Folder widget layout
+  folderWidgetLayout: 'Widget Layout',
+  folderWidgetLayoutFooter:
+    'Used whenever this folder appears, including inside a divided widget. These settings take priority over the per-panel options.',
+  folderWidgetCover: 'Cover Mode',
+  // Divided widget panels
+  widgetPanels: 'Folders',
+  widgetPanelsFooter:
+    'A large widget divides into two panels and the extra-large families into three. Tap a panel to choose its folder and give it its own layout, icon size, spacing, shape and rendering mode. Division starts once at least one panel names a folder; panels left on Default take the next folder in the list.',
+  widgetPanelLabel: 'Panel {index}',
+  widgetPanelDefault: 'Default',
+  widgetPanelsEmpty:
+    'Create at least two folders to divide a large widget into panels.',
+  // Per-panel settings
+  panelFolder: 'Folder',
+  panelAppearance: 'Appearance',
+  panelAuto: 'Auto',
+  panelReset: 'Reset This Panel',
+  panelSummaryDefault: 'Default',
+  panelFromFolder: 'From folder',
+  panelFolderOverrides:
+    'This folder has its own appearance settings, and they take priority over the options below.',
+  // iCloud
+  iCloud: 'iCloud',
+  iCloudOn: 'On',
+  iCloudOff: 'Off',
+  iCloudFooter:
+    'Apps, folders, settings and custom button code are mirrored to iCloud Drive and restored on a new device. The widget reads a local copy, so it keeps working offline.',
+  iCloudOffFooter:
+    'Turn on iCloud for Scripting in the system Settings to back up your data and sync it across devices.',
+  iCloudBackupNow: 'Back Up Now',
+  iCloudBackupDone: 'Backed up to iCloud.',
+  iCloudBackupFailed: 'Could not write to iCloud.'
 }
 
 const ZH: MessageTable = {
@@ -506,11 +572,14 @@ const ZH: MessageTable = {
   widgetLayoutAuto: '自动网格',
   widgetLayoutSingle: '单应用',
   widgetLayoutDual: '双应用',
+  widgetLayoutTriple: '三宫格',
   widgetLayoutQuad: '四宫格',
+  widgetLayoutSix: '六宫格',
+  widgetLayoutNine: '九宫格',
   widgetLayoutFooter:
-    '固定布局会根据小组件尺寸缩放图标；图标大小与间距用于自动网格，渲染模式对所有布局生效。',
+    '固定布局会根据小组件尺寸缩放图标，列数最多三列；图标大小与间距用于自动网格，渲染模式对所有布局生效。',
   widgetParameterHint:
-    '可在系统的小组件参数中单独指定：layout=single、layout=dual、layout=quad、folder=文件夹名 或 cover=1，用 & 组合，例如 layout=quad&folder=工作&cover=1。',
+    '可在系统的小组件参数中单独指定：layout=single、layout=dual、layout=triple、layout=quad、layout=six、layout=nine、folder=文件夹名、cover=1、folders=工作,娱乐 或 panelAxis=columns，用 & 组合，例如 folders=工作,娱乐&panelAxis=columns。',
   widgetSlots: '应用槽位',
   widgetSlotLabel: '槽位 {index}',
   widgetSlotsFooter:
@@ -522,7 +591,39 @@ const ZH: MessageTable = {
   widgetNoApps: '暂无应用',
   previewWidget: '预览小组件',
   previewWidgetFooter:
-    '预览使用当前的布局与槽位设置。将小组件添加到主屏幕后才会正式生效。'
+    '预览使用当前的布局与槽位设置。将小组件添加到主屏幕后才会正式生效。',
+  // Folder widget layout
+  folderWidgetLayout: '小组件布局',
+  folderWidgetLayoutFooter:
+    '该文件夹出现时使用的排列方式（含分区小组件），优先级高于各区域的单独设置。',
+  folderWidgetCover: '封面模式',
+  // Divided widget panels
+  widgetPanels: '文件夹分区',
+  widgetPanelsFooter:
+    '大尺寸小组件会均分为两个区域，超大尺寸均分为三个区域。点进每个区域可以选择文件夹，并单独设置布局、图标大小、间距、形状与渲染模式。只要有一个区域选定了文件夹就会开始分区；留为“默认”的区域按顺序取下一个文件夹。',
+  widgetPanelLabel: '区域 {index}',
+  widgetPanelDefault: '默认',
+  widgetPanelsEmpty: '至少创建两个文件夹，大尺寸小组件才会分区显示。',
+  // Per-panel settings
+  panelFolder: '文件夹',
+  panelAppearance: '外观',
+  panelAuto: '自动',
+  panelReset: '重置此区域',
+  panelSummaryDefault: '默认',
+  panelFromFolder: '跟随文件夹',
+  panelFolderOverrides:
+    '该文件夹已自定义外观，会优先于下面的设置。清空文件夹外观后，这里的设置才会生效。',
+  // iCloud
+  iCloud: 'iCloud',
+  iCloudOn: '已开启',
+  iCloudOff: '未开启',
+  iCloudFooter:
+    '应用、文件夹、设置和自定义按钮代码都会同步到 iCloud 云盘，换新设备时自动恢复。小组件读取本地副本，离线也能正常显示。',
+  iCloudOffFooter:
+    '请在系统设置中为「Scripting」开启 iCloud，即可备份数据并在多台设备间同步。',
+  iCloudBackupNow: '立即备份',
+  iCloudBackupDone: '已备份到 iCloud。',
+  iCloudBackupFailed: '无法写入 iCloud。'
 }
 
 const TABLES: Record<Language, MessageTable> = { en: EN, zh: ZH }

@@ -29,6 +29,53 @@ function appIconAssetUrl(bundleId: string, appearance: 'dark' | 'light') {
 }
 
 /**
+ * Side length requested for App Store artwork. The search result only carries a
+ * 100x100 thumbnail, which looks soft as soon as the widget scales it up;
+ * Apple's CDN re-renders any requested size from the master, so ask for a
+ * larger square instead.
+ */
+export const ARTWORK_URL_SIZE = 512
+
+/**
+ * Rewrites the trailing size segment of an App Store artwork URL, for example
+ * `100x100bb.jpg` to `512x512bb.jpg`. URLs that do not follow the pattern (the
+ * GitHub dark-icon assets, or a hand-pasted URL) are returned unchanged, and a
+ * missing value stays missing.
+ */
+export function highResArtworkUrl(
+  url?: string,
+  size = ARTWORK_URL_SIZE
+): string | undefined {
+  if (!url) return url
+  const match = /^(.*\/)(\d+x\d+)((?:[a-z]{2})?\.(?:jpe?g|png|webp))$/i.exec(url)
+  if (!match) return url
+  return `${match[1]}${size}x${size}${match[3]}`
+}
+
+/** The artwork fields an iTunes search result can carry, largest first. */
+export interface ArtworkUrls {
+  artworkUrl512?: string
+  artworkUrl100?: string
+  artworkUrl60?: string
+}
+
+/**
+ * The sharpest artwork a search response offers, normalised to a large square.
+ * `artworkUrl512` is preferred when present; otherwise the smaller thumbnail
+ * URL is rewritten to request a larger render from Apple's CDN.
+ */
+export function pickArtwork(
+  app: ArtworkUrls,
+  size = ARTWORK_URL_SIZE
+): string | undefined {
+  return (
+    highResArtworkUrl(app.artworkUrl512, size) ||
+    highResArtworkUrl(app.artworkUrl100, size) ||
+    highResArtworkUrl(app.artworkUrl60, size)
+  )
+}
+
+/**
  * Finds the best icon from Honye/assets to use for an app's dark appearance.
  * A real dark variant wins; apps with only a light repository asset use that
  * as the fallback. Missing assets and network failures leave the field empty.
@@ -103,7 +150,27 @@ export function migrateAppItem(
   if (folderId && !folderIds.includes(folderId)) {
     folderIds.push(folderId)
   }
-  return { ...rest, folderIds }
+  return { ...rest, folderIds, ...upgradeIconArtwork(rest) }
+}
+
+/**
+ * Bumps a stored 100x100 App Store artwork URL to a larger render. Apps saved
+ * before the sharper search were pinned to the thumbnail and stayed soft when
+ * the widget scaled them up. The cache key is the URL hash, so a rewritten URL
+ * also re-downloads at the new size on the next pass.
+ */
+function upgradeIconArtwork(item: {
+  icon: string
+  iconDark?: string
+}): { icon: string; iconDark?: string } {
+  const icon = highResArtworkUrl(item.icon) ?? item.icon
+  const iconDark = item.iconDark
+    ? (highResArtworkUrl(item.iconDark) ?? item.iconDark)
+    : item.iconDark
+  if (icon === item.icon && iconDark === item.iconDark) {
+    return { icon: item.icon, iconDark: item.iconDark }
+  }
+  return { icon, iconDark }
 }
 
 export interface AppItem {
@@ -135,6 +202,23 @@ export interface FolderStyle {
   cornerRadius?: number
   spacing?: number
   widgetAccentedRenderingMode?: Config['widgetAccentedRenderingMode']
+  /**
+   * Widget arrangement for this folder specifically, so one folder can be a
+   * four-grid while another stays on the auto grid.
+   */
+  layout?: WidgetLayout
+  /** Cover presentation flag for this folder's widget. */
+  cover?: boolean
+}
+
+/**
+ * One panel of a divided widget: which folder it shows plus that panel's own
+ * appearance. The appearance fields are optional and fall back to the folder's
+ * own style, then to the global widget settings.
+ */
+export interface WidgetPanelConfig extends FolderStyle {
+  /** Folder id or name shown in this panel. Empty fills from list order. */
+  folder?: string
 }
 
 export interface Folder {
@@ -150,31 +234,143 @@ export interface Folder {
  * How a widget arranges its apps.
  *
  * - `auto`: the original flow grid, sized from `iconSize` and `spacing`.
- * - `single` / `dual` / `quad`: fixed compositions that scale the icon to the
- *   widget and read their apps from the configured slots.
+ * - `single` / `dual` / `triple` / `quad` / `six` / `nine`: fixed grids that
+ *   scale the icon to the widget and read their apps from the configured slots.
+ *
+ * The fixed grids never use more than three columns, which is what keeps the
+ * icons large enough to read inside a widget.
  */
-export type WidgetLayout = 'auto' | 'single' | 'dual' | 'quad'
+export type WidgetLayout =
+  | 'auto'
+  | 'single'
+  | 'dual'
+  | 'triple'
+  | 'quad'
+  | 'six'
+  | 'nine'
 
 export const WIDGET_LAYOUTS: WidgetLayout[] = [
   'auto',
   'single',
   'dual',
-  'quad'
+  'triple',
+  'quad',
+  'six',
+  'nine'
 ]
 
-/** The fixed layouts use at most four apps, one per slot. */
-export const MAX_WIDGET_SLOTS = 4
+/** The widest fixed arrangement; the grid layouts are capped at three columns. */
+export const MAX_GRID_COLUMNS = 3
+
+export interface GridSpec {
+  columns: number
+  rows: number
+}
+
+/**
+ * The row/column shape of a fixed layout, or `undefined` for the auto grid.
+ * Every shape stays within `MAX_GRID_COLUMNS` columns.
+ */
+export function gridSpecForLayout(
+  layout: WidgetLayout
+): GridSpec | undefined {
+  switch (layout) {
+    case 'single':
+      return { columns: 1, rows: 1 }
+    case 'dual':
+      return { columns: 2, rows: 1 }
+    case 'triple':
+      return { columns: 3, rows: 1 }
+    case 'quad':
+      return { columns: 2, rows: 2 }
+    case 'six':
+      return { columns: 3, rows: 2 }
+    case 'nine':
+      return { columns: 3, rows: 3 }
+    default:
+      return undefined
+  }
+}
+
+/** How many apps the largest fixed layout pins, one per grid cell. */
+export const MAX_WIDGET_SLOTS = 9
 
 /** How many apps each layout renders. */
 export const WIDGET_LAYOUT_SLOT_COUNT: Record<WidgetLayout, number> = {
   auto: MAX_WIDGET_SLOTS,
   single: 1,
   dual: 2,
-  quad: 4
+  triple: 3,
+  quad: 4,
+  six: 6,
+  nine: 9
 }
 
 export function isWidgetLayout(value: string): value is WidgetLayout {
   return (WIDGET_LAYOUTS as string[]).includes(value)
+}
+
+/**
+ * How many folder panels a widget of this family holds.
+ *
+ * A panel is one whole folder, rendered with that folder's own arrangement, so
+ * the count follows the widget size rather than the user's choice: the large
+ * widget divides into two, the extra-large families into three, and everything
+ * smaller stays whole.
+ */
+export function panelCountForFamily(family: string): number {
+  if (family === 'systemLarge') return 2
+  if (family === 'systemExtraLarge' || family === 'systemExtraLargePortrait') {
+    return MAX_WIDGET_PANELS
+  }
+  return 1
+}
+
+/** The most panels a widget can be divided into. */
+export const MAX_WIDGET_PANELS = 3
+
+/**
+ * The axis the panels are laid out along: the longer one, which keeps every
+ * panel as close to square as the widget allows. Portrait widgets stack rows,
+ * landscape ones sit side by side.
+ */
+export function panelAxisForSize(
+  width: number,
+  height: number
+): 'vertical' | 'horizontal' {
+  return height >= width ? 'vertical' : 'horizontal'
+}
+
+/**
+ * Pads or trims a panel list to exactly `MAX_WIDGET_PANELS` entries.
+ *
+ * Also migrates the older format, where a panel was just a folder id string,
+ * into the object form that carries per-panel appearance settings.
+ */
+export function normalizeWidgetPanels(panels?: unknown): WidgetPanelConfig[] {
+  const list = Array.isArray(panels) ? panels : []
+  const next: WidgetPanelConfig[] = []
+  for (let i = 0; i < MAX_WIDGET_PANELS; i++) {
+    const entry = list[i]
+    if (typeof entry === 'string') {
+      next.push({ folder: entry.trim() })
+    } else if (entry && typeof entry === 'object') {
+      const panel = entry as WidgetPanelConfig
+      next.push({
+        folder: (panel.folder ?? '').trim(),
+        layout: panel.layout,
+        iconSize: panel.iconSize,
+        spacing: panel.spacing,
+        shape: panel.shape,
+        cornerRadius: panel.cornerRadius,
+        widgetAccentedRenderingMode: panel.widgetAccentedRenderingMode,
+        cover: panel.cover
+      })
+    } else {
+      next.push({ folder: '' })
+    }
+  }
+  return next
 }
 
 export interface Config {
@@ -200,6 +396,13 @@ export interface Config {
    * widget background.
    */
   widgetCoverMode?: boolean
+  /**
+   * Folders shown side by side when the widget is large enough to divide, in
+   * panel order. Each entry carries the folder to show plus that panel's own
+   * appearance; an empty entry falls back to the next unused folder. A large
+   * widget divides into two panels and the extra-large families into three.
+   */
+  widgetPanels?: WidgetPanelConfig[]
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -209,7 +412,8 @@ export const DEFAULT_CONFIG: Config = {
   widgetAccentedRenderingMode: 'fullColor',
   widgetLayout: 'auto',
   widgetSlots: [],
-  widgetCoverMode: false
+  widgetCoverMode: false,
+  widgetPanels: []
 }
 
 /** Pads or trims a slot list so it always has exactly `MAX_WIDGET_SLOTS` entries. */
@@ -219,6 +423,74 @@ export function normalizeWidgetSlots(slots?: string[]): string[] {
     next.push((slots?.[i] ?? '').trim())
   }
   return next
+}
+
+/** One folder rendered inside a divided widget. */
+export interface WidgetPanel {
+  folder: Folder
+  apps: AppItem[]
+  /** The panel's own appearance overrides, straight from the settings. */
+  style: WidgetPanelConfig
+}
+
+/**
+ * Resolves the folders a divided widget shows, position by position: an
+ * explicit entry wins, and every empty entry takes the next folder that has
+ * not been used yet. Entries naming a folder that no longer exists are
+ * skipped, so deleting a folder empties one panel rather than breaking the
+ * widget. At most `count` panels are returned.
+ */
+export function resolveWidgetPanels(
+  folders: Folder[],
+  apps: AppItem[],
+  configs: WidgetPanelConfig[] | undefined,
+  count: number
+): WidgetPanel[] {
+  if (count <= 0) return []
+
+  const byName = new Map<string, Folder>()
+  for (const folder of folders) {
+    byName.set(folder.name, folder)
+    byName.set(folder.id, folder)
+  }
+
+  const styleAt = (index: number): WidgetPanelConfig =>
+    configs?.[index] ?? { folder: '' }
+
+  const picked: (Folder | undefined)[] = []
+  const used = new Set<string>()
+
+  for (let i = 0; i < count; i++) {
+    const folder = byName.get((styleAt(i).folder ?? '').trim())
+    if (folder && !used.has(folder.id)) {
+      picked.push(folder)
+      used.add(folder.id)
+    } else {
+      picked.push(undefined)
+    }
+  }
+
+  // Fill the gaps in list order, skipping any folder already placed.
+  let cursor = 0
+  for (let i = 0; i < count; i++) {
+    if (picked[i]) continue
+    while (cursor < folders.length && used.has(folders[cursor].id)) cursor++
+    if (cursor >= folders.length) break
+    picked[i] = folders[cursor]
+    used.add(folders[cursor].id)
+    cursor++
+  }
+
+  const resolved: WidgetPanel[] = []
+  picked.forEach((folder, index) => {
+    if (!folder) return
+    resolved.push({
+      folder,
+      apps: apps.filter(app => app.folderIds?.includes(folder.id)),
+      style: styleAt(index)
+    })
+  })
+  return resolved
 }
 
 export const DEFAULT_APPS: AppItem[] = [
@@ -249,6 +521,16 @@ export interface WidgetParameter {
   slots?: string[]
   /** `cover=1` turns on the cover presentation for the fixed layouts. */
   cover?: boolean
+  /**
+   * `folders=Work,Play` splits the widget into panels, one folder each. Only
+   * the panels a widget of this size can hold are used.
+   */
+  folders?: string[]
+  /**
+   * `panelAxis=columns` puts the panels side by side instead of along the
+   * longer edge. Accepts `columns`/`horizontal` or `rows`/`vertical`.
+   */
+  panelAxis?: 'vertical' | 'horizontal'
 }
 
 const TRUE_WORDS = ['1', 'true', 'yes', 'on']
@@ -304,6 +586,21 @@ export function parseWidgetParameter(
     } else if (key === 'cover' || key === 'covermode') {
       const cover = parseBoolean(value)
       if (cover !== undefined) parsed.cover = cover
+    } else if (key === 'folders' || key === 'panels') {
+      // Folder names may contain commas only by accident, so an unknown token
+      // is ignored by the resolver that follows, not here.
+      const names = value
+        .split(/[,，]/)
+        .map(name => name.trim())
+        .filter(Boolean)
+      if (names.length > 0) parsed.folders = names
+    } else if (key === 'panelaxis' || key === 'axis') {
+      const word = value.toLowerCase()
+      if (word === 'columns' || word === 'horizontal' || word === 'h') {
+        parsed.panelAxis = 'horizontal'
+      } else if (word === 'rows' || word === 'vertical' || word === 'v') {
+        parsed.panelAxis = 'vertical'
+      }
     }
   }
   return parsed
@@ -313,12 +610,20 @@ export function parseWidgetParameter(
 export function buildWidgetParameter(
   layout: WidgetLayout,
   folderName?: string,
-  cover?: boolean
+  cover?: boolean,
+  folders?: string[]
 ): string {
   const parts = [`layout=${layout}`]
   if (folderName) parts.push(`folder=${folderName}`)
   if (cover) parts.push('cover=1')
+  const names = (folders ?? []).filter(Boolean)
+  if (names.length > 0) parts.push(`folders=${names.join(',')}`)
   return parts.join('&')
+}
+
+/** The folder names a panel list points at, for the preview parameter. */
+export function panelFolderNames(panels: WidgetPanelConfig[]): string[] {
+  return panels.map(panel => (panel.folder ?? '').trim()).filter(Boolean)
 }
 
 /**

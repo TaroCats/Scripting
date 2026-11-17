@@ -32,7 +32,10 @@ import {
   Config,
   DEFAULT_CONFIG,
   Folder,
-  FolderStyle
+  FolderStyle,
+  MAX_GRID_COLUMNS,
+  WidgetLayout,
+  gridSpecForLayout
 } from '../constants'
 import { AppIconArtwork } from './AppIconArtwork'
 import { AppEditor } from './AppEditor'
@@ -252,6 +255,34 @@ function FolderSettingsView({
           onChanged={setCustomized}
         />
       </Section>
+      {customize && (
+        <Section
+          header={<Text>{t('widget')}</Text>}
+          footer={<Text>{t('folderWidgetLayoutFooter')}</Text>}
+        >
+          <Picker
+            title={t('folderWidgetLayout')}
+            value={folderStyle.layout ?? 'auto'}
+            onChanged={(value: string) =>
+              updateStyle({ layout: value as WidgetLayout })
+            }
+          >
+            <Text tag="auto">{t('widgetLayoutAuto')}</Text>
+            <Text tag="single">{t('widgetLayoutSingle')}</Text>
+            <Text tag="dual">{t('widgetLayoutDual')}</Text>
+            <Text tag="triple">{t('widgetLayoutTriple')}</Text>
+            <Text tag="quad">{t('widgetLayoutQuad')}</Text>
+            <Text tag="six">{t('widgetLayoutSix')}</Text>
+            <Text tag="nine">{t('widgetLayoutNine')}</Text>
+          </Picker>
+          <Toggle
+            title={t('folderWidgetCover')}
+            systemImage="rectangle.inset.filled"
+            value={folderStyle.cover ?? false}
+            onChanged={(value: boolean) => updateStyle({ cover: value })}
+          />
+        </Section>
+      )}
       {customize && (
         <Section header={<Text>{t('appearance')}</Text>}>
           <Stepper
@@ -647,6 +678,7 @@ function FolderPreview({
                   apps={apps}
                   config={config}
                   previewSize={Math.min(proxy.size.width, proxy.size.height)}
+                  layout={folder.style?.layout}
                 />
               )}
             </GeometryReader>
@@ -660,19 +692,64 @@ function FolderPreview({
 function FolderPreviewGrid({
   apps,
   config,
-  previewSize
+  previewSize,
+  layout
 }: {
   apps: AppItem[]
   config: Config
   previewSize: number
+  layout?: WidgetLayout
 }) {
   const iconSize = config.iconSize || DEFAULT_CONFIG.iconSize
   const preferredSpacing = config.spacing
+  const spec = layout ? gridSpecForLayout(layout) : undefined
+
+  if (spec) {
+    // A fixed layout draws its own rows and columns, so the folder preview
+    // matches what the widget will render instead of the auto flow.
+    const gap = 8
+    const cell = Math.min(
+      (previewSize - preferredSpacing * 2 - gap * (spec.columns - 1)) /
+        spec.columns,
+      (previewSize - preferredSpacing * 2 - gap * (spec.rows - 1)) / spec.rows
+    )
+    const displayApps = apps.slice(0, spec.columns * spec.rows)
+    const rows: AppItem[][] = []
+    for (let i = 0; i < displayApps.length; i += spec.columns) {
+      rows.push(displayApps.slice(i, i + spec.columns))
+    }
+    const cellIconSize = Math.max(10, cell)
+
+    return (
+      <VStack
+        spacing={gap}
+        padding={preferredSpacing}
+        frame={{ width: previewSize, height: previewSize }}
+        alignment="center"
+      >
+        <Spacer />
+        {rows.map((row, rowIndex) => (
+          <HStack key={rowIndex} spacing={gap} alignment="center">
+            {row.map(item => (
+              <AppIconArtwork
+                key={item.id}
+                item={item}
+                config={{ ...config, iconSize: cellIconSize, cornerRadius: undefined }}
+              />
+            ))}
+          </HStack>
+        ))}
+        <Spacer />
+      </VStack>
+    )
+  }
+
   const availableSize = Math.max(0, previewSize - preferredSpacing * 2)
   const itemStride = iconSize + preferredSpacing
-  const columns = Math.max(
-    1,
-    Math.floor((availableSize + preferredSpacing) / itemStride)
+  // A folder preview never exceeds three columns, matching the widget grids.
+  const columns = Math.min(
+    MAX_GRID_COLUMNS,
+    Math.max(1, Math.floor((availableSize + preferredSpacing) / itemStride))
   )
   const rowCount = columns
   const displayApps = apps.slice(0, columns * rowCount)

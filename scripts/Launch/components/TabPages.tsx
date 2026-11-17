@@ -1,5 +1,6 @@
 import {
   Button,
+  Color,
   ContentUnavailableView,
   Device,
   EditButton,
@@ -25,12 +26,18 @@ import {
   Config,
   Folder,
   FolderStyle,
+  MAX_WIDGET_PANELS,
   WIDGET_LAYOUT_SLOT_COUNT,
   WidgetLayout,
+  WidgetPanelConfig,
   buildWidgetParameter,
-  normalizeWidgetSlots
+  normalizeWidgetPanels,
+  normalizeWidgetSlots,
+  panelFolderNames
 } from '../constants'
 import { AppEditor } from './AppEditor'
+import { isiCloudReady, pushToiCloud } from '../cloudSync'
+import { PanelSettingsView } from './PanelSettings'
 import {
   FolderDetail,
   FolderGridCell,
@@ -53,11 +60,18 @@ const FOLDER_GRID_COLUMNS = [
 ]
 
 /** The most informative widget size to demo each layout in. */
-const PREVIEW_FAMILY: Record<WidgetLayout, 'systemSmall' | 'systemMedium'> = {
+const PREVIEW_FAMILY: Record<
+  WidgetLayout,
+  'systemSmall' | 'systemMedium' | 'systemLarge'
+> = {
   auto: 'systemMedium',
   single: 'systemSmall',
   dual: 'systemMedium',
-  quad: 'systemMedium'
+  triple: 'systemMedium',
+  quad: 'systemMedium',
+  // The denser grids need the tall widget to show every row.
+  six: 'systemLarge',
+  nine: 'systemLarge'
 }
 
 export function AppsPage({
@@ -269,18 +283,22 @@ export function FoldersPage({
 export function SettingsPage({
   config,
   apps,
+  folders = [],
   onSaveConfig
 }: {
   config: Config
   apps: AppItem[]
+  folders?: Folder[]
   onSaveConfig: (patch: Partial<Config>) => void
 }) {
   const { t } = useI18n()
   const [language, setLanguagePreference] = useState<LanguagePreference>(
     getLanguagePreference
   )
+  const cloudReady = isiCloudReady()
   const layout: WidgetLayout = config.widgetLayout ?? 'auto'
   const slots = normalizeWidgetSlots(config.widgetSlots)
+  const panels = normalizeWidgetPanels(config.widgetPanels)
   // A slot may point at a deleted app; showing "Default" is kinder than an
   // unresolved picker value.
   const slotValue = (index: number) =>
@@ -292,12 +310,47 @@ export function SettingsPage({
     onSaveConfig({ widgetSlots: next })
   }
 
+  function updatePanel(index: number, panel: WidgetPanelConfig) {
+    const next = normalizeWidgetPanels(config.widgetPanels)
+    next[index] = panel
+    onSaveConfig({ widgetPanels: next })
+  }
+
+  /** Human-readable layout name, used in each panel's summary row. */
+  function layoutLabel(value?: WidgetLayout) {
+    switch (value) {
+      case 'single':
+        return t('widgetLayoutSingle')
+      case 'dual':
+        return t('widgetLayoutDual')
+      case 'triple':
+        return t('widgetLayoutTriple')
+      case 'quad':
+        return t('widgetLayoutQuad')
+      case 'six':
+        return t('widgetLayoutSix')
+      case 'nine':
+        return t('widgetLayoutNine')
+      default:
+        return t('widgetLayoutAuto')
+    }
+  }
+
   async function previewWidget() {
-    const family = PREVIEW_FAMILY[layout]
+    // A large widget divides into two panels and the extra-large into three,
+    // so preview those sizes when panels are configured.
+    const panelNames = panelFolderNames(panels)
+    const divided = panelNames.length > 0
+    const family = divided
+      ? PREVIEW_FAMILY[layout] === 'systemSmall'
+        ? 'systemMedium'
+        : 'systemLarge'
+      : PREVIEW_FAMILY[layout]
     const parameter = buildWidgetParameter(
       layout,
       undefined,
-      config.widgetCoverMode
+      config.widgetCoverMode,
+      panelNames
     )
     const optionName = t('widget')
     try {
@@ -321,6 +374,38 @@ export function SettingsPage({
         frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
         scrollContentBackground="hidden"
       >
+        <Section
+          header={<Text>{t('iCloud')}</Text>}
+          footer={
+            <Text>
+              {cloudReady ? t('iCloudFooter') : t('iCloudOffFooter')}
+            </Text>
+          }
+        >
+          <HStack>
+            <Image
+              systemName={cloudReady ? 'icloud.fill' : 'icloud.slash'}
+              foregroundStyle={
+                (cloudReady ? 'systemBlue' : 'secondaryLabel') as Color
+              }
+            />
+            <Text>{cloudReady ? t('iCloudOn') : t('iCloudOff')}</Text>
+            <Spacer />
+          </HStack>
+          <Button
+            title={t('iCloudBackupNow')}
+            systemImage="arrow.up.to.line"
+            disabled={!cloudReady}
+            action={async () => {
+              const ok = pushToiCloud()
+              await Dialog.alert({
+                title: t('iCloud'),
+                message: ok ? t('iCloudBackupDone') : t('iCloudBackupFailed')
+              })
+            }}
+          />
+        </Section>
+
         <Section>
           <Picker
             title={t('language')}
@@ -418,7 +503,10 @@ export function SettingsPage({
             <Text tag="auto">{t('widgetLayoutAuto')}</Text>
             <Text tag="single">{t('widgetLayoutSingle')}</Text>
             <Text tag="dual">{t('widgetLayoutDual')}</Text>
+            <Text tag="triple">{t('widgetLayoutTriple')}</Text>
             <Text tag="quad">{t('widgetLayoutQuad')}</Text>
+            <Text tag="six">{t('widgetLayoutSix')}</Text>
+            <Text tag="nine">{t('widgetLayoutNine')}</Text>
           </Picker>
         </Section>
 
@@ -464,6 +552,56 @@ export function SettingsPage({
             )}
           </Section>
         )}
+
+        <Section
+          header={<Text>{t('widgetPanels')}</Text>}
+          footer={
+            <Text>
+              {folders.length < 2
+                ? t('widgetPanelsEmpty')
+                : t('widgetPanelsFooter')}
+            </Text>
+          }
+        >
+          {folders.length < 2 ? null : (
+            <Fragment>
+              {Array.from(
+                { length: MAX_WIDGET_PANELS },
+                (_unused, index) => {
+                  const panel = panels[index]
+                  const folder = folders.find(
+                    entry =>
+                      entry.id === panel.folder || entry.name === panel.folder
+                  )
+                  return (
+                    <NavigationLink
+                      key={index}
+                      destination={
+                        <PanelSettingsView
+                          index={index}
+                          panel={panel}
+                          folders={folders}
+                          globalConfig={config}
+                          onChange={next => updatePanel(index, next)}
+                        />
+                      }
+                    >
+                      <HStack>
+                        <Text>
+                          {t('widgetPanelLabel', { index: index + 1 })}
+                        </Text>
+                        <Spacer />
+                        <Text opacity={0.5} lineLimit={1}>
+                          {`${folder ? folder.name : t('widgetPanelDefault')} · ${layoutLabel(panel.layout)}`}
+                        </Text>
+                      </HStack>
+                    </NavigationLink>
+                  )
+                }
+              )}
+            </Fragment>
+          )}
+        </Section>
 
         <Section
           footer={

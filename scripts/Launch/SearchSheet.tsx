@@ -18,6 +18,7 @@ import {
   useState
 } from 'scripting'
 import type { Color } from 'scripting'
+import { pickArtwork } from './constants'
 import { TranslationKey, useI18n } from './i18n'
 
 export interface ITunesApp {
@@ -70,10 +71,6 @@ function regionFor(code: string): Region {
   return REGIONS.find((r) => r.code === code) || REGIONS[0]
 }
 
-function pickArtwork(app: ITunesApp): string | undefined {
-  return app.artworkUrl100 || app.artworkUrl60
-}
-
 function ResultRow({
   app,
   onSelect
@@ -81,7 +78,9 @@ function ResultRow({
   app: ITunesApp
   onSelect: () => void
 }) {
-  const artwork = pickArtwork(app)
+  // The row renders at 48pt; 128px is a crisp 2x-3x source without pulling a
+  // needlessly large image over the network.
+  const artwork = pickArtwork(app, 128)
   return (
     <Button action={onSelect} buttonStyle="plain">
       <HStack

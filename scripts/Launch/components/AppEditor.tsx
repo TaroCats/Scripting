@@ -27,7 +27,8 @@ import {
   CACHE_PATH,
   Folder,
   findRepositoryDarkIcon,
-  getIconCachePath
+  getIconCachePath,
+  pickArtwork
 } from '../constants'
 import {
   readButtonCode,
@@ -285,7 +286,9 @@ export function AppEditor({
       setBundleId(app.bundleId)
       setMode('bundleId')
     }
-    const artwork = app.artworkUrl100 || app.artworkUrl60 || ''
+    // Ask for a large square render: the widget can scale the icon well past
+    // the 100x100 thumbnail the search response ships with.
+    const artwork = pickArtwork(app, 512) ?? ''
     if (artwork) {
       setIcon(artwork)
       setIconType('image')

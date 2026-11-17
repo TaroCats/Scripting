@@ -25,9 +25,11 @@ import {
   FolderStyle,
   getIconCachePath,
   migrateAppItem,
+  normalizeWidgetPanels,
   normalizeWidgetSlots
 } from './constants'
 import { pruneButtonCode, runButtonById } from './buttonCode'
+import { pushToiCloud, syncWithiCloud } from './cloudSync'
 import { filterApps, matchesQuery } from './components/SharedViews'
 import { AppsPage, FoldersPage, SettingsPage } from './components/TabPages'
 import { useI18n } from './i18n'
@@ -43,46 +45,66 @@ function App() {
   const dismiss = Navigation.useDismiss()
 
   useEffect(() => {
-    try {
-      if (FileManager.existsSync(FILE_PATH)) {
-        const source = FileManager.readAsStringSync(FILE_PATH)
-        apps.setValue((JSON.parse(source) as AppItem[]).map(migrateAppItem))
-      } else {
+    let cancelled = false
+
+    async function load() {
+      // Reconcile with iCloud before reading, so a reinstall or a second
+      // device starts from the newest copy.
+      try {
+        await syncWithiCloud()
+      } catch (error) {
+        console.error(error)
+      }
+      if (cancelled) return
+
+      try {
+        if (FileManager.existsSync(FILE_PATH)) {
+          const source = FileManager.readAsStringSync(FILE_PATH)
+          apps.setValue((JSON.parse(source) as AppItem[]).map(migrateAppItem))
+        } else {
+          apps.setValue(DEFAULT_APPS)
+          ensureBaseDirectory()
+          FileManager.writeAsStringSync(FILE_PATH, JSON.stringify(DEFAULT_APPS))
+        }
+
+        if (FileManager.existsSync(FOLDERS_PATH)) {
+          folders.setValue(
+            JSON.parse(FileManager.readAsStringSync(FOLDERS_PATH))
+          )
+        }
+
+        if (FileManager.existsSync(CONFIG_PATH)) {
+          const stored = JSON.parse(
+            FileManager.readAsStringSync(CONFIG_PATH)
+          ) as Partial<Config>
+          setConfig({
+            shape: stored.shape ?? DEFAULT_CONFIG.shape,
+            iconSize: stored.iconSize ?? DEFAULT_CONFIG.iconSize,
+            spacing: stored.spacing ?? DEFAULT_CONFIG.spacing,
+            widgetAccentedRenderingMode:
+              stored.widgetAccentedRenderingMode ??
+              DEFAULT_CONFIG.widgetAccentedRenderingMode,
+            cornerRadius: stored.cornerRadius,
+            widgetLayout: stored.widgetLayout ?? DEFAULT_CONFIG.widgetLayout,
+            widgetSlots: normalizeWidgetSlots(stored.widgetSlots),
+            widgetCoverMode:
+              stored.widgetCoverMode ?? DEFAULT_CONFIG.widgetCoverMode,
+            widgetPanels: normalizeWidgetPanels(stored.widgetPanels)
+          })
+        }
+      } catch (error) {
+        console.error(error)
         apps.setValue(DEFAULT_APPS)
-        ensureBaseDirectory()
-        FileManager.writeAsStringSync(FILE_PATH, JSON.stringify(DEFAULT_APPS))
+      } finally {
+        if (cancelled) return
+        setIsLoaded(true)
+        apps.value.forEach(cacheAppIcon)
       }
+    }
 
-      if (FileManager.existsSync(FOLDERS_PATH)) {
-        folders.setValue(
-          JSON.parse(FileManager.readAsStringSync(FOLDERS_PATH))
-        )
-      }
-
-      if (FileManager.existsSync(CONFIG_PATH)) {
-        const stored = JSON.parse(
-          FileManager.readAsStringSync(CONFIG_PATH)
-        ) as Partial<Config>
-        setConfig({
-          shape: stored.shape ?? DEFAULT_CONFIG.shape,
-          iconSize: stored.iconSize ?? DEFAULT_CONFIG.iconSize,
-          spacing: stored.spacing ?? DEFAULT_CONFIG.spacing,
-          widgetAccentedRenderingMode:
-            stored.widgetAccentedRenderingMode ??
-            DEFAULT_CONFIG.widgetAccentedRenderingMode,
-          cornerRadius: stored.cornerRadius,
-          widgetLayout: stored.widgetLayout ?? DEFAULT_CONFIG.widgetLayout,
-          widgetSlots: normalizeWidgetSlots(stored.widgetSlots),
-          widgetCoverMode:
-            stored.widgetCoverMode ?? DEFAULT_CONFIG.widgetCoverMode
-        })
-      }
-    } catch (error) {
-      console.error(error)
-      apps.setValue(DEFAULT_APPS)
-    } finally {
-      setIsLoaded(true)
-      apps.value.forEach(cacheAppIcon)
+    load()
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -92,6 +114,7 @@ function App() {
       ensureBaseDirectory()
       FileManager.writeAsStringSync(FILE_PATH, JSON.stringify(apps.value))
       pruneButtonCode(apps.value.map(app => app.id))
+      pushToiCloud()
       Widget.reloadAll()
     } catch (error) {
       console.error(error)
@@ -106,6 +129,7 @@ function App() {
         FOLDERS_PATH,
         JSON.stringify(folders.value)
       )
+      pushToiCloud()
       Widget.reloadAll()
     } catch (error) {
       console.error(error)
@@ -148,6 +172,7 @@ function App() {
     const next: Config = { ...config, ...patch }
     ensureBaseDirectory()
     FileManager.writeAsStringSync(CONFIG_PATH, JSON.stringify(next))
+    pushToiCloud()
     Widget.reloadAll()
     setConfig(next)
   }
@@ -313,6 +338,7 @@ function App() {
         <SettingsPage
           config={config}
           apps={apps.value}
+          folders={folders.value}
           onSaveConfig={saveConfig}
         />
       )

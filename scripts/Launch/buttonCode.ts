@@ -1,5 +1,6 @@
 import { fetch, Notification, Path, Script, Widget } from 'scripting'
 import { AppItem, BUTTONS_PATH, getButtonCodePath } from './constants'
+import { pushToiCloud } from './cloudSync'
 
 /**
  * A "button" app item runs plain JavaScript authored by the user. The code
@@ -44,6 +45,8 @@ export function saveButtonCode(id: string, code: string) {
     FileManager.createDirectorySync(BUTTONS_PATH, true)
   }
   FileManager.writeAsStringSync(getButtonCodePath(id), code)
+  // User-authored code is not regenerable, so mirror it to iCloud right away.
+  pushToiCloud()
 }
 
 /** Removes code files whose owning app item no longer exists. */

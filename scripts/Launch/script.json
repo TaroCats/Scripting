@@ -22,16 +22,16 @@
   },
   "runInApp": false,
   "color": "rgba(243, 159, 68,1)",
-  "version": "1.7.2",
+  "version": "1.11.0",
   "localizedDescriptions": {
-    "en": "A customizable launcher widget for your favourite apps and folders.",
+    "en": "A customizable launcher widget for your favourite apps and folders. Large widgets can divide into folder panels, with single, dual and 3/4/6/9-grid or auto-grid layouts.",
     "es": "",
     "pt": "",
     "it": "",
     "ja": "",
     "ru": "",
     "de": "",
-    "zh": "可自定义的应用启动器小组件，支持单应用、双应用与四宫格布局。",
+    "zh": "可自定义的应用启动器小组件，大尺寸可分区展示多个文件夹，支持单应用、双应用、三/四/六/九宫格与自动网格布局。",
     "fr": ""
   },
   "permissions": null
