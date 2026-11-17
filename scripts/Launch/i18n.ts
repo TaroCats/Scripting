@@ -197,6 +197,10 @@ export const MESSAGE_KEYS = [
   'panelSummaryDefault',
   'panelFromFolder',
   'panelFolderOverrides',
+  'panelAlign',
+  'alignCenter',
+  'alignTop',
+  'alignBottom',
   // iCloud
   'iCloud',
   'iCloudOn',
@@ -409,6 +413,10 @@ const EN: MessageTable = {
   panelFromFolder: 'From folder',
   panelFolderOverrides:
     'This folder has its own appearance settings, and they take priority over the options below.',
+  panelAlign: 'Position',
+  alignCenter: 'Center',
+  alignTop: 'Top',
+  alignBottom: 'Bottom',
   // iCloud
   iCloud: 'iCloud',
   iCloudOn: 'On',
@@ -613,6 +621,10 @@ const ZH: MessageTable = {
   panelFromFolder: '跟随文件夹',
   panelFolderOverrides:
     '该文件夹已自定义外观，会优先于下面的设置。清空文件夹外观后，这里的设置才会生效。',
+  panelAlign: '位置',
+  alignCenter: '居中',
+  alignTop: '顶部',
+  alignBottom: '底部',
   // iCloud
   iCloud: 'iCloud',
   iCloudOn: '已开启',

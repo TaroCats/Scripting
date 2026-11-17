@@ -26,6 +26,7 @@ import {
   MAX_GRID_COLUMNS,
   MAX_PANEL_COLUMNS,
   MAX_WIDGET_SLOTS,
+  PanelAlign,
   WidgetLayout,
   WidgetPanel,
   WidgetPanelConfig,
@@ -46,6 +47,9 @@ import { t } from './i18n'
 
 const SECONDARY = 'secondaryLabel' as Color
 const WHITE = 'white' as Color
+
+/** Margin kept from the edge a panel's content is anchored to. */
+const ALIGN_INSET = 10
 /** Soft light-to-shadow wash that keeps a flat colour from looking printed. */
 const COVER_WASH = gradient('linear', {
   colors: [
@@ -59,6 +63,17 @@ const COVER_WASH = gradient('linear', {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * A widget config plus two flags saying whether the icon size and spacing came
+ * from an actual folder/panel setting rather than a computed default. The
+ * layouts use them to decide between "respect the user's value" and "fit the
+ * available space", which is what makes those settings visibly work.
+ */
+type RenderConfig = Config & {
+  iconSizeSet?: boolean
+  spacingSet?: boolean
 }
 
 function readJSON<T>(path: string, fallback: T): T {
@@ -355,7 +370,8 @@ function SingleAppLayout({
   width,
   height,
   cover,
-  flush = false
+  flush = false,
+  align = 'center'
 }: {
   apps: AppItem[]
   config: Config
@@ -364,6 +380,8 @@ function SingleAppLayout({
   cover: boolean
   /** Drop the outer inset so the icon fills a panel edge to edge. */
   flush?: boolean
+  /** Where the icon sits when it does not fill the panel. */
+  align?: PanelAlign
 }) {
   if (apps.length === 0) return <EmptyState />
 
@@ -383,19 +401,26 @@ function SingleAppLayout({
     )
   }
 
-  const size = clamp(Math.min(width, height) * 0.44, 40, 112)
+  const size = (config as RenderConfig).iconSizeSet
+    ? clamp(config.iconSize, 14, 160)
+    : clamp(Math.min(width, height) * 0.44, 40, 112)
+
+  // Anchoring to an edge keeps a 10pt margin from it.
+  const inset = flush ? 0 : 16
+  const padTop = align === 'top' ? Math.max(inset, ALIGN_INSET) : inset
+  const padBottom = align === 'bottom' ? Math.max(inset, ALIGN_INSET) : inset
 
   return (
     <VStack
       spacing={10}
-      padding={flush ? 0 : 16}
+      padding={{ leading: inset, trailing: inset, top: padTop, bottom: padBottom }}
       frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
       alignment="center"
     >
-      <Spacer />
+      {align !== 'top' ? <Spacer /> : null}
       <AppIcon item={app} config={config} size={size} />
       {height > 90 ? <AppLabel name={app.name} /> : null}
-      <Spacer />
+      {align !== 'bottom' ? <Spacer /> : null}
     </VStack>
   )
 }
@@ -416,7 +441,8 @@ function FixedGridLayout({
   columns,
   rows,
   cover,
-  flush = false
+  flush = false,
+  align = 'center'
 }: {
   apps: AppItem[]
   config: Config
@@ -427,6 +453,8 @@ function FixedGridLayout({
   cover: boolean
   /** Drop the outer inset so the grid fills a panel edge to edge. */
   flush?: boolean
+  /** Where the rows sit when they do not fill the panel. */
+  align?: PanelAlign
 }) {
   if (apps.length === 0) return <EmptyState />
 
@@ -490,18 +518,26 @@ function FixedGridLayout({
   // A panel is much smaller than the widget, so the inset and the gaps shrink
   // with it instead of eating most of the cell.
   const scale = Math.min(width, height)
-  const padding = flush ? 0 : clamp(Math.round(scale * 0.045), 4, 16)
-  const gap = columnCount > 2 ? clamp(Math.round(scale * 0.028), 3, 10) : clamp(Math.round(scale * 0.04), 4, 14)
+  const inset = flush ? 0 : clamp(Math.round(scale * 0.045), 4, 16)
+  // Anchoring to an edge keeps a 10pt margin from it.
+  const padTop = align === 'top' ? Math.max(inset, ALIGN_INSET) : inset
+  const padBottom = align === 'bottom' ? Math.max(inset, ALIGN_INSET) : inset
+  const render = config as RenderConfig
+  const gap = render.spacingSet
+    ? clamp(config.spacing, 0, 40)
+    : columnCount > 2
+      ? clamp(Math.round(scale * 0.028), 3, 10)
+      : clamp(Math.round(scale * 0.04), 4, 14)
   // The icon has to fit both the cell width and the cell height. Without a
   // label it still keeps a small margin so neighbouring icons do not touch.
   const cellWidth =
-    (width - padding * 2 - gap * (columnCount - 1)) / columnCount
-  const cellHeight = (height - padding * 2 - gap * (rows - 1)) / rows
+    (width - inset * 2 - gap * (columnCount - 1)) / columnCount
+  const cellHeight = (height - padTop - padBottom - gap * (rows - 1)) / rows
   const showLabel = rows === 1 && height > 90
   // With a label the icon can use the full remaining height; without one it
   // keeps a small margin so neighbouring rows do not touch.
   const labelAllowance = showLabel ? 22 : cellHeight * 0.06
-  const size = clamp(
+  const cellSize = clamp(
     Math.min(
       cellWidth * (columnCount > 2 ? 0.8 : 0.82),
       cellHeight - labelAllowance
@@ -509,15 +545,25 @@ function FixedGridLayout({
     14,
     92
   )
+  // An explicit icon size caps the cell fit, so changing it has a visible
+  // effect instead of being swallowed by the fill-the-cell maths.
+  const size = render.iconSizeSet
+    ? clamp(Math.min(cellSize, config.iconSize), 14, 92)
+    : cellSize
 
   return (
     <VStack
       spacing={gap}
-      padding={padding}
+      padding={{
+        leading: inset,
+        trailing: inset,
+        top: padTop,
+        bottom: padBottom
+      }}
       frame={{ maxWidth: 'infinity', maxHeight: 'infinity' }}
       alignment="center"
     >
-      <Spacer />
+      {align !== 'top' ? <Spacer /> : null}
       {gridRows.map((row, rowIndex) => (
         <HStack
           key={rowIndex}
@@ -533,7 +579,7 @@ function FixedGridLayout({
           ))}
         </HStack>
       ))}
-      <Spacer />
+      {align !== 'bottom' ? <Spacer /> : null}
     </VStack>
   )
 }
@@ -544,12 +590,15 @@ function AutoGridLayout({
   config,
   width,
   height,
-  embedded = false
+  embedded = false,
+  align = 'center'
 }: {
   apps: AppItem[]
   config: Config
   width: number
   height: number
+  /** Where the rows sit when they do not fill the panel. */
+  align?: PanelAlign
   /**
    * Inside a divided widget the grid fills its panel edge to edge: no outer
    * padding, and the leftover space becomes equal gaps on both axes.
@@ -566,10 +615,20 @@ function AutoGridLayout({
   const totalHeight = height
 
   if (embedded) {
-    // A panel is wide and short, so it allows more columns than the whole
-    // widget. `gap` is the minimum breathing room used to pick the grid shape;
-    // the real gaps are then widened so the grid spans the panel exactly.
-    const gap = Math.max(2, Math.min(preferredSpacing, Math.round(iconSize * 0.35)))
+    const render = config as RenderConfig
+    // When the user configured the icon size or the spacing, take those
+    // literally and centre the result. Otherwise pick a minimum gap and widen
+    // it so the grid spans the panel exactly.
+    const explicit = render.iconSizeSet === true || render.spacingSet === true
+    const gap = render.spacingSet
+      ? clamp(preferredSpacing, 0, 40)
+      : Math.max(2, Math.min(preferredSpacing, Math.round(iconSize * 0.35)))
+
+    // Anchoring to an edge keeps a 10pt margin from it, so that margin is
+    // taken out of the height the grid is fitted into.
+    const edge = align === 'center' ? 0 : ALIGN_INSET
+    const availHeight = totalHeight - edge
+
     const columns = clamp(
       Math.floor((totalWidth + gap) / (iconSize + gap)),
       1,
@@ -577,12 +636,18 @@ function AutoGridLayout({
     )
     const rowsThatFit = Math.max(
       1,
-      Math.floor((totalHeight + gap) / (iconSize + gap))
+      Math.floor((availHeight + gap) / (iconSize + gap))
     )
     const shown = apps.slice(0, columns * rowsThatFit)
     const rowCount = Math.max(1, Math.ceil(shown.length / columns))
-    const gapX = Math.max(0, (totalWidth - columns * iconSize) / (columns + 1))
-    const gapY = Math.max(0, (totalHeight - rowCount * iconSize) / (rowCount + 1))
+    const gapX = explicit
+      ? gap
+      : Math.max(0, (totalWidth - columns * iconSize) / (columns + 1))
+    const gapY = explicit
+      ? gap
+      : Math.max(0, (availHeight - rowCount * iconSize) / (rowCount + 1))
+    const padTop = align === 'top' ? ALIGN_INSET : explicit ? 0 : gapY
+    const padBottom = align === 'bottom' ? ALIGN_INSET : explicit ? 0 : gapY
 
     const rowGroups: AppItem[][] = []
     for (let i = 0; i < shown.length; i += columns) {
@@ -594,13 +659,14 @@ function AutoGridLayout({
         padding={{
           leading: gapX,
           trailing: gapX,
-          top: gapY,
-          bottom: gapY
+          top: padTop,
+          bottom: padBottom
         }}
         spacing={gapY}
         frame={{ width: totalWidth, height: totalHeight }}
         alignment="center"
       >
+        {align !== 'top' ? <Spacer /> : null}
         {rowGroups.map((row, rowIndex) => (
           <HStack key={rowIndex} spacing={gapX} alignment="center">
             {row.map(item => (
@@ -608,6 +674,7 @@ function AutoGridLayout({
             ))}
           </HStack>
         ))}
+        {align !== 'bottom' ? <Spacer /> : null}
       </VStack>
     )
   }
@@ -712,19 +779,19 @@ function PaneledLayout({
    * panel's overrides, then the global widget settings, so configuring a
    * folder once applies it everywhere that folder appears.
    */
-  const configForPanel = (panel: WidgetPanel): Config => {
+  const configForPanel = (panel: WidgetPanel): RenderConfig => {
     const style = panel.style ?? {}
     const folderStyle = panel.folder.style ?? {}
+    const explicitIconSize = folderStyle.iconSize ?? style.iconSize
+    const explicitSpacing = folderStyle.spacing ?? style.spacing
     return {
       ...config,
-      iconSize:
-        folderStyle.iconSize ??
-        style.iconSize ??
-        clamp(Math.round(base * 0.3), 18, 40),
+      iconSize: explicitIconSize ?? clamp(Math.round(base * 0.3), 18, 40),
       spacing:
-        folderStyle.spacing ??
-        style.spacing ??
+        explicitSpacing ??
         (compact ? Math.min(config.spacing, 8) : Math.min(config.spacing, 12)),
+      iconSizeSet: explicitIconSize !== undefined,
+      spacingSet: explicitSpacing !== undefined,
       shape: folderStyle.shape ?? style.shape ?? config.shape,
       cornerRadius:
         folderStyle.cornerRadius ?? style.cornerRadius ?? config.cornerRadius,
@@ -741,6 +808,8 @@ function PaneledLayout({
       panel.folder.style?.layout ?? panel.style?.layout ?? 'auto'
     const cover =
       panel.folder.style?.cover ?? panel.style?.cover ?? false
+    const align =
+      panel.folder.style?.align ?? panel.style?.align ?? 'center'
     // A definite frame per panel, so the grid's spacers can actually divide
     // the slice instead of collapsing to the content's intrinsic height.
     return (
@@ -755,6 +824,7 @@ function PaneledLayout({
           config={panelConfig}
           layout={layout}
           cover={cover}
+          align={align}
           width={panelWidth}
           height={contentHeight}
         />
@@ -792,6 +862,7 @@ function PanelContent({
   config,
   layout,
   cover,
+  align,
   width,
   height
 }: {
@@ -799,6 +870,7 @@ function PanelContent({
   config: Config
   layout: WidgetLayout
   cover: boolean
+  align: PanelAlign
   width: number
   height: number
 }) {
@@ -810,6 +882,7 @@ function PanelContent({
         width={width}
         height={height}
         cover={cover}
+        align={align}
         flush
       />
     )
@@ -826,6 +899,7 @@ function PanelContent({
         columns={spec.columns}
         rows={spec.rows}
         cover={cover}
+        align={align}
         flush
       />
     )
@@ -837,6 +911,7 @@ function PanelContent({
       config={config}
       width={width}
       height={height}
+      align={align}
       embedded
     />
   )
@@ -879,8 +954,14 @@ export function LauncherWidget({
   // Division only kicks in once a panel actually names a folder: without that
   // an existing large widget would lose its own `widgetLayout` arrangement the
   // moment this feature shipped.
+  // `folders=` from the widget parameter only overrides WHICH folders each
+  // panel shows. The panel's own appearance is kept, otherwise every widget
+  // configured with a folder list would silently lose its per-panel settings.
   const panelConfigs: WidgetPanelConfig[] | undefined = parameter.folders?.length
-    ? parameter.folders.map(folder => ({ folder }))
+    ? parameter.folders.map((folder, index) => ({
+        ...(config.widgetPanels?.[index] ?? {}),
+        folder
+      }))
     : config.widgetPanels
   const divisionRequested = (panelConfigs ?? []).some(
     panel => (panel.folder ?? '').trim() !== ''

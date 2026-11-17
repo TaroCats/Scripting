@@ -7,12 +7,14 @@ import {
   Spacer,
   Stepper,
   Text,
-  Toggle
+  Toggle,
+  useState
 } from 'scripting'
 import {
   Config,
   Folder,
   FolderStyle,
+  PanelAlign,
   WidgetLayout,
   WidgetPanelConfig
 } from '../constants'
@@ -41,14 +43,22 @@ export function PanelSettingsView({
 }) {
   const { t } = useI18n()
 
+  // A pushed page keeps the element it was opened with, so the `panel` prop
+  // never changes while editing. Local state is what makes the controls move,
+  // and it is also the base for every patch: spreading the stale prop would
+  // drop the fields edited just before.
+  const [draft, setDraft] = useState<WidgetPanelConfig>(panel)
+
   function update(patch: Partial<WidgetPanelConfig>) {
-    onChange({ ...panel, ...patch })
+    const next = { ...draft, ...patch }
+    setDraft(next)
+    onChange(next)
   }
 
   // The folder's own appearance wins over this panel's overrides, so it is
   // resolved first and also shown as the source of whatever is in effect.
   const activeFolder = folders.find(
-    entry => entry.id === panel.folder || entry.name === panel.folder
+    entry => entry.id === draft.folder || entry.name === draft.folder
   )
   const folderStyle: FolderStyle = activeFolder?.style ?? {}
   const folderHasStyle = Object.keys(folderStyle).length > 0
@@ -56,21 +66,23 @@ export function PanelSettingsView({
     folderStyle[field] !== undefined
 
   const effectiveIconSize =
-    folderStyle.iconSize ?? panel.iconSize ?? globalConfig.iconSize
+    folderStyle.iconSize ?? draft.iconSize ?? globalConfig.iconSize
   const effectiveSpacing =
-    folderStyle.spacing ?? panel.spacing ?? globalConfig.spacing
+    folderStyle.spacing ?? draft.spacing ?? globalConfig.spacing
   const effectiveShape =
-    folderStyle.shape ?? panel.shape ?? globalConfig.shape
+    folderStyle.shape ?? draft.shape ?? globalConfig.shape
   const effectiveRadius =
     folderStyle.cornerRadius ??
-    panel.cornerRadius ??
+    draft.cornerRadius ??
     effectiveIconSize * 0.225
   const effectiveRenderingMode =
     folderStyle.widgetAccentedRenderingMode ??
-    panel.widgetAccentedRenderingMode ??
+    draft.widgetAccentedRenderingMode ??
     globalConfig.widgetAccentedRenderingMode
-  const effectiveLayout = folderStyle.layout ?? panel.layout ?? 'auto'
-  const effectiveCover = folderStyle.cover ?? panel.cover ?? false
+  const effectiveLayout = folderStyle.layout ?? draft.layout ?? 'auto'
+  const effectiveAlign: PanelAlign =
+    folderStyle.align ?? draft.align ?? 'center'
+  const effectiveCover = folderStyle.cover ?? draft.cover ?? false
 
   /** Trailing value text: the inherited value, the panel's own, or "Auto". */
   function valueLabel(
@@ -88,7 +100,7 @@ export function PanelSettingsView({
       <Section>
         <Picker
           title={t('panelFolder')}
-          value={panel.folder ?? ''}
+          value={draft.folder ?? ''}
           onChanged={(value: string) => update({ folder: value })}
         >
           <Text tag="">{t('widgetPanelDefault')}</Text>
@@ -122,6 +134,18 @@ export function PanelSettingsView({
           <Text tag="nine">{t('widgetLayoutNine')}</Text>
         </Picker>
 
+        <Picker
+          title={t('panelAlign')}
+          value={effectiveAlign}
+          onChanged={(value: string) =>
+            update({ align: value as PanelAlign })
+          }
+        >
+          <Text tag="center">{t('alignCenter')}</Text>
+          <Text tag="top">{t('alignTop')}</Text>
+          <Text tag="bottom">{t('alignBottom')}</Text>
+        </Picker>
+
         <Stepper
           onIncrement={() => {
             const value = effectiveIconSize + 1
@@ -135,7 +159,7 @@ export function PanelSettingsView({
           <HStack>
             <Text>{t('iconSize')}</Text>
             <Spacer />
-            <Text opacity={0.5}>{valueLabel('iconSize', panel.iconSize)}</Text>
+            <Text opacity={0.5}>{valueLabel('iconSize', draft.iconSize)}</Text>
           </HStack>
         </Stepper>
 
@@ -152,7 +176,7 @@ export function PanelSettingsView({
           <HStack>
             <Text>{t('spacing')}</Text>
             <Spacer />
-            <Text opacity={0.5}>{valueLabel('spacing', panel.spacing)}</Text>
+            <Text opacity={0.5}>{valueLabel('spacing', draft.spacing)}</Text>
           </HStack>
         </Stepper>
 
@@ -182,7 +206,7 @@ export function PanelSettingsView({
               <Text>{t('cornerRadius')}</Text>
               <Spacer />
               <Text opacity={0.5}>
-                {valueLabel('cornerRadius', panel.cornerRadius)}
+                {valueLabel('cornerRadius', draft.cornerRadius)}
               </Text>
             </HStack>
           </Stepper>
@@ -218,7 +242,11 @@ export function PanelSettingsView({
         <Button
           title={t('panelReset')}
           role="destructive"
-          action={() => onChange({ folder: panel.folder ?? '' })}
+          action={() => {
+            const cleared: WidgetPanelConfig = { folder: draft.folder ?? '' }
+            setDraft(cleared)
+            onChange(cleared)
+          }}
         />
       </Section>
     </Form>

@@ -209,6 +209,8 @@ export interface FolderStyle {
   layout?: WidgetLayout
   /** Cover presentation flag for this folder's widget. */
   cover?: boolean
+  /** Where the content sits inside a divided widget's panel. */
+  align?: PanelAlign
 }
 
 /**
@@ -248,6 +250,18 @@ export type WidgetLayout =
   | 'quad'
   | 'six'
   | 'nine'
+
+/**
+ * Where a panel's content sits along the vertical axis when it does not fill
+ * the whole panel. `center` is the default.
+ */
+export type PanelAlign = 'center' | 'top' | 'bottom'
+
+export const PANEL_ALIGNS: PanelAlign[] = ['center', 'top', 'bottom']
+
+export function isPanelAlign(value: string): value is PanelAlign {
+  return (PANEL_ALIGNS as string[]).includes(value)
+}
 
 export const WIDGET_LAYOUTS: WidgetLayout[] = [
   'auto',
@@ -371,7 +385,8 @@ export function normalizeWidgetPanels(panels?: unknown): WidgetPanelConfig[] {
         shape: panel.shape,
         cornerRadius: panel.cornerRadius,
         widgetAccentedRenderingMode: panel.widgetAccentedRenderingMode,
-        cover: panel.cover
+        cover: panel.cover,
+        align: panel.align
       })
     } else {
       next.push({ folder: '' })
