@@ -1,6 +1,6 @@
-import { addDays, type AgendaItem, type HourlyWeather, foregroundStyle, startOfDay, DashboardData, formatDay, formatWeekday } from "../shared/shared"
+import { addDays, type AgendaItem, type DailyWeather, type HourlyWeather, type WeatherSummary, foregroundStyle, startOfDay, DashboardData, formatDay, formatShortTime, formatWeekday } from "../shared/shared"
 import { CompleteReminderIntent, RefreshWidgetIntent, ToggleReminderIntent } from "../app_intents"
-import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Divider, FlowLayout } from "scripting"
+import { HStack, Spacer, VStack, Text, Image, Button, Font, ShapeStyle, DynamicShapeStyle, Divider, FlowLayout, RoundedRectangle } from "scripting"
 
 type DayGroup = {
   key: string
@@ -229,5 +229,220 @@ export function AgendaColumn({ dashboard, maxLines = 10 }: { dashboard: Dashboar
       </Button>
       <EventLines events={dashboard.upcomingEvents} maxLines={maxLines} />
     </VStack>
+  )
+}
+
+/* ------------------------------------------------------------------
+ * 大号 / 超大号小组件专用布局组件
+ * ------------------------------------------------------------------ */
+
+/** 日程时间标签：全天 / 今天 / 进行中 / 09:00 / 11/22 */
+function scheduleLabel(event: AgendaItem, now: Date) {
+  const todayStart = startOfDay(now)
+  const tomorrowStart = addDays(todayStart, 1)
+  const startTime = event.startDate.getTime()
+
+  if (event.isAllDay) {
+    if (startTime < todayStart.getTime()) return "全天"
+    if (startTime < tomorrowStart.getTime()) return "今天"
+    return `${event.startDate.getMonth() + 1}/${event.startDate.getDate()}`
+  }
+
+  if (startTime < now.getTime()) return "进行中"
+  if (startTime < tomorrowStart.getTime()) return formatShortTime(event.startDate)
+  return `${event.startDate.getMonth() + 1}/${event.startDate.getDate()}`
+}
+
+/** 日期徽标：大号日期数字 + 月份 / 星期 */
+export function DateBadge({ date, fontSize = 38 }: { date: Date; fontSize?: number }) {
+  return (
+    <HStack alignment="center" spacing={7}>
+      <Text font={fontSize} bold lineLimit={1}>{formatDay(date)}</Text>
+      <VStack alignment="leading" spacing={0}>
+        <Text font={9} bold foregroundStyle="systemGray">{`${date.getMonth() + 1}月`}</Text>
+        <Text font={11} bold foregroundStyle="systemRed">{formatWeekday(date)}</Text>
+      </VStack>
+    </HStack>
+  )
+}
+
+/** 顶部：日期 + 当前天气 */
+export function WeatherHeader({ dashboard }: { dashboard: DashboardData }) {
+  const w = dashboard.weather
+  const now = new Date()
+
+  return (
+    <HStack alignment="center" spacing={10} frame={{ maxWidth: "infinity" }}>
+      <Button intent={ToggleReminderIntent({})} buttonStyle="plain">
+        <DateBadge date={now} />
+      </Button>
+      <Spacer />
+      {w ? (
+        <HStack alignment="center" spacing={8}>
+          <Image
+            systemName={w.symbolName}
+            font={30}
+            symbolRenderingMode="multicolor"
+            shadow={{ color: "systemGray", radius: 2, y: 1 }}
+            frame={{ width: 38, height: 38 }}
+          />
+          <VStack alignment="leading" spacing={1}>
+            <Text font={30} bold lineLimit={1}>{w.temperature}°</Text>
+            <Text font={10} foregroundStyle="systemGray" lineLimit={1}>
+              {`${w.condition} · ${w.highTemperature}°/${w.lowTemperature}°`}
+            </Text>
+          </VStack>
+        </HStack>
+      ) : (
+        <Text font={10} foregroundStyle="systemGray" lineLimit={2} frame={{ maxWidth: 160 }}>
+          {dashboard.warnings?.join(" ") || "天气不可用"}
+        </Text>
+      )}
+    </HStack>
+  )
+}
+
+/** 等宽逐时预报行，占满整行宽度 */
+export function HourlyStrip({ forecast, maxHour = 6 }: { forecast: HourlyWeather[]; maxHour?: number }) {
+  if (forecast.length === 0) return null
+  const items = forecast.slice(0, maxHour)
+
+  return (
+    <HStack spacing={0} frame={{ maxWidth: "infinity" }}>
+      {items.map((h, i) => (
+        <VStack key={i} alignment="center" spacing={4} frame={{ maxWidth: "infinity" }}>
+          <Text font={10} foregroundStyle="systemGray" lineLimit={1}>{h.time}</Text>
+          <Image
+            systemName={h.symbolName}
+            font={18}
+            symbolRenderingMode="multicolor"
+            shadow={{ color: "systemGray", radius: 2, y: 1 }}
+            frame={{ height: 22 }}
+          />
+          <Text font={12} bold lineLimit={1}>{h.temperature}°</Text>
+        </VStack>
+      ))}
+    </HStack>
+  )
+}
+
+/** 未来几天预报：星期 + 图标 + 最低/最高 */
+export function DailyForecastList({ forecast, maxDays = 5 }: { forecast: DailyWeather[]; maxDays?: number }) {
+  if (forecast.length === 0 || maxDays <= 0) return null
+
+  return (
+    <VStack alignment="leading" spacing={6} frame={{ maxWidth: "infinity" }}>
+      {forecast.slice(0, maxDays).map((day, index) => (
+        <HStack key={`${day.day}-${index}`} alignment="center" spacing={8} frame={{ maxWidth: "infinity" }}>
+          <Text font={11} foregroundStyle="systemGray" lineLimit={1} frame={{ width: 34, alignment: "leading" }}>
+            {day.day}
+          </Text>
+          <Image
+            systemName={day.symbolName}
+            font={14}
+            symbolRenderingMode="multicolor"
+            frame={{ width: 20 }}
+          />
+          <Spacer />
+          <Text font={11} foregroundStyle="systemGray" lineLimit={1} frame={{ width: 26, alignment: "trailing" }}>
+            {day.low}°
+          </Text>
+          <Text font={11} bold lineLimit={1} frame={{ width: 26, alignment: "trailing" }}>
+            {day.high}°
+          </Text>
+        </HStack>
+      ))}
+    </VStack>
+  )
+}
+
+/** 小节标题（左侧图标 + 文字，右侧可跟说明） */export function SectionTitle({ systemName, text, trailing }: { systemName: string; text: string; trailing?: string }) {
+  return (
+    <HStack alignment="center" spacing={4} frame={{ maxWidth: "infinity" }}>
+      <Image systemName={systemName} font={10} foregroundStyle="systemGray" />
+      <Text font={10} bold foregroundStyle="systemGray">{text}</Text>
+      <Spacer />
+      {trailing ? <Text font={10} foregroundStyle="systemGray" lineLimit={1}>{trailing}</Text> : null}
+    </HStack>
+  )
+}
+
+/** 单条日程：时间标签 + 色条/提醒圆圈 + 标题 */
+function AgendaRow({ event, now }: { event: AgendaItem; now: Date }) {
+  const row = (
+    <HStack alignment="center" spacing={6} frame={{ maxWidth: "infinity" }}>
+      <Text font={10} monospacedDigit foregroundStyle="systemGray" lineLimit={1} frame={{ width: 34, alignment: "leading" }}>
+        {scheduleLabel(event, now)}
+      </Text>
+      {event.type === "reminder"
+        ? <Image systemName="circle" font={11} foregroundStyle="systemBlue" />
+        : <RoundedRectangle cornerRadius={2} fill="systemBlue" frame={{ width: 3, height: 13 }} />}
+      <Text font={13} bold lineLimit={1} truncationMode="tail">{event.title}</Text>
+      <Spacer />
+      {event.location ? <Image systemName="mappin" font={9} foregroundStyle="systemGray" /> : null}
+    </HStack>
+  )
+
+  return event.type === "reminder"
+    ? <Button intent={CompleteReminderIntent({ id: event.identifier })} buttonStyle="plain">{row}</Button>
+    : row
+}
+
+/** 日程列表（按时间顺序，自动去重跨天重复展示） */
+export function AgendaRows({ events, maxRows = 6, spacing = 6 }: { events: AgendaItem[]; maxRows?: number; spacing?: number }) {
+  const now = new Date()
+
+  if (events.length === 0) {
+    return (
+      <HStack alignment="center" spacing={6} frame={{ maxWidth: "infinity" }}>
+        <Image systemName="checkmark.circle" font={12} foregroundStyle="systemGray" />
+        <Text font={11} foregroundStyle="systemGray">近期没有日程安排</Text>
+        <Spacer />
+      </HStack>
+    )
+  }
+
+  return (
+    <VStack alignment="leading" spacing={spacing} frame={{ maxWidth: "infinity" }}>
+      {events.slice(0, maxRows).map((event) => (
+        <AgendaRow key={`${event.type}-${event.identifier}`} event={event} now={now} />
+      ))}
+    </VStack>
+  )
+}
+
+/** 天气指标小项 */
+function WeatherMetric({ systemName, text }: { systemName: string; text: string }) {
+  return (
+    <HStack alignment="center" spacing={3}>
+      <Image systemName={systemName} font={10} foregroundStyle="systemGray" />
+      <Text font={10} foregroundStyle="systemGray" lineLimit={1}>{text}</Text>
+    </HStack>
+  )
+}
+
+/** 底部：体感 / 湿度 / 风向 + 刷新 */
+export function WeatherMetrics({ weather, showRefresh = true }: { weather: WeatherSummary | null; showRefresh?: boolean }) {
+  return (
+    <HStack alignment="center" spacing={12} frame={{ maxWidth: "infinity" }}>
+      {weather ? (
+        <>
+          <WeatherMetric systemName="thermometer.medium" text={`体感 ${weather.apparentTemperature}`} />
+          <WeatherMetric systemName="humidity" text={weather.humidity} />
+          <WeatherMetric systemName="wind" text={weather.wind} />
+        </>
+      ) : (
+        <Text font={10} foregroundStyle="systemGray">天气数据不可用</Text>
+      )}
+      <Spacer />
+      {showRefresh ? (
+        <Button intent={RefreshWidgetIntent({})} buttonStyle="plain">
+          <HStack alignment="center" spacing={2}>
+            <Image systemName="arrow.clockwise" font={9} foregroundStyle="systemGray" />
+            <Text font={9} foregroundStyle="systemGray">刷新</Text>
+          </HStack>
+        </Button>
+      ) : null}
+    </HStack>
   )
 }

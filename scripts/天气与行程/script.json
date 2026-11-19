@@ -1,45 +1,50 @@
 {
-  "contributors": [],
-  "version": "1.0.2",
-  "localizedNames": {
-    "de": "",
-    "fr": "",
-    "en": "",
-    "ja": "",
-    "ru": "",
-    "zh": "",
-    "it": "",
-    "es": "",
-    "pt": ""
+  "permissions" : null,
+  "localizedNames" : {
+    "es" : "",
+    "en" : "",
+    "de" : "",
+    "ja" : "",
+    "it" : "",
+    "zh" : "",
+    "fr" : "",
+    "pt" : "",
+    "ru" : ""
   },
-  "permissions": null,
-  "entry": "index.tsx",
-  "localizedDescriptions": {
-    "zh": "",
-    "en": "",
-    "fr": "",
-    "es": "",
-    "it": "",
-    "de": "",
-    "ru": "",
-    "ja": "",
-    "pt": ""
+  "author" : {
+    "name" : "TARO",
+    "homepage" : null,
+    "email" : "i@taro.cat"
   },
-  "remoteResource": {
-    "autoUpdateInterval": 3600,
-    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/%E5%A4%A9%E6%B0%94%E4%B8%8E%E8%A1%8C%E7%A8%8B",
-    "hash": "695edecc3011d6f5714ac1d00360d40a"
+  "contributors" : [
+
+  ],
+  "localizedDescriptions" : {
+    "en" : "",
+    "pt" : "",
+    "ja" : "",
+    "ru" : "",
+    "it" : "",
+    "fr" : "",
+    "de" : "",
+    "es" : "",
+    "zh" : ""
   },
-  "intentInputTypes": [],
-  "iconImage": "https://raw.githubusercontent.com/TaroCats/Scripting/refs/heads/main/scripts/%E5%A4%A9%E6%B0%94%E4%B8%8E%E8%A1%8C%E7%A8%8B/icon.png",
-  "runInApp": false,
-  "icon": "map.fill",
-  "color": "rgba(0, 0, 0, 1.00)",
-  "description": "",
-  "name": "天气与行程",
-  "author": {
-    "name": "TARO",
-    "email": "i@taro.cat",
-    "homepage": null
-  }
+  "icon" : "map.fill",
+  "remoteResource" : {
+    "url" : "https:\/\/github.com\/TaroCats\/Scripting\/releases\/download\/weather-trip\/weather-trip.zip",
+    "hash" : "6afaf2ccbd2c446e97b169dda9d9ace1",
+    "autoUpdateInterval" : 3600
+  },
+  "name" : "天气与行程",
+  "iconImage" : "https:\/\/raw.githubusercontent.com\/TaroCats\/Scripting\/refs\/heads\/main\/scripts\/%E5%A4%A9%E6%B0%94%E4%B8%8E%E8%A1%8C%E7%A8%8B\/icon.png",
+  "runInApp" : false,
+  "color" : "rgba(0, 0, 0, 1.00)",
+  "intentInputTypes" : [
+
+  ],
+  "version" : "1.0.2",
+  "remoteDefinitionId" : null,
+  "entry" : "index.tsx",
+  "description" : ""
 }

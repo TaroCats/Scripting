@@ -23,6 +23,13 @@ export type HourlyWeather = {
   temperature: string
 }
 
+export type DailyWeather = {
+  day: string
+  symbolName: string
+  high: string
+  low: string
+}
+
 export type WeatherSummary = {
   condition: string
   symbolName: string
@@ -31,6 +38,7 @@ export type WeatherSummary = {
   lowTemperature: string
   temperatureUnit: string
   hourlyForecast: HourlyWeather[]
+  dailyForecast?: DailyWeather[]
   apparentTemperature: string
   humidity: string
   wind: string

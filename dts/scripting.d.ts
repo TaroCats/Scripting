@@ -8648,9 +8648,16 @@ type MarkdownProps = {
      */
     useDefaultHighlighterTheme?: boolean;
     /**
-     * Whether the markdown view is scrollable, defaults to `true`.
+     * Whether code blocks scroll horizontally. Defaults to `true`.
      */
     scrollable?: boolean;
+    /**
+     * Whether tables can scroll horizontally. Defaults to `true`.
+     * Long cell text wraps within an adaptive width; wider tables scroll.
+     * Set to `false` to fit all columns to the available width without horizontal scrolling.
+     * Independent of code-block `scrollable`.
+     */
+    tableScrollable?: boolean;
 };
 /**
  * Display a view by markdown text.
@@ -11729,6 +11736,14 @@ declare namespace Navigation {
     function present<T = any>(options: VirtualNode | {
         element: VirtualNode;
         modalPresentationStyle?: ModalPresentationStyle;
+        /**
+         * Prevents interactive dismissal of this modal presentation. Defaults to false.
+         * Also blocks modal edge-back and its VoiceOver escape action.
+         * False does not override interactiveDismissDisabled. Provide an accessible
+         * Close button using useDismiss(), which still closes the page.
+         * Does not prevent closing an independent script window.
+         */
+        isModalInPresentation?: boolean;
         /**
          * Left-edge rightward swipe behavior for fullScreen / overFullScreen.
          * Defaults to disabled; other presentation styles ignore this option.

@@ -1,6 +1,6 @@
-import { addDays, formatShortTime } from "./shared_format"
+import { addDays, formatShortTime, formatWeekday } from "./shared_format"
 import { translateWeatherCondition } from "./shared_weather"
-import { type WeatherSummary } from "./shared_types"
+import { type DailyWeather, type WeatherSummary } from "./shared_types"
 
 const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000
 const WEATHER_CACHE_PATH = `${FileManager.appGroupDocumentsDirectory}/weather_cache.json`
@@ -9,6 +9,39 @@ type WeatherCache = {
   fetchedAt: number
   locationName: string
   weather: WeatherSummary
+}
+
+const COMPASS_ZH: Record<string, string> = {
+  north: "北风",
+  northnortheast: "北东北风",
+  northeast: "东北风",
+  eastnortheast: "东东北风",
+  east: "东风",
+  eastsoutheast: "东东南风",
+  southeast: "东南风",
+  southsoutheast: "南东南风",
+  south: "南风",
+  southsouthwest: "南西南风",
+  southwest: "西南风",
+  westsouthwest: "西西南风",
+  west: "西风",
+  westnorthwest: "西西北风",
+  northwest: "西北风",
+  northnorthwest: "北西北风",
+}
+
+/** 温度单位简写：°C -> ° */
+function shortUnit(symbol: string | undefined): string {
+  if (!symbol) return "°"
+  return symbol.startsWith("°") ? "°" : symbol
+}
+
+/** 风向：优先用中文方位，否则回退到角度 */
+function formatWind(wind: any): string {  const compass = typeof wind?.compassDirection === "string" ? wind.compassDirection : ""
+  const mapped = COMPASS_ZH[compass.toLowerCase()]
+  if (mapped) return mapped
+  if (/[\u4e00-\u9fa5]/.test(compass)) return compass
+  return wind?.direction?.formatted ?? "--"
 }
 
 async function readWeatherCache(): Promise<WeatherCache | null> {
@@ -80,10 +113,17 @@ export async function loadWeather(now: Date, warnings: string[], noCache: boolea
       const currentWeather = await Weather.requestCurrent(location)
       const forecast = await Weather.requestDailyForecast(location, {
         startDate: now,
-        endDate: addDays(now, 1),
+        endDate: addDays(now, 6),
       })
       const today = forecast.forecast[0]
       const tomorrow = forecast.forecast[1]
+
+      const dailyForecast: DailyWeather[] = forecast.forecast.slice(1, 6).map((day: any, index: number) => ({
+        day: index === 0 ? "明天" : formatWeekday(new Date(day.date)),
+        symbolName: `${day.symbolName}.fill`,
+        high: day.highTemperature.value.toFixed(0),
+        low: day.lowTemperature.value.toFixed(0),
+      }))
 
       const hourlyForecastRes = await Weather.requestHourlyForecast(location, {
         startDate: now,
@@ -103,11 +143,12 @@ export async function loadWeather(now: Date, warnings: string[], noCache: boolea
         highTemperature: today ? `${today.highTemperature.value.toFixed(0)}` : "--",
         lowTemperature: today ? `${today.lowTemperature.value.toFixed(0)}` : "--",
         hourlyForecast,
-        apparentTemperature: `${currentWeather.apparentTemperature.value.toFixed(1)}${currentWeather.apparentTemperature.symbol}`,
+        dailyForecast,
+        apparentTemperature: `${currentWeather.apparentTemperature.value.toFixed(0)}${currentWeather.apparentTemperature.symbol}`,
         humidity: `${Math.round(currentWeather.humidity * 100)}%`,
-        wind: currentWeather.wind.direction.formatted,
+        wind: formatWind(currentWeather.wind),
         dailySummary: tomorrow
-          ? `明日 ${translateWeatherCondition(tomorrow.condition)} ${tomorrow.lowTemperature.value.toFixed(0)} ${tomorrow.lowTemperature.symbol} - ${tomorrow.highTemperature.value.toFixed(0)} ${tomorrow.highTemperature.symbol}`
+          ? `明日 ${translateWeatherCondition(tomorrow.condition)} ${tomorrow.lowTemperature.value.toFixed(0)}${shortUnit(tomorrow.lowTemperature.symbol)} ~ ${tomorrow.highTemperature.value.toFixed(0)}${shortUnit(tomorrow.highTemperature.symbol)}`
           : null,
       }
 
