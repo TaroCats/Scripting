@@ -1,50 +1,45 @@
 {
-  "runInApp" : false,
-  "contributors" : [
-
-  ],
-  "localizedNames" : {
-    "zh" : "",
-    "ja" : "",
-    "pt" : "",
-    "en" : "",
-    "fr" : "",
-    "ru" : "",
-    "de" : "",
-    "it" : "",
-    "es" : ""
+  "runInApp": false,
+  "contributors": [],
+  "localizedNames": {
+    "zh": "",
+    "ja": "",
+    "pt": "",
+    "en": "",
+    "fr": "",
+    "ru": "",
+    "de": "",
+    "it": "",
+    "es": ""
   },
-  "version" : "1.0.0",
-  "name" : "二维码助手",
-  "remoteResource" : {
-    "autoUpdateInterval" : 3600,
-    "url" : "https:\/\/github.com\/iamwaa\/Scripting\/tree\/main\/二维码助手",
-    "hash" : "54bece8fd151ac5326c17a78b1c4b7d4"
+  "version": "1.0.1",
+  "name": "二维码助手",
+  "remoteResource": {
+    "autoUpdateInterval": 3600,
+    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/%E4%BA%8C%E7%BB%B4%E7%A0%81%E5%8A%A9%E6%89%8B"
   },
-  "author" : {
-    "email" : null,
-    "name" : "Waa",
-    "homepage" : "https:\/\/github.com\/iamwaa"
+  "author": {
+    "email": null,
+    "name": "Waa",
+    "homepage": "https://github.com/iamwaa"
   },
-  "color" : "rgba(71, 102, 194,1)",
-  "localizedDescriptions" : {
-    "zh" : "",
-    "fr" : "",
-    "ja" : "",
-    "es" : "",
-    "ru" : "",
-    "en" : "",
-    "pt" : "",
-    "it" : "",
-    "de" : ""
+  "color": "rgba(71, 102, 194,1)",
+  "localizedDescriptions": {
+    "zh": "",
+    "fr": "",
+    "ja": "",
+    "es": "",
+    "ru": "",
+    "en": "",
+    "pt": "",
+    "it": "",
+    "de": ""
   },
-  "description" : "基于 Scripting 打造的 iOS 实用工具。它不仅拥有纯粹、丝滑的苹果原生 UI 体验，更在传统的“扫码-生成”流程上进行了深度优化，加入了极具效率的自定义智能跳转引擎，让二维码的处理变得前所未有的简单和自由。",
-  "entry" : "index.tsx",
-  "iconImage" : "",
-  "intentInputTypes" : [
-
-  ],
-  "icon" : "qrcode.viewfinder",
-  "permissions" : null,
-  "remoteDefinitionId" : null
+  "description": "基于 Scripting 打造的 iOS 实用工具。它不仅拥有纯粹、丝滑的苹果原生 UI 体验，更在传统的“扫码-生成”流程上进行了深度优化，加入了极具效率的自定义智能跳转引擎，让二维码的处理变得前所未有的简单和自由。",
+  "entry": "index.tsx",
+  "iconImage": "",
+  "intentInputTypes": [],
+  "icon": "qrcode.viewfinder",
+  "permissions": null,
+  "remoteDefinitionId": null
 }
