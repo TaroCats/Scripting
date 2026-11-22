@@ -1,10 +1,46 @@
 {
-  "name": "亲邻开门工具",
-  "icon": "door.left.hand.open",
-  "color": "#0A84FF",
-  "version": "0.1.6",
-  "remoteResource": {
-    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/%E4%BA%B2%E9%82%BB%E5%BC%80%E9%97%A8%E5%B7%A5%E5%85%B7",
-    "autoUpdateInterval": 3600
-  }
+  "remoteDefinitionId" : null,
+  "color" : "#0A84FF",
+  "contributors" : [
+
+  ],
+  "remoteResource" : {
+    "hash" : "ac11d2df1fb4c22255dc38e8e9926b74",
+    "autoUpdateInterval" : 3600,
+    "url" : "https:\/\/github.com\/TaroCats\/Scripting\/tree\/main\/scripts\/%E4%BA%B2%E9%82%BB%E5%BC%80%E9%97%A8%E5%B7%A5%E5%85%B7"
+  },
+  "localizedDescriptions" : {
+    "es" : "",
+    "en" : "",
+    "fr" : "",
+    "ru" : "",
+    "pt" : "",
+    "de" : "",
+    "it" : "",
+    "zh" : "",
+    "ja" : ""
+  },
+  "author" : null,
+  "version" : "0.2.0",
+  "permissions" : null,
+  "runInApp" : false,
+  "intentInputTypes" : [
+
+  ],
+  "icon" : "door.left.hand.open",
+  "description" : null,
+  "iconImage" : null,
+  "localizedNames" : {
+    "es" : "",
+    "en" : "",
+    "fr" : "",
+    "ru" : "",
+    "pt" : "",
+    "de" : "",
+    "it" : "",
+    "zh" : "",
+    "ja" : ""
+  },
+  "name" : "亲邻开门工具",
+  "entry" : "index.tsx"
 }

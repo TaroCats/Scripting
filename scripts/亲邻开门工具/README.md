@@ -77,9 +77,11 @@
     ├── aes.ts           AES-128-ECB + PKCS5（宿主只给 AES-GCM）
     ├── crypto.ts        MD5 签名 + 请求体加密
     ├── session.ts       Keychain 会话（first_unlock_this_device）
+    ├── session_refresh.ts 会话续期 / 401 自动换 token 重试（扩展可用，不碰蓝牙）
     ├── api.ts           公共参数 / 签名 / 解包 / 401 → SessionExpiredError
     ├── blue.ts          BLE：扫描→连接→发现→写入→等回执
-    └── opendoor.ts      远程优先 → 失败转蓝牙 的状态机
+    ├── external_call.ts 对外开门接口（`Script.run` / URL scheme，无 UI）
+    └── opendoor.ts      蓝牙优先 → 失败转远程 的状态机
 ```
 
 ## 已跑过的验证
@@ -91,6 +93,9 @@
 | BLE 全流程（mock central manager）  | scan→connect→discover→write，写入字节 `a10bff` 与模板一致 ✅ |
 | 远程失败 → 自动转蓝牙（mock）             | `via=ble`，写入 `a10b` ✅                             |
 | 远程成功 / 远程失败 / 401 三分支          | 分别返回 remote / none / 抛 SessionExpiredError ✅      |
+| 401 → 换 token 重试控制流（自测）        | 成功不重试；401 无 userId 抛原错；403 不重试；换 token 失败不重试，均只调一次 ✅ |
+| 外部调用默认开门页选中的门              | `mode=openDoor` 不带 door → 命中的是 `ql_selected_door`（实测 A座大堂）✅ |
+| `Script.run` 调本项目                                  | 返回值原样回到调用方 ✅                                 |
 | esbuild 编译 `index.tsx` + 全部 TS | 零错误 ✅ |
 | **tsc 严格类型检查**（对着 App 同步的 `dts/*.d.ts`） | exit=0，0 错误 ✅ |
 
@@ -104,6 +109,80 @@
 4. 「门禁」录入 `doorControlId`（列表接口未确认，`doorcontrol/v2/sort` 只是排序）
 5. 想用蓝牙：抓一次原 App 的 BLE 通信拿到 serviceUUID / writeCharUUID / 写入字节，填进「蓝牙」区
 6. 点「开门」→ 先远程，失败自动转蓝牙；每一步都会写日志
+
+---
+
+## 对外开门接口（给其他 App / 脚本调用）
+
+主功能也能无 UI 调起：带上 `mode=openDoor` 启动，脚本不会弹界面，开门后把结果
+`Script.exit(reply)` 交回调用方。不带这个参数时一切照旧。
+
+### 其他 Scripting 脚本调用（推荐）
+
+```ts
+// 开 App 里当前选中的那扇门（收藏优先的第一项兜底）
+const r = await Script.run<{ ok: boolean; message: string }>({
+  name: "亲邻开门工具",
+  queryParameters: { mode: "openDoor" },
+})
+```
+
+```ts
+// 指定门禁 + 只走远程（蓝牙扫描没设备时会一直等到超时，无人值守场景建议 false）
+const r = await Script.run({
+  name: "亲邻开门工具",
+  queryParameters: { mode: "openDoor", door: "1 号楼大门", ble: false },
+})
+```
+
+### 快捷指令 / 其他 App（URL scheme，参数一律字符串）
+
+```
+scripting://run/亲邻开门工具?mode=openDoor
+scripting://run/亲邻开门工具?mode=openDoor&door=1
+scripting://run/亲邻开门工具?mode=openDoor&doorControlId=12345&ble=false
+```
+
+### 参数
+
+| 参数 | 说明 |
+| --- | --- |
+| `mode` | 必填，`openDoor`（也接受 `open`）才算对外调用 |
+| `door` | 选门：id 精确匹配 → 名称（精确/包含）→ 1 起序号；不传或传 `home` / `default` / `selected` 时用**开门页当前选中的那扇门**（没选中就用列表第一项，收藏优先） |
+| `doorControlId` | 直接指定 id，优先于 `door`；可配合 `macAddress` / `name` 开本机没记录的门 |
+| `macAddress` | 与 `doorControlId` 一起直传时使用 |
+| `ble` | `false` / `0` 只走远程；缺省允许蓝牙优先 |
+| `timeoutMs` | 整个流程上限，缺省 20000，范围 1000–60000 |
+| `silent` | `true` 时不往「日志」页记录，缺省 false |
+
+### 返回体
+
+```jsonc
+{
+  "ok": true,
+  "code": "ok",          // ok | open_failed | no_door | not_logged_in | session_expired | timeout | error
+  "via": "remote",       // ble | remote | none
+  "message": "开门成功 · 1 号楼大门",
+  "doorControlId": "12345",
+  "doorControlName": "1 号楼大门",
+  "at": 1763737200000,
+  "build": "2026-11-16-b",
+  "steps": ["选门 → …", "remote …"]
+}
+```
+
+`ok` 是唯一成功判据。
+
+**会话过期自动续期**：开门前若 `expiresAt` 即将到期且本机有 `userId`，先主动换新 token；
+如果开门仍返 **401**，会用 `userId` 换一次 token 并**自动重试一次**（整个发送 + 续期 + 重试共用同一个超时）。
+所以用「用 userId 登录」登录过后，日常调用不会再因为 30 分钟会话到期而失败。
+没有 `userId` 的会话无法续期，此时返回 `session_expired` 并提示重新登录。
+
+只有服务端明确返回 **401** 时才清除本机登录态；403 多半是网关拦截，只上报不登出。
+已经最小化的实例被 URL scheme 唤起时（`Script.onResume`），同样会执行开门，但不会 `Script.exit` —— 免得把用户开着的界面关掉。
+
+> `Script.run` 首次调用需要允许「脚本调用」（Settings → Script Permissions → Script Calls）。
+> 未登录 / 门禁为空时返回 `not_logged_in` / `no_door`，不会静默成功。
 
 ---
 

@@ -5,6 +5,7 @@
  * 正确的 body 与合法的 sessionId（拼在 query 上）。
  * 旧的网关签名逻辑保留一个开关（cfg.signMode === "header"），默认关闭。
  */
+import { fetch } from "scripting"
 import {
   encryptBodyToBase64,
   randomNumber4,

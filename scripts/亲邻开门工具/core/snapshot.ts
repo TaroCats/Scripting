@@ -84,6 +84,8 @@ export function writeSnapshot(patch: {
   doors: DoorKey[]
   prefs: DoorPrefs
   lastResult?: SnapshotResult | null
+  /** 显式指定快照里的会话；不传则用当前 Keychain/Storage 里能读到的那个 */
+  session?: Session | null
 }): void {
   const prev = readSnapshot()
   writeRaw({
@@ -94,8 +96,22 @@ export function writeSnapshot(patch: {
     lastResult: patch.lastResult !== undefined ? patch.lastResult : (prev?.lastResult ?? null),
     diag: prev?.diag ?? null,
     // Keychain 能读就用最新的；读不到（扩展进程）保留上一次写进去的
-    session: loadSession() ?? prev?.session ?? null,
+    session: patch.session !== undefined
+      ? patch.session
+      : (loadSession() ?? prev?.session ?? null),
   })
+}
+
+/**
+ * 只更新快照里的会话（续期/换 token 后调用）。
+ *
+ * 不能走 `writeSnapshot`：扩展进程里 `loadSession()` 读不到 Keychain，
+ * 会把刚换到的新会话写成旧的那个。没有快照时直接跳过，等 App 自己写。
+ */
+export function writeSnapshotSession(session: Session | null): void {
+  const prev = readSnapshot()
+  if (!prev) return
+  writeRaw({ ...prev, session })
 }
 
 /** 小组件渲染前调用：写指纹（顺带把读到的门禁/偏好回写，保证文件里是最新的） */

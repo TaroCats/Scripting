@@ -12,8 +12,9 @@ import {
 } from "./core/api"
 import { DEFAULT_CONFIG, K, type ApiConfig, type DoorKey } from "./core/protocol"
 import { loadDoorPrefs, normalizePrefs, saveDoorPrefs } from "./core/door_prefs"
-import { readSnapshot, recordResult, writeSnapshot } from "./core/snapshot"
-import { isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
+import { readSnapshot, recordResult, writeSnapshot, writeSnapshotSession } from "./core/snapshot"
+import { type Session } from "./core/session"
+import { ensureFreshSession, withSessionRefresh } from "./core/session_refresh"
 
 export type LogEntry = { ts: number; text: string }
 
@@ -65,32 +66,12 @@ export function interpretState(state: unknown): { ok: boolean; text: string } {
   return { ok: false, text: `未知状态 openDoorState=${String(state)}` }
 }
 
-/** 用 userId 换新 sessionId（30 分钟有效） */
-async function renewSession(cur: Session, cfg: ApiConfig): Promise<Session> {
-  if (!cur.userId) return cur
-  const r = await loginByUserId(cur.userId, { cfg })
-  return saveSession({
-    token: r.sessionId,
-    sessionId: r.sessionId,
-    phone: cur.phone,
-    userId: cur.userId,
-    ttlSec: r.expires,
-  })
-}
-
 /**
  * 取可用会话：临近过期且有 userId 时自动续期。
  * 续期失败不抛错，沿用旧会话（真正开门时若 401 会再报错并记日志）。
  */
 export async function ensureSession(cfg: ApiConfig): Promise<Session | null> {
-  const cur = loadSession()
-  if (!cur) return null
-  if (!isExpiringSoon(cur)) return cur
-  try {
-    return await renewSession(cur, cfg)
-  } catch {
-    return cur
-  }
+  return ensureFreshSession(cfg)
 }
 
 /** 会话失效时由调用方负责登出，避免在这里重复写清理逻辑 */
@@ -108,13 +89,17 @@ async function sessionForWidget(cfg: ApiConfig): Promise<Session | null> {
   if (saved.userId) {
     try {
       const r = await loginByUserId(saved.userId, { cfg })
-      return {
+      const next: Session = {
         ...saved,
         token: r.sessionId,
         sessionId: r.sessionId,
         loginAt: Date.now(),
         expiresAt: Date.now() + r.expires * 1000,
       }
+      // 扩展进程里 Keychain 可能写不进去，但快照一定写得了 ——
+      // 不写的话，下一次点小组件又拿回这份旧的。
+      try { writeSnapshotSession(next) } catch { /* ignore */ }
+      return next
     } catch {
       // 换不到就用旧会话再试一次，失败会走 401 分支给出明确文案
     }
@@ -140,9 +125,14 @@ export async function openDoorFromWidget(params: {
     return { ok: false, text }
   }
   try {
-    const env = await openDoorRemote(
-      { doorControlId: params.doorControlId, macAddress: params.macAddress || undefined },
-      { cfg, session }
+    // 401 自动换 token 再重试一次：小组件点击也不该因为“刚好过期”就失败
+    const { value: env } = await withSessionRefresh(
+      cfg,
+      session,
+      s => openDoorRemote(
+        { doorControlId: params.doorControlId, macAddress: params.macAddress || undefined },
+        { cfg, session: s }
+      )
     )
     const name = env.data?.doorControlName ?? params.doorControlName
     const verdict = interpretState(env.data?.openDoorState)
@@ -152,10 +142,12 @@ export async function openDoorFromWidget(params: {
     return { ok: verdict.ok, text: `${verdict.text} · ${name}` }
   } catch (e) {
     if (e instanceof SessionExpiredError) {
-      const text = "会话已失效，请打开 App 重新登录"
+      const is401 = String(e.code ?? "") === "401"
+      const text = is401 ? "会话已失效，请打开 App 重新登录" : `请求被拒绝（${e.code || "403"}），登录态未变`
       appendLog(`[小组件] ❌ ${text}`)
       recordResult(false, text)
-      return { ok: false, text, expired: true }
+      // 只有 401 才让调用方去登出（app_intents 会 clearSession）
+      return { ok: false, text, expired: is401 }
     }
     const text = e instanceof Error ? e.message : String(e)
     appendLog(`[小组件] ❌ 开门异常：${text}`)
@@ -193,9 +185,10 @@ export async function syncDoors(): Promise<OpResult> {
     return { ok: true, text }
   } catch (e) {
     if (e instanceof SessionExpiredError) {
-      const text = "会话已失效，请打开 App 重新登录"
+      const is401 = String(e.code ?? "") === "401"
+      const text = is401 ? "会话已失效，请打开 App 重新登录" : `请求被拒绝（${e.code || "403"}）`
       appendLog(`[小组件] ${text}`)
-      return { ok: false, text, expired: true }
+      return { ok: false, text, expired: is401 }
     }
     const text = e instanceof Error ? e.message : String(e)
     appendLog(`[小组件] 同步门禁失败：${text}`)

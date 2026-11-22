@@ -21,6 +21,14 @@ export type OpenOutcome = {
 
 export type OpenHooks = {
   onStep?: (stage: string, detail?: string) => void
+  /**
+   * 是否允许走蓝牙。缺省 true（App 内开门保持原行为）。
+   * 外部调用（`core/external_call.ts`）可以传 false，只走远程 ——
+   * 蓝牙扫描在没有设备时会一直等到超时，不适合无人值守的自动调用。
+   *
+   * 注意：这里只关掉蓝牙**开门**，不会裁剪 UI；App 里点按钮仍然蓝牙优先。
+   */
+  allowBle?: boolean
 }
 
 function toBleConfig(s: BleSettings): BleConfig {
@@ -70,7 +78,7 @@ export async function openDoor(
 ): Promise<OpenOutcome> {
   const step = (s: string, d?: string) => hooks.onStep?.(s, d)
 
-  const useBle = key.hasBluetoothModule !== false && bleReady(ble)
+  const useBle = hooks.allowBle !== false && key.hasBluetoothModule !== false && bleReady(ble)
 
   // ── 1) 蓝牙优先 ──
   if (useBle) {
@@ -123,9 +131,11 @@ export async function openDoor(
   }
 
   // ── 2) 无蓝牙或未配置 → 直接远程 ──
-  const skipReason = key.hasBluetoothModule === false
-    ? "该门无蓝牙模块"
-    : "蓝牙未配置（需 serviceUUID / writeCharUUID / 载荷模板）"
+  const skipReason = hooks.allowBle === false
+    ? "调用方要求仅远程"
+    : key.hasBluetoothModule === false
+      ? "该门无蓝牙模块"
+      : "蓝牙未配置（需 serviceUUID / writeCharUUID / 载荷模板）"
   step("remote", `${key.doorControlName}（${skipReason}，跳过蓝牙）`)
   try {
     const env = await openDoorRemote(

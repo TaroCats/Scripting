@@ -57,6 +57,8 @@ import {
 } from "./core/door_prefs"
 import { readSnapshot, writeSnapshot } from "./core/snapshot"
 import { clearSession, isExpiringSoon, loadSession, saveSession, type Session } from "./core/session"
+import { withSessionRefresh } from "./core/session_refresh"
+import { isExternalRequest, runExternalRequest } from "./core/external_call"
 
 /** 深拷贝 —— Storage.get 返回的对象可能被运行时冻结，写入前必须复制 */
 function safeClone<T>(obj: T): T {
@@ -705,14 +707,27 @@ function App(props: { initialLog: string }) {
     setBusy(true)
     try {
       const sess = (await ensureSession(session)) ?? session
-      const r = await openDoor(selectedDoor, { cfg, session: sess }, ble, {
-        onStep: (stage, detail) => log(`· ${stage}${detail ? ` ${detail}` : ""}`),
-      })
+      // 401 时自动用 userId 换新 token 再重试一次（见 core/session_refresh.ts），
+      // 不再是“过期就只能重新登录”。
+      const res = await withSessionRefresh(
+        cfg,
+        sess,
+        s => openDoor(selectedDoor, { cfg, session: s }, ble, {
+          onStep: (stage, detail) => log(`· ${stage}${detail ? ` ${detail}` : ""}`),
+        }),
+        { onRenew: next => { setSession(next); log("会话已过期，已自动换新 token 并重试") } }
+      )
+      const r = res.value
       say(r.ok ? `✅ ${r.message}` : `❌ ${r.message}`)
     } catch (e) {
       if (e instanceof SessionExpiredError) {
-        clearSession(); setSession(null)
-        say("会话失效，请重新登录")
+        if (String(e.code ?? "") === "401") {
+          clearSession(); setSession(null)
+          say("会话失效且自动续期失败，请重新登录")
+        } else {
+          // 403 多半是网关拦截，登掉有效会话反而更麻烦
+          say(`请求被拒绝（403）：${e.message}`)
+        }
       } else {
         say(`开门异常：${e instanceof Error ? e.message : String(e)}`)
       }
@@ -1106,9 +1121,26 @@ async function startupCheck(): Promise<string> {
 }
 
 async function run() {
+  // ① 外部调用（其他 App / 其他脚本 Script.run）—— 无 UI，开门后直接把结果 exit 回去
+  if (isExternalRequest()) {
+    await runExternalRequest()
+    return
+  }
+
+  // ② 普通启动：静默校验 → 呈现主界面
   const initialLog = await startupCheck()
   await Navigation.present(<App initialLog={initialLog} />)
   Script.exit()
 }
+
+/**
+ * 脚本已经存在（最小化）时，`scripting://run/...?mode=openDoor` 不会重跑 index.tsx，
+ * 只会触发 resume。这里接住这类请求：照常开门，但**不** exit ——
+ * 那会把用户正开着的界面关掉，而 URL scheme 本来也拿不到返回值。
+ */
+Script.onResume(details => {
+  if (!isExternalRequest(details.queryParameters)) return
+  void runExternalRequest({ qp: details.queryParameters ?? {}, exit: false })
+})
 
 run()
