@@ -76,6 +76,8 @@ declare global {
     readonly cached?: boolean
     readonly cacheKey?: string
     readonly backend: 'native' | 'system' | 'remux'
+    /** Remote input failure details when available. The FFmpeg line omits URLs and credentials. */
+    readonly readError?: { stage: string; ffmpegCode: number; httpStatus?: number; byteOffset?: number; line?: string } | null
     readonly error: string | null
   }
   type VideoToneMappingOptions = { mode: 'system' } | { mode: 'reinhard'; exposureEV?: number; whitePoint?: number }
@@ -165,7 +167,7 @@ declare global {
     readonly rawFrameCallbacks: false
   }
   interface VideoPlaybackOpenOptions {
-    /** Auto uses native playback for ordinary media/headers, system playback for plain HLS, and system or remux output for supported HDR media. Declared Profile7 sources use native reconstruction. */
+    /** Auto uses native playback for ordinary media/headers, system playback for plain HLS, and system or remux output for supported HDR media. Declared Profile7 sources use native reconstruction. Auto/system adapt single-layer Profile5 through remux. System also adapts supported Matroska video; mediaInfo.backend reports the actual path. Explicit native does not support single-layer Profile5/8. */
     backend?: 'auto' | 'native' | 'system' | 'remux'
     /** Native video decoding preference. System/remux backends require auto. Unsupported hardware requests fail explicitly. */
     decoder?: 'auto' | 'hardware' | 'software'
@@ -173,6 +175,10 @@ declare global {
     audioOutput?: 'stereo' | 'multichannel' | 'spatial'
     /** Custom headers use native/remux playback. Explicit system playback rejects headers. */
     headers?: Record<string, string>
+    /** Preferred lookahead in seconds (0-60); zero or omission uses backend defaults. Native applies to remote MKV/WebM compressed data, subject to cache limits. System and remux apply their respective buffering policies. */
+    forwardBufferDuration?: number
+    /** Maximum simultaneous HTTP byte-range reads for eligible native and remux files. Defaults to 1. */
+    maxReadConnections?: 1 | 2 | 3 | 4
   }
   /** Main App playback controller, iOS/iPadOS 17+. Dispose it when its owning page closes. */
   class VideoPlaybackController {

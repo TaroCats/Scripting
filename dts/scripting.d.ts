@@ -10114,10 +10114,21 @@ type RealityViewProps = {
 /** Displays a RealityKit scene in the foreground App. */
 declare const RealityView: FunctionComponent<RealityViewProps>;
 
+type StreamClosure = {
+    state: 'closed';
+} | {
+    state: 'errored';
+    error: unknown;
+};
+type ClosureObserver = (closure: StreamClosure) => void;
+/** @internal */
+declare const observeStreamClosure: unique symbol;
 type UnderlyingSource<R> = {
     start?: (controller: ReadableStreamDefaultController<R>) => void | Promise<void>;
     pull?: (controller: ReadableStreamDefaultController<R>) => void | Promise<void>;
     cancel?: (reason?: any) => void | Promise<void>;
+    /** @internal Subscribe to the mapped source only while observing closure. */
+    [observeStreamClosure]?: (controller: ReadableStreamDefaultController<R>) => (() => void) | undefined;
 };
 /**
  * The `ReadableStreamDefaultController` interface represents a controller allowing control of a `ReadableStream`'s state and internal queue.
@@ -10125,6 +10136,7 @@ type UnderlyingSource<R> = {
  * `ReadableStreamDefaultController` instances are created automatically during `ReadableStream` construction.
  */
 declare class ReadableStreamDefaultController<R> {
+    private readonly observeSourceClose?;
     private queue;
     private pullAlgorithm;
     private cancelAlgorithm;
@@ -10132,10 +10144,12 @@ declare class ReadableStreamDefaultController<R> {
     private errorSignaled;
     private _errorReason;
     private pulling;
+    private closureObservers?;
+    private stopObservingSource?;
     /**
      * @internal
      */
-    constructor(pullAlgorithm?: (controller: ReadableStreamDefaultController<R>) => void | Promise<void>, cancelAlgorithm?: (reason: any) => void | Promise<void>);
+    constructor(pullAlgorithm?: (controller: ReadableStreamDefaultController<R>) => void | Promise<void>, cancelAlgorithm?: (reason: any) => void | Promise<void>, observeSourceClose?: UnderlyingSource<R>[typeof observeStreamClosure]);
     /**
      * Enqueues a given chunk in the associated stream.
      * @param chunk The chunk to enqueue.
@@ -10150,6 +10164,10 @@ declare class ReadableStreamDefaultController<R> {
      * @param e The error you want future interactions to fail with.
      */
     error(e: any): void;
+    private get closure();
+    /** @internal */
+    [observeStreamClosure](observer: ClosureObserver): (() => void) | undefined;
+    private publishClosure;
     /**
      * Returns the desired size required to fill the stream's internal queue.
      */
@@ -10208,6 +10226,8 @@ declare class ReadableStream<R> {
      * @param underlyingSource An object containing methods and properties that define how the constructed stream instance will behave.
      */
     constructor(underlyingSource?: UnderlyingSource<R>);
+    /** @internal Observe a terminal state without locking or pulling the stream. */
+    [observeStreamClosure](observer: ClosureObserver): (() => void) | undefined;
     [Symbol.asyncIterator](): AsyncIterableIterator<R>;
     /**
      * The `locked` read-only property of the `ReadableStream` interface returns whether or not the readable stream is locked to a reader.
@@ -10234,7 +10254,10 @@ declare class ReadableStream<R> {
  */
 declare class ReadableStreamDefaultReader<R> {
     private controller;
-    private releaseLockCallback;
+    private releaseLockCallback?;
+    private closedPromise?;
+    private rejectClosedOnRelease?;
+    private pendingReads?;
     /**
      * @internal
      */
@@ -10259,6 +10282,7 @@ declare class ReadableStreamDefaultReader<R> {
         value: R | undefined;
         done: boolean;
     }>;
+    private waitForData;
     /**
      * The `releaseLock()` method of the `ReadableStreamDefaultReader` interface releases the reader's lock on the stream.
      */
