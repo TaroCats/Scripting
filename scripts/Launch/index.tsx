@@ -26,10 +26,12 @@ import {
   getIconCachePath,
   migrateAppItem,
   normalizeWidgetPanels,
-  normalizeWidgetSlots
+  normalizeWidgetProfiles,
+  normalizeWidgetSlots,
+  createWidgetProfile
 } from './constants'
 import { pruneButtonCode, runButtonById } from './buttonCode'
-import { pushToiCloud, syncWithiCloud } from './cloudSync'
+import { markLocalChange, schedulePushToiCloud, syncWithiCloud } from './cloudSync'
 import { filterApps, matchesQuery } from './components/SharedViews'
 import { AppsPage, FoldersPage, SettingsPage } from './components/TabPages'
 import { useI18n } from './i18n'
@@ -40,6 +42,9 @@ function App() {
   const folders = useObservable<Folder[]>([])
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [isLoaded, setIsLoaded] = useState(false)
+  // Saves wait for the first reconciliation, so a stale local copy cannot
+  // overwrite a newer one pulled from the iCloud store.
+  const [canSync, setCanSync] = useState(false)
   const [query, setQuery] = useState('')
   const visibleApps = useObservable<AppItem[]>([])
   const dismiss = Navigation.useDismiss()
@@ -47,16 +52,8 @@ function App() {
   useEffect(() => {
     let cancelled = false
 
-    async function load() {
-      // Reconcile with iCloud before reading, so a reinstall or a second
-      // device starts from the newest copy.
-      try {
-        await syncWithiCloud()
-      } catch (error) {
-        console.error(error)
-      }
-      if (cancelled) return
-
+    function readLocal(): Config | undefined {
+      let result: Config | undefined
       try {
         if (FileManager.existsSync(FILE_PATH)) {
           const source = FileManager.readAsStringSync(FILE_PATH)
@@ -77,7 +74,7 @@ function App() {
           const stored = JSON.parse(
             FileManager.readAsStringSync(CONFIG_PATH)
           ) as Partial<Config>
-          setConfig({
+          const next: Config = {
             shape: stored.shape ?? DEFAULT_CONFIG.shape,
             iconSize: stored.iconSize ?? DEFAULT_CONFIG.iconSize,
             spacing: stored.spacing ?? DEFAULT_CONFIG.spacing,
@@ -89,20 +86,58 @@ function App() {
             widgetSlots: normalizeWidgetSlots(stored.widgetSlots),
             widgetCoverMode:
               stored.widgetCoverMode ?? DEFAULT_CONFIG.widgetCoverMode,
-            widgetPanels: normalizeWidgetPanels(stored.widgetPanels)
-          })
+            widgetPanels: normalizeWidgetPanels(stored.widgetPanels),
+            widgetProfiles: normalizeWidgetProfiles(stored.widgetProfiles)
+          }
+          result = next
+          setConfig(next)
         }
       } catch (error) {
         console.error(error)
         apps.setValue(DEFAULT_APPS)
-      } finally {
-        if (cancelled) return
-        setIsLoaded(true)
-        apps.value.forEach(cacheAppIcon)
       }
+      return result
     }
 
-    load()
+    async function start() {
+      // The widget reads these same files, so showing the local copy first
+      // keeps the app responsive while iCloud answers.
+      let current = readLocal()
+      if (cancelled) return
+      setIsLoaded(true)
+      apps.value.forEach(cacheAppIcon)
+
+      // Reconcile in the background; a pull replaces what is on screen.
+      try {
+        const result = await syncWithiCloud()
+        if (!cancelled && result === 'pulled') {
+          current = readLocal()
+          apps.value.forEach(cacheAppIcon)
+        }
+      } catch (error) {
+        console.error(error)
+      }
+      if (cancelled) return
+
+      // A fresh install starts with one profile, so a widget has something to
+      // select without opening any settings first.
+      const base = current ?? DEFAULT_CONFIG
+      if ((base.widgetProfiles?.length ?? 0) === 0) {
+        const next: Config = {
+          ...base,
+          widgetProfiles: [
+            createWidgetProfile(t('widgetProfileDefaultTitle'), base)
+          ]
+        }
+        ensureBaseDirectory()
+        FileManager.writeAsStringSync(CONFIG_PATH, JSON.stringify(next))
+        setConfig(next)
+        schedulePushToiCloud()
+      }
+      setCanSync(true)
+    }
+
+    start()
     return () => {
       cancelled = true
     }
@@ -111,15 +146,17 @@ function App() {
   useEffect(() => {
     if (!isLoaded) return
     try {
+      // The local file is the widget's source of truth, so it is written even
+      // while the first reconcile is still running; only the upload waits.
       ensureBaseDirectory()
       FileManager.writeAsStringSync(FILE_PATH, JSON.stringify(apps.value))
       pruneButtonCode(apps.value.map(app => app.id))
-      pushToiCloud()
+      if (canSync) schedulePushToiCloud()
       Widget.reloadAll()
     } catch (error) {
       console.error(error)
     }
-  }, [apps.value, isLoaded])
+  }, [apps.value, isLoaded, canSync])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -129,12 +166,12 @@ function App() {
         FOLDERS_PATH,
         JSON.stringify(folders.value)
       )
-      pushToiCloud()
+      if (canSync) schedulePushToiCloud()
       Widget.reloadAll()
     } catch (error) {
       console.error(error)
     }
-  }, [folders.value, isLoaded])
+  }, [folders.value, isLoaded, canSync])
 
   useEffect(() => {
     const folderIDs = new Set(folders.value.map(folder => folder.id))
@@ -172,7 +209,13 @@ function App() {
     const next: Config = { ...config, ...patch }
     ensureBaseDirectory()
     FileManager.writeAsStringSync(CONFIG_PATH, JSON.stringify(next))
-    pushToiCloud()
+    // Before the first reconcile settles, only stamp the change: the effect that
+    // runs once it settles uploads the whole snapshot, config included.
+    if (canSync) {
+      schedulePushToiCloud()
+    } else {
+      markLocalChange()
+    }
     Widget.reloadAll()
     setConfig(next)
   }

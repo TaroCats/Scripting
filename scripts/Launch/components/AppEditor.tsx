@@ -7,6 +7,7 @@ import {
   Image,
   Label,
   Navigation,
+  NavigationLink,
   Picker,
   RoundedRectangle,
   Script,
@@ -42,6 +43,7 @@ import {
 } from './SharedViews'
 import { extractIconColor } from '../iconColor'
 import { IconColorSheet } from './IconColorSheet'
+import { SFSymbolPicker } from './SFSymbolPicker'
 import { t, useI18n } from '../i18n'
 
 type AppLaunchMode = 'url' | 'bundleId' | 'script'
@@ -565,22 +567,29 @@ export function AppEditor({
         </Picker>
 
         {iconType === 'symbol' ? (
-          <HStack>
-            <TextField
-              label={
-                <Label title={t('sfSymbol')} systemImage="sparkles" />
-              }
-              prompt="app.fill"
-              value={icon}
-              onChanged={setIcon}
-            />
-            <Image
-              systemName={icon || 'app.fill'}
-              font={20}
-              foregroundStyle={color}
-              frame={{ width: 28, height: 28 }}
-            />
-          </HStack>
+          <NavigationLink
+            destination={
+              <SFSymbolPicker
+                name={icon}
+                color={color}
+                onSelect={setIcon}
+              />
+            }
+          >
+            <HStack>
+              <Label title={t('sfSymbol')} systemImage="sparkles" />
+              <Spacer />
+              <Image
+                systemName={icon || 'app.fill'}
+                font={20}
+                foregroundStyle={color}
+                frame={{ width: 28, height: 28 }}
+              />
+              <Text font={13} foregroundStyle={EDITOR_SECONDARY} lineLimit={1}>
+                {icon || t('sfSymbolChoose')}
+              </Text>
+            </HStack>
+          </NavigationLink>
         ) : (
           <Fragment>
             <HStack>

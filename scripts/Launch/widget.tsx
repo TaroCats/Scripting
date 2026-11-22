@@ -34,12 +34,16 @@ import {
   gridSpecForLayout,
   migrateAppItem,
   normalizeWidgetPanels,
+  normalizeWidgetProfiles,
   panelAxisForSize,
+  panelConfigsForFolders,
   panelCountForFamily,
   parseWidgetParameter,
+  profileForParameter,
   resolveIconSource,
   resolveSlotApps,
-  resolveWidgetPanels
+  resolveWidgetPanels,
+  shouldDivideWidget
 } from './constants'
 import { AppIconArtwork } from './components/AppIconArtwork'
 import { OpenAppIntent, RunButtonIntent } from './app_intents'
@@ -775,15 +779,15 @@ function PaneledLayout({
   const base = Math.min(panelWidth, contentHeight)
 
   /**
-   * Resolves a panel's appearance. The folder's own settings win, then the
-   * panel's overrides, then the global widget settings, so configuring a
-   * folder once applies it everywhere that folder appears.
+   * Resolves a panel's appearance. The panel's own settings are the most
+   * specific choice, so they win; the folder's shared style is the fallback
+   * for everything a panel leaves unset.
    */
   const configForPanel = (panel: WidgetPanel): RenderConfig => {
     const style = panel.style ?? {}
     const folderStyle = panel.folder.style ?? {}
-    const explicitIconSize = folderStyle.iconSize ?? style.iconSize
-    const explicitSpacing = folderStyle.spacing ?? style.spacing
+    const explicitIconSize = style.iconSize ?? folderStyle.iconSize
+    const explicitSpacing = style.spacing ?? folderStyle.spacing
     return {
       ...config,
       iconSize: explicitIconSize ?? clamp(Math.round(base * 0.3), 18, 40),
@@ -792,24 +796,26 @@ function PaneledLayout({
         (compact ? Math.min(config.spacing, 8) : Math.min(config.spacing, 12)),
       iconSizeSet: explicitIconSize !== undefined,
       spacingSet: explicitSpacing !== undefined,
-      shape: folderStyle.shape ?? style.shape ?? config.shape,
+      shape: style.shape ?? folderStyle.shape ?? config.shape,
       cornerRadius:
-        folderStyle.cornerRadius ?? style.cornerRadius ?? config.cornerRadius,
+        style.cornerRadius ?? folderStyle.cornerRadius ?? config.cornerRadius,
       widgetAccentedRenderingMode:
-        folderStyle.widgetAccentedRenderingMode ??
         style.widgetAccentedRenderingMode ??
+        folderStyle.widgetAccentedRenderingMode ??
         config.widgetAccentedRenderingMode
     }
   }
 
   const panelViews = panels.map(panel => {
     const panelConfig = configForPanel(panel)
-    const layout =
-      panel.folder.style?.layout ?? panel.style?.layout ?? 'auto'
+    const layout = panel.style?.layout ?? panel.folder.style?.layout ?? 'auto'
+    // Cover is a per-region choice: the panel's own setting, then the
+    // folder's shared default. A whole-widget cover switch is not involved,
+    // so every region can be switched independently.
     const cover =
-      panel.folder.style?.cover ?? panel.style?.cover ?? false
+      panel.style?.cover ?? panel.folder.style?.cover ?? false
     const align =
-      panel.folder.style?.align ?? panel.style?.align ?? 'center'
+      panel.style?.align ?? panel.folder.style?.align ?? 'center'
     // A definite frame per panel, so the grid's spacers can actually divide
     // the slice instead of collapsing to the content's intrinsic height.
     return (
@@ -937,12 +943,35 @@ export function LauncherWidget({
     ...storedConfig,
     // The panel list is stored as objects now; older files held bare folder
     // ids, so normalise before anything reads it.
-    widgetPanels: normalizeWidgetPanels(storedConfig.widgetPanels)
+    widgetPanels: normalizeWidgetPanels(storedConfig.widgetPanels),
+    widgetProfiles: normalizeWidgetProfiles(storedConfig.widgetProfiles)
   }
 
-  // The widget parameter can name a folder (legacy) or carry `key=value`
-  // settings such as `layout=quad&folder=Work`.
-  const parameter = parseWidgetParameter(Widget.parameter, folders)
+  // The parameter can name a saved profile (or a folder, or a layout), and it
+  // can carry `key=value` settings such as `layout=quad&folder=Work`.
+  const profiles = config.widgetProfiles ?? []
+  const parameter = parseWidgetParameter(Widget.parameter, folders, profiles)
+  const profile = profileForParameter(Widget.parameter, folders, profiles)
+
+  // A profile only pins the parts that differ from the global widget settings.
+  if (profile) {
+    config = {
+      ...config,
+      iconSize: profile.iconSize ?? config.iconSize,
+      spacing: profile.spacing ?? config.spacing,
+      shape: profile.shape ?? config.shape,
+      cornerRadius: profile.cornerRadius ?? config.cornerRadius,
+      widgetAccentedRenderingMode:
+        profile.widgetAccentedRenderingMode ??
+        config.widgetAccentedRenderingMode,
+      // An icon size the profile asks for is a real choice, so the layouts must
+      // honour it instead of fitting the cell.
+      iconSizeSet: profile.iconSize !== undefined,
+      spacingSet: profile.spacing !== undefined
+    } as Config
+  }
+
+  const align: PanelAlign = profile?.align ?? 'center'
 
   const { width, height } = Widget.displaySize
 
@@ -951,23 +980,36 @@ export function LauncherWidget({
   // appearance. The `folders=` parameter picks which folders; otherwise the
   // configured panels are used.
   //
-  // Division only kicks in once a panel actually names a folder: without that
-  // an existing large widget would lose its own `widgetLayout` arrangement the
-  // moment this feature shipped.
-  // `folders=` from the widget parameter only overrides WHICH folders each
-  // panel shows. The panel's own appearance is kept, otherwise every widget
-  // configured with a folder list would silently lose its per-panel settings.
-  const panelConfigs: WidgetPanelConfig[] | undefined = parameter.folders?.length
-    ? parameter.folders.map((folder, index) => ({
-        ...(config.widgetPanels?.[index] ?? {}),
-        folder
-      }))
-    : config.widgetPanels
-  const divisionRequested = (panelConfigs ?? []).some(
-    panel => (panel.folder ?? '').trim() !== ''
-  )
+  // A whole-widget arrangement pinned by the profile, the parameter or the
+  // global default wins over the panels — otherwise changing the layout in
+  // a profile or in the widget defaults would silently do nothing. `layout=auto`
+  // still leaves room for the panels.
+  //
+  // A profile that stores its own panels wins over everything global, so each
+  // widget profile can configure its regions independently. A plain `folders=`
+  // list only overrides WHICH folders each panel shows; a stored global
+  // panel's appearance is carried over only when that panel still names the
+  // same folder, so a list naming other folders never inherits an unrelated
+  // panel's cover or layout.
+  const requestedLayout: WidgetLayout =
+    parameter.layout ?? config.widgetLayout ?? 'auto'
+  const profilePanels = parameter.panels?.length
+    ? normalizeWidgetPanels(parameter.panels)
+    : undefined
+  const panelConfigs: WidgetPanelConfig[] | undefined = profilePanels
+    ? profilePanels
+    : parameter.folders?.length
+      ? panelConfigsForFolders(parameter.folders, config.widgetPanels, folders)
+      : config.widgetPanels
   const panelCount = panelCountForFamily(Widget.family)
-  if (panelCount > 1 && !parameter.folder && divisionRequested) {
+  if (
+    shouldDivideWidget({
+      family: Widget.family,
+      layout: requestedLayout,
+      folder: parameter.folder,
+      panels: panelConfigs
+    })
+  ) {
     const panels = resolveWidgetPanels(
       folders,
       apps,
@@ -1035,6 +1077,7 @@ export function LauncherWidget({
         width={width}
         height={height}
         cover={cover}
+        align={align}
       />
     )
   }
@@ -1050,6 +1093,7 @@ export function LauncherWidget({
         columns={spec.columns}
         rows={spec.rows}
         cover={cover}
+        align={align}
       />
     )
   }

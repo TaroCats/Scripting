@@ -1,38 +1,45 @@
 {
-  "iconImage": null,
-  "remoteDefinitionId": null,
-  "entry": "index.tsx",
-  "description": null,
-  "contributors": [],
-  "name": "Launch",
-  "icon": "appclip",
-  "intentInputTypes": [],
-  "localizedNames": {
-    "en": "Launch",
-    "zh": "启动台"
+  "remoteDefinitionId" : null,
+  "color" : "rgba(243, 159, 68,1)",
+  "localizedDescriptions" : {
+    "zh" : "可自定义的应用启动器小组件，支持多份小组件配置：每个小组件通过参数选择自己的展示内容。大尺寸可分区展示多个文件夹，每个区域都能独立设置布局与外观；SF Symbol 可视化搜索选择并支持填充等样式，支持单应用、双应用、三\/四\/六\/九宫格与自动网格布局，数据保存在 iCloud 共享数据储存库中。",
+    "en" : "A customizable launcher widget for your favourite apps and folders. Several widgets can each show different content by naming a saved profile in their parameter, and large widgets can divide into folder panels that are each configured independently, and SF Symbols can be picked from a searchable catalogue with styles such as Fill, with single, dual and 3\/4\/6\/9-grid or auto-grid layouts. Data lives in an iCloud shared data store.",
+    "ja" : "",
+    "de" : "",
+    "es" : "",
+    "pt" : "",
+    "fr" : "",
+    "it" : "",
+    "ru" : ""
   },
-  "remoteResource": {
-    "autoUpdateInterval": 3600,
-    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/Launch"
+  "entry" : "index.tsx",
+  "iconImage" : null,
+  "intentInputTypes" : [
+
+  ],
+  "icon" : "appclip",
+  "remoteResource" : {
+    "autoUpdateInterval" : null,
+    "url" : "https:\/\/github.com\/TaroCats\/Scripting\/tree\/main\/scripts\/Launch",
+    "hash" : "889222cd3d3f0ba7d1ffed404ec77eb9"
   },
-  "author": {
-    "name": "Jackie",
-    "homepage": "https://t.me/iiMarkr",
-    "email": "Honye@github.com"
+  "version" : "1.15.1",
+  "author" : {
+    "name" : "Jackie",
+    "email" : "Honye@github.com",
+    "homepage" : "https:\/\/t.me\/iiMarkr"
   },
-  "runInApp": false,
-  "color": "rgba(243, 159, 68,1)",
-  "version": "1.11.5",
-  "localizedDescriptions": {
-    "en": "A customizable launcher widget for your favourite apps and folders. Large widgets can divide into folder panels, with single, dual and 3/4/6/9-grid or auto-grid layouts.",
-    "es": "",
-    "pt": "",
-    "it": "",
-    "ja": "",
-    "ru": "",
-    "de": "",
-    "zh": "可自定义的应用启动器小组件，大尺寸可分区展示多个文件夹，支持单应用、双应用、三/四/六/九宫格与自动网格布局。",
-    "fr": ""
+  "permissions" : [
+    "cloudSharedData"
+  ],
+  "name" : "Launch",
+  "localizedNames" : {
+    "en" : "Launch",
+    "zh" : "启动台"
   },
-  "permissions": null
+  "contributors" : [
+
+  ],
+  "description" : null,
+  "runInApp" : false
 }

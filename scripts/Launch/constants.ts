@@ -9,6 +9,15 @@ export const FILE_PATH = Path.join(BASE_PATH, 'launcher_apps.json')
 export const CONFIG_PATH = Path.join(BASE_PATH, 'launcher_config.json')
 export const CACHE_PATH = Path.join(BASE_PATH, 'cache')
 export const FOLDERS_PATH = Path.join(BASE_PATH, 'launcher_folders.json')
+/**
+ * The iCloud shared-data store that holds Launch's durable copy. The data lives
+ * in CloudKit (see `CloudSharedData`) instead of in the iCloud Drive folder, so
+ * nothing is written into the Files app's iCloud container any more.
+ *
+ * A store is identified by the UUID handed out when it was created; scripts are
+ * pure consumers and cannot create one themselves.
+ */
+export const CLOUD_STORE_ID = 'D958B1BD-CAED-4771-A2CC-451CFAA017D7'
 /** Directory holding the user-authored JS of "button" items, keyed by item id. */
 export const BUTTONS_PATH = Path.join(BASE_PATH, 'buttons')
 const APP_ICON_ASSETS_BASE_URL =
@@ -211,6 +220,47 @@ export interface FolderStyle {
   cover?: boolean
   /** Where the content sits inside a divided widget's panel. */
   align?: PanelAlign
+  /**
+   * How the folder presents its own apps. `auto` shrinks the icons and the
+   * gaps until `maxApps` of them fit; `nine` keeps eight full icons and
+   * collects the rest into a ninth, miniature cell. Unset leaves the widget
+   * layout above in charge, which is what existing folders keep doing.
+   */
+  display?: FolderDisplay
+  /** `auto` display: the most apps to show. */
+  maxApps?: number
+}
+
+/**
+ * The two ways a folder can present its apps, independent of the widget layout.
+ *
+ * - `auto`: every app (up to `maxApps`) is shown, the grid scaling itself down
+ *   to make room instead of dropping the overflow.
+ * - `nine`: the App Library arrangement — eight apps keep a full icon and the
+ *   ninth cell holds the remainder as miniature artwork.
+ */
+export type FolderDisplay = 'auto' | 'nine'
+
+export const FOLDER_DISPLAYS: FolderDisplay[] = ['auto', 'nine']
+
+export function isFolderDisplay(value: string): value is FolderDisplay {
+  return (FOLDER_DISPLAYS as string[]).includes(value)
+}
+
+/** Bounds for the auto display's "most apps" setting. */
+export const MIN_FOLDER_MAX_APPS = 1
+export const MAX_FOLDER_MAX_APPS = 30
+export const DEFAULT_FOLDER_MAX_APPS = 8
+
+/** Keeps a stored app cap inside the range the settings can express. */
+export function clampFolderMaxApps(value?: number): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return DEFAULT_FOLDER_MAX_APPS
+  }
+  return Math.min(
+    MAX_FOLDER_MAX_APPS,
+    Math.max(MIN_FOLDER_MAX_APPS, Math.round(value))
+  )
 }
 
 /**
@@ -221,6 +271,191 @@ export interface FolderStyle {
 export interface WidgetPanelConfig extends FolderStyle {
   /** Folder id or name shown in this panel. Empty fills from list order. */
   folder?: string
+}
+
+/**
+ * A named widget preset. The widget's configuration parameter names one, which
+ * is what lets several Home Screen widgets show different content while the
+ * definitions live in the app instead of being retyped per instance.
+ *
+ * Every appearance field is optional and falls back to the global widget
+ * settings, so a profile can pin only the parts that differ.
+ */
+export interface WidgetProfile extends FolderStyle {
+  id: string
+  /** The key typed into the widget's parameter field. */
+  name: string
+  /** Folder name or id to filter the apps by. */
+  folder?: string
+  /** App ids pinned to the fixed layouts, in slot order. */
+  slots?: string[]
+  /** Folder names that divide this widget into panels. */
+  folders?: string[]
+  /**
+   * Per-panel folders and appearance for this profile. Newer profiles keep
+   * each panel's settings here, so one profile's panels stay independent of
+   * the global panel list. `folders` mirrors the folder order for older
+   * readers and for parameters typed by hand.
+   */
+  panels?: WidgetPanelConfig[]
+  /** `horizontal` puts the panels side by side instead of along the longer edge. */
+  panelAxis?: 'vertical' | 'horizontal'
+}
+
+/** The most profiles the app keeps; the widget parameter only needs a name. */
+export const MAX_WIDGET_PROFILES = 20
+
+/**
+ * Trims stored profiles and drops entries without a name, since the name is
+ * what a widget parameter selects a profile by.
+ */
+export function normalizeWidgetProfiles(profiles?: unknown): WidgetProfile[] {
+  const list = Array.isArray(profiles) ? profiles : []
+  const next: WidgetProfile[] = []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const profile = entry as WidgetProfile
+    const name = (profile.name ?? '').trim()
+    if (!name) continue
+    const panels =
+      Array.isArray(profile.panels) && profile.panels.length > 0
+        ? normalizeWidgetPanels(profile.panels)
+        : undefined
+    next.push({
+      id: (profile.id ?? '').trim() || name,
+      name,
+      folder: (profile.folder ?? '').trim() || undefined,
+      slots: Array.isArray(profile.slots)
+        ? normalizeWidgetSlots(profile.slots)
+        : undefined,
+      cover: profile.cover,
+      layout:
+        profile.layout && isWidgetLayout(profile.layout)
+          ? profile.layout
+          : undefined,
+      align: profile.align,
+      iconSize: profile.iconSize,
+      spacing: profile.spacing,
+      shape: profile.shape,
+      cornerRadius: profile.cornerRadius,
+      widgetAccentedRenderingMode: profile.widgetAccentedRenderingMode,
+      panels,
+      folders: panels
+        ? panels.map(panel => (panel.folder ?? '').trim())
+        : Array.isArray(profile.folders)
+          ? profile.folders.map(name => String(name).trim()).filter(Boolean)
+          : undefined,
+      panelAxis:
+        profile.panelAxis === 'horizontal' || profile.panelAxis === 'vertical'
+          ? profile.panelAxis
+          : undefined
+    })
+    if (next.length >= MAX_WIDGET_PROFILES) break
+  }
+  return next
+}
+
+/** Finds the profile a widget parameter names, matching its id or its name. */
+export function findWidgetProfile(
+  profiles: WidgetProfile[] | undefined,
+  token: string | undefined
+): WidgetProfile | undefined {
+  const key = (token ?? '').trim().toLowerCase()
+  if (!key) return undefined
+  return (profiles ?? []).find(
+    profile =>
+      profile.id.toLowerCase() === key || profile.name.toLowerCase() === key
+  )
+}
+
+/** The widget settings a profile stands for. */
+export function profileToParameter(
+  profile: WidgetProfile
+): WidgetParameter {
+  const panels = profile.panels
+    ? normalizeWidgetPanels(profile.panels)
+    : undefined
+  return {
+    layout: profile.layout,
+    folder: profile.folder,
+    slots: profile.slots,
+    cover: profile.cover,
+    folders: panels
+      ? panels.map(panel => (panel.folder ?? '').trim())
+      : profile.folders,
+    panels,
+    panelAxis: profile.panelAxis
+  }
+}
+
+/** The parameter string a widget instance uses to select this profile. */
+export function profileParameter(profile: WidgetProfile): string {
+  return `profile=${profile.name}`
+}
+
+/** A profile seeded from the current global widget settings. */
+export function createWidgetProfile(
+  name: string,
+  config: Config
+): WidgetProfile {
+  const panels = normalizeWidgetPanels(config.widgetPanels)
+  // Seed a profile with the current global panels so it starts as a complete,
+  // independent copy. An empty global panel list stays unset, which keeps the
+  // profile following the global panels once they are configured.
+  const hasPanels = panels.some(panel => (panel.folder ?? '').trim() !== '')
+  return {
+    id: `profile_${Date.now().toString(36)}${Math.random()
+      .toString(36)
+      .slice(2, 6)}`,
+    name,
+    layout: config.widgetLayout ?? 'auto',
+    slots: normalizeWidgetSlots(config.widgetSlots),
+    cover: config.widgetCoverMode ?? false,
+    panels: hasPanels ? panels : undefined,
+    folders: hasPanels
+      ? panels.map(panel => (panel.folder ?? '').trim())
+      : undefined
+  }
+}
+
+/** A free name derived from `base`, so a copy never collides with a sibling. */
+export function uniqueProfileName(
+  base: string,
+  profiles: WidgetProfile[],
+  copySuffix = ''
+): string {
+  const used = new Set(
+    profiles.map(profile => profile.name.trim().toLowerCase())
+  )
+  const wanted = `${base}${copySuffix}`.trim()
+  if (!used.has(wanted.toLowerCase())) return wanted
+  let index = 2
+  let name = `${wanted} ${index}`
+  while (used.has(name.toLowerCase())) {
+    index += 1
+    name = `${wanted} ${index}`
+  }
+  return name
+}
+
+/** A copy of `profile` with a fresh id and a free name. */
+export function duplicateWidgetProfile(
+  profile: WidgetProfile,
+  profiles: WidgetProfile[],
+  copySuffix = ''
+): WidgetProfile {
+  return {
+    ...profile,
+    id: `profile_${Date.now().toString(36)}${Math.random()
+      .toString(36)
+      .slice(2, 6)}`,
+    name: uniqueProfileName(profile.name, profiles, copySuffix),
+    slots: profile.slots ? [...profile.slots] : undefined,
+    panels: profile.panels
+      ? profile.panels.map(panel => ({ ...panel }))
+      : undefined,
+    folders: profile.folders ? [...profile.folders] : undefined
+  }
 }
 
 export interface Folder {
@@ -313,8 +548,94 @@ export function gridSpecForLayout(
   }
 }
 
-/** How many apps the largest fixed layout pins, one per grid cell. */
+/** The most apps the largest fixed layout pins, one per grid cell. */
 export const MAX_WIDGET_SLOTS = 9
+
+/** The nine-grid display: eight full icons plus one cell for the overflow. */
+export const NINE_GRID_APPS = 8
+/** How many miniature icons the overflow cell shows, in a 2 x 2 block. */
+export const NINE_GRID_OVERFLOW_PREVIEW = 4
+
+/**
+ * Splits a folder's apps for the nine-grid display: the first eight keep a
+ * full icon, and everything past them goes into the small ninth cell.
+ *
+ * A folder that already fits inside the grid is returned whole, so no empty
+ * overflow cell appears for a folder of eight or fewer apps.
+ */
+export function splitNineGrid(apps: AppItem[]): {
+  primary: AppItem[]
+  overflow: AppItem[]
+} {
+  if (apps.length <= NINE_GRID_APPS + 1) {
+    return { primary: apps, overflow: [] }
+  }
+  return {
+    primary: apps.slice(0, NINE_GRID_APPS),
+    overflow: apps.slice(NINE_GRID_APPS)
+  }
+}
+
+/** The grid a folder's auto display settles on, in points. */
+export interface FolderGridFit {
+  columns: number
+  rows: number
+  /** Square icon side length. */
+  iconSize: number
+  /** Gap between icons, both axes. */
+  gap: number
+}
+
+/**
+ * Picks the grid that shows every app as large as possible.
+ *
+ * The gap is kept proportional to the icon, so a denser grid simply scales the
+ * whole arrangement down instead of letting the gaps eat the cells. Every
+ * column count is tried and the one yielding the largest icon wins, which is
+ * what makes a wide panel settle on more columns than a tall one.
+ */
+export function fitFolderGrid(options: {
+  count: number
+  width: number
+  height: number
+  maxColumns?: number
+  maxIconSize?: number
+  /** Gap as a fraction of the icon size. */
+  gapRatio?: number
+}): FolderGridFit {
+  const count = Math.max(1, Math.floor(options.count))
+  const width = Math.max(1, options.width)
+  const height = Math.max(1, options.height)
+  const maxColumns = Math.max(1, Math.floor(options.maxColumns ?? MAX_GRID_COLUMNS))
+  const maxIcon = options.maxIconSize ?? 92
+  const ratio = options.gapRatio ?? 0.24
+
+  let best: FolderGridFit = {
+    columns: 1,
+    rows: count,
+    iconSize: 1,
+    gap: ratio
+  }
+  let bestScore = -1
+
+  for (let columns = 1; columns <= Math.min(count, maxColumns); columns++) {
+    const rows = Math.ceil(count / columns)
+    // width  >= icon * (columns + (columns - 1) * ratio)
+    const byWidth = width / (columns + (columns - 1) * ratio)
+    const byHeight = height / (rows + (rows - 1) * ratio)
+    const iconSize = Math.min(byWidth, byHeight, maxIcon)
+    // Ties go to the wider grid: two apps read better side by side than
+    // stacked, and the icon size is identical either way.
+    if (iconSize + 0.0001 < bestScore) continue
+    bestScore = iconSize
+    // No readability floor here: showing every app is the promise this mode
+    // makes, so the grid keeps shrinking instead of letting icons overflow.
+    const size = Math.max(1, iconSize)
+    best = { columns, rows, iconSize: size, gap: Math.max(1, size) * ratio }
+  }
+
+  return best
+}
 
 /** How many apps each layout renders. */
 export const WIDGET_LAYOUT_SLOT_COUNT: Record<WidgetLayout, number> = {
@@ -349,6 +670,30 @@ export function panelCountForFamily(family: string): number {
 
 /** The most panels a widget can be divided into. */
 export const MAX_WIDGET_PANELS = 3
+
+/**
+ * Whether a widget should divide into folder panels instead of drawing one
+ * arrangement.
+ *
+ * Division needs three things: a widget big enough to hold more than one panel,
+ * at least one panel naming a folder, and no whole-widget arrangement pinned by
+ * the widget's own configuration. That last rule is what makes the layout picker
+ * in a profile actually work: a fixed layout there is an explicit choice for the
+ * whole widget, so it outranks the panels, while `auto` leaves room for them.
+ */
+export function shouldDivideWidget(options: {
+  family: string
+  /** The layout the widget's parameter or profile pins, if any. */
+  layout?: WidgetLayout
+  /** Set when the widget shows a single folder, which never divides. */
+  folder?: string
+  panels: WidgetPanelConfig[] | undefined
+}): boolean {
+  if (options.folder) return false
+  if (panelCountForFamily(options.family) <= 1) return false
+  if (options.layout !== undefined && options.layout !== 'auto') return false
+  return (options.panels ?? []).some(panel => (panel.folder ?? '').trim() !== '')
+}
 
 /**
  * The axis the panels are laid out along: the longer one, which keeps every
@@ -425,6 +770,11 @@ export interface Config {
    * widget divides into two panels and the extra-large families into three.
    */
   widgetPanels?: WidgetPanelConfig[]
+  /**
+   * Named presets a widget instance picks up through its parameter, so several
+   * Home Screen widgets can each show different content.
+   */
+  widgetProfiles?: WidgetProfile[]
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -435,7 +785,8 @@ export const DEFAULT_CONFIG: Config = {
   widgetLayout: 'auto',
   widgetSlots: [],
   widgetCoverMode: false,
-  widgetPanels: []
+  widgetPanels: [],
+  widgetProfiles: []
 }
 
 /** Pads or trims a slot list so it always has exactly `MAX_WIDGET_SLOTS` entries. */
@@ -453,6 +804,48 @@ export interface WidgetPanel {
   apps: AppItem[]
   /** The panel's own appearance overrides, straight from the settings. */
   style: WidgetPanelConfig
+}
+
+/**
+ * Maps a positional folder list onto stored panel configs. A panel keeps its
+ * stored appearance only when that entry still points at the same folder, so
+ * a list naming other folders never inherits an unrelated panel's style.
+ */
+export function panelConfigsForFolders(
+  tokens: string[],
+  globalPanels: WidgetPanelConfig[] | undefined,
+  folders: Folder[]
+): WidgetPanelConfig[] {
+  const base = normalizeWidgetPanels(globalPanels)
+  const resolve = (token?: string) =>
+    folders.find(entry => entry.id === token || entry.name === token)
+  return tokens.map((token, index) => {
+    const folder = (token ?? '').trim()
+    const stored = base[index] ?? { folder: '' }
+    const target = resolve(folder)
+    const baseTarget = resolve(stored.folder)
+    const same =
+      !!folder && !!target && !!baseTarget && target.id === baseTarget.id
+    return same ? { ...stored, folder } : { folder }
+  })
+}
+
+/**
+ * The panel list a profile editor works on: the profile's own panel settings
+ * when it has them, otherwise its folder list mapped onto the global panels.
+ * Always returns one entry per possible panel.
+ */
+export function profilePanelConfigs(
+  profile: WidgetProfile,
+  globalPanels: WidgetPanelConfig[] | undefined,
+  folders: Folder[]
+): WidgetPanelConfig[] {
+  if (profile.panels) return normalizeWidgetPanels(profile.panels)
+  const tokens = Array.from(
+    { length: MAX_WIDGET_PANELS },
+    (_unused, index) => (profile.folders?.[index] ?? '').trim()
+  )
+  return panelConfigsForFolders(tokens, globalPanels, folders)
 }
 
 /**
@@ -536,11 +929,21 @@ export const DEFAULT_APPS: AppItem[] = [
  * either a layout name or a folder name.
  */
 export interface WidgetParameter {
+  /**
+   * `profile=Work` selects a saved widget profile. Every other field is then
+   * inherited from that profile, and keys written next to it override it.
+   */
+  profile?: string
   layout?: WidgetLayout
   /** Folder name or id to filter the apps by. */
   folder?: string
   /** App ids for the fixed layouts, in slot order. */
   slots?: string[]
+  /**
+   * Per-panel settings carried by a named profile. This is never parsed from
+   * the parameter string: only a profile can supply rich objects.
+   */
+  panels?: WidgetPanelConfig[]
   /** `cover=1` turns on the cover presentation for the fixed layouts. */
   cover?: boolean
   /**
@@ -572,21 +975,24 @@ function parseBoolean(value: string): boolean | undefined {
  */
 export function parseWidgetParameter(
   raw: string | undefined,
-  folders: Folder[] = []
+  folders: Folder[] = [],
+  profiles: WidgetProfile[] = []
 ): WidgetParameter {
-  let text = (raw ?? '').trim()
   // A preview passes the parameter through JSON, which can leave the quotes on.
-  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
-    text = text.slice(1, -1).trim()
-  }
+  const text = widgetParameterText(raw)
   if (!text) return {}
 
+  // A bare value keeps its historical meaning, most specific first: a layout
+  // name, then a folder, then a saved profile.
   if (isWidgetLayout(text)) return { layout: text }
   if (folders.some(folder => folder.name === text || folder.id === text)) {
     return { folder: text }
   }
+  const bare = findWidgetProfile(profiles, text)
+  if (bare) return profileToParameter(bare)
 
-  const parsed: WidgetParameter = {}
+  const fields: WidgetParameter = {}
+  let profileName = ''
   // Both ASCII and full-width separators, since the parameter is hand typed.
   for (const part of text.split(/[&;＆；]/)) {
     const separator = part.indexOf('=')
@@ -595,19 +1001,21 @@ export function parseWidgetParameter(
     const value = part.slice(separator + 1).trim()
     if (!key || !value) continue
 
-    if (key === 'layout') {
-      if (isWidgetLayout(value)) parsed.layout = value
+    if (key === 'profile' || key === 'preset' || key === 'config') {
+      profileName = value
+    } else if (key === 'layout') {
+      if (isWidgetLayout(value)) fields.layout = value
     } else if (key === 'folder' || key === 'folderid') {
-      parsed.folder = value
+      fields.folder = value
     } else if (key === 'slots' || key === 'apps') {
       const ids = value
         .split(/[,，]/)
         .map(id => id.trim())
         .filter(Boolean)
-      if (ids.length > 0) parsed.slots = ids
+      if (ids.length > 0) fields.slots = ids
     } else if (key === 'cover' || key === 'covermode') {
       const cover = parseBoolean(value)
-      if (cover !== undefined) parsed.cover = cover
+      if (cover !== undefined) fields.cover = cover
     } else if (key === 'folders' || key === 'panels') {
       // Folder names may contain commas only by accident, so an unknown token
       // is ignored by the resolver that follows, not here.
@@ -615,17 +1023,78 @@ export function parseWidgetParameter(
         .split(/[,，]/)
         .map(name => name.trim())
         .filter(Boolean)
-      if (names.length > 0) parsed.folders = names
+      if (names.length > 0) fields.folders = names
     } else if (key === 'panelaxis' || key === 'axis') {
       const word = value.toLowerCase()
       if (word === 'columns' || word === 'horizontal' || word === 'h') {
-        parsed.panelAxis = 'horizontal'
+        fields.panelAxis = 'horizontal'
       } else if (word === 'rows' || word === 'vertical' || word === 'v') {
-        parsed.panelAxis = 'vertical'
+        fields.panelAxis = 'vertical'
       }
     }
   }
+
+  // A named profile supplies the defaults; keys typed next to it win.
+  const profile = profileName
+    ? findWidgetProfile(profiles, profileName)
+    : undefined
+  const parsed: WidgetParameter = profile
+    ? profileToParameter(profile)
+    : {}
+  if (fields.layout) parsed.layout = fields.layout
+  if (fields.folder) parsed.folder = fields.folder
+  if (fields.slots) parsed.slots = fields.slots
+  if (fields.cover !== undefined) parsed.cover = fields.cover
+  if (fields.folders) {
+    parsed.folders = fields.folders
+    // Folders typed next to a profile replace its panel definitions, which
+    // also drops the profile's per-panel appearance.
+    parsed.panels = undefined
+  }
+  if (fields.panelAxis) parsed.panelAxis = fields.panelAxis
   return parsed
+}
+
+/** Trims a widget parameter and removes the quotes a JSON preview can add. */
+export function widgetParameterText(raw: string | undefined): string {
+  let text = (raw ?? '').trim()
+  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+    text = text.slice(1, -1).trim()
+  }
+  return text
+}
+
+/**
+ * The profile a widget parameter selects, if any. Mirrors the resolution order
+ * of `parseWidgetParameter`: a bare value is a layout, then a folder, then a
+ * profile name, and `profile=Name` always names a profile explicitly.
+ */
+export function profileForParameter(
+  raw: string | undefined,
+  folders: Folder[] = [],
+  profiles: WidgetProfile[] = []
+): WidgetProfile | undefined {
+  const text = widgetParameterText(raw)
+  if (!text) return undefined
+  if (isWidgetLayout(text)) return undefined
+  if (folders.some(folder => folder.name === text || folder.id === text)) {
+    return undefined
+  }
+
+  const bare = findWidgetProfile(profiles, text)
+  if (bare) return bare
+
+  for (const part of text.split(/[&;＆；]/)) {
+    const separator = part.indexOf('=')
+    if (separator < 0) continue
+    const key = part.slice(0, separator).trim().toLowerCase()
+    const value = part.slice(separator + 1).trim()
+    if (!value) continue
+    if (key === 'profile' || key === 'preset' || key === 'config') {
+      return findWidgetProfile(profiles, value)
+    }
+  }
+  return undefined
 }
 
 /** Builds the parameter string shown in Settings and handed to `Widget.preview`. */
@@ -633,19 +1102,42 @@ export function buildWidgetParameter(
   layout: WidgetLayout,
   folderName?: string,
   cover?: boolean,
-  folders?: string[]
+  folders?: string[],
+  profileName?: string
 ): string {
   const parts = [`layout=${layout}`]
   if (folderName) parts.push(`folder=${folderName}`)
   if (cover) parts.push('cover=1')
   const names = (folders ?? []).filter(Boolean)
   if (names.length > 0) parts.push(`folders=${names.join(',')}`)
+  if (profileName) parts.push(`profile=${profileName}`)
   return parts.join('&')
 }
 
 /** The folder names a panel list points at, for the preview parameter. */
 export function panelFolderNames(panels: WidgetPanelConfig[]): string[] {
   return panels.map(panel => (panel.folder ?? '').trim()).filter(Boolean)
+}
+
+/**
+ * The most informative widget size to preview an arrangement in: the fixed
+ * grids need the tall widget to show every row, a divided widget needs a large
+ * one, and a single app reads best small.
+ */
+export function previewFamilyForLayout(
+  layout: WidgetLayout,
+  divided = false
+): 'systemSmall' | 'systemMedium' | 'systemLarge' {
+  if (divided) return 'systemLarge'
+  switch (layout) {
+    case 'single':
+      return 'systemSmall'
+    case 'six':
+    case 'nine':
+      return 'systemLarge'
+    default:
+      return 'systemMedium'
+  }
 }
 
 /**

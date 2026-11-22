@@ -17,7 +17,6 @@ import {
   Spacer,
   Stepper,
   Text,
-  Toggle,
   Widget,
   useState
 } from 'scripting'
@@ -26,18 +25,13 @@ import {
   Config,
   Folder,
   FolderStyle,
-  MAX_WIDGET_PANELS,
-  WIDGET_LAYOUT_SLOT_COUNT,
   WidgetLayout,
-  WidgetPanelConfig,
-  buildWidgetParameter,
-  normalizeWidgetPanels,
-  normalizeWidgetSlots,
-  panelFolderNames
+  normalizeWidgetProfiles
 } from '../constants'
 import { AppEditor } from './AppEditor'
 import { isiCloudReady, pushToiCloud } from '../cloudSync'
-import { PanelSettingsView } from './PanelSettings'
+import { WidgetDefaultsView } from './WidgetDefaults'
+import { WidgetProfilesView } from './WidgetProfiles'
 import {
   FolderDetail,
   FolderGridCell,
@@ -58,21 +52,6 @@ const FOLDER_GRID_COLUMNS = [
     spacing: 16
   }
 ]
-
-/** The most informative widget size to demo each layout in. */
-const PREVIEW_FAMILY: Record<
-  WidgetLayout,
-  'systemSmall' | 'systemMedium' | 'systemLarge'
-> = {
-  auto: 'systemMedium',
-  single: 'systemSmall',
-  dual: 'systemMedium',
-  triple: 'systemMedium',
-  quad: 'systemMedium',
-  // The denser grids need the tall widget to show every row.
-  six: 'systemLarge',
-  nine: 'systemLarge'
-}
 
 export function AppsPage({
   apps,
@@ -296,27 +275,10 @@ export function SettingsPage({
     getLanguagePreference
   )
   const cloudReady = isiCloudReady()
+  const profiles = normalizeWidgetProfiles(config.widgetProfiles)
   const layout: WidgetLayout = config.widgetLayout ?? 'auto'
-  const slots = normalizeWidgetSlots(config.widgetSlots)
-  const panels = normalizeWidgetPanels(config.widgetPanels)
-  // A slot may point at a deleted app; showing "Default" is kinder than an
-  // unresolved picker value.
-  const slotValue = (index: number) =>
-    apps.some(app => app.id === slots[index]) ? slots[index] : ''
 
-  function updateSlot(index: number, value: string) {
-    const next = normalizeWidgetSlots(config.widgetSlots)
-    next[index] = value
-    onSaveConfig({ widgetSlots: next })
-  }
-
-  function updatePanel(index: number, panel: WidgetPanelConfig) {
-    const next = normalizeWidgetPanels(config.widgetPanels)
-    next[index] = panel
-    onSaveConfig({ widgetPanels: next })
-  }
-
-  /** Human-readable layout name, used in each panel's summary row. */
+  /** Human-readable layout name, shown as the default-settings summary. */
   function layoutLabel(value?: WidgetLayout) {
     switch (value) {
       case 'single':
@@ -333,37 +295,6 @@ export function SettingsPage({
         return t('widgetLayoutNine')
       default:
         return t('widgetLayoutAuto')
-    }
-  }
-
-  async function previewWidget() {
-    // A large widget divides into two panels and the extra-large into three,
-    // so preview those sizes when panels are configured.
-    const panelNames = panelFolderNames(panels)
-    const divided = panelNames.length > 0
-    const family = divided
-      ? PREVIEW_FAMILY[layout] === 'systemSmall'
-        ? 'systemMedium'
-        : 'systemLarge'
-      : PREVIEW_FAMILY[layout]
-    const parameter = buildWidgetParameter(
-      layout,
-      undefined,
-      config.widgetCoverMode,
-      panelNames
-    )
-    const optionName = t('widget')
-    try {
-      await Widget.preview({
-        family,
-        parameters: {
-          options: { [optionName]: JSON.stringify(parameter) },
-          default: optionName
-        }
-      })
-    } catch (e) {
-      console.error(e)
-      await Widget.preview({ family })
     }
   }
 
@@ -397,7 +328,7 @@ export function SettingsPage({
             systemImage="arrow.up.to.line"
             disabled={!cloudReady}
             action={async () => {
-              const ok = pushToiCloud()
+              const ok = await pushToiCloud(true)
               await Dialog.alert({
                 title: t('iCloud'),
                 message: ok ? t('iCloudBackupDone') : t('iCloudBackupFailed')
@@ -490,129 +421,48 @@ export function SettingsPage({
         </Section>
 
         <Section
+          header={<Text>{t('widgetProfiles')}</Text>}
+          footer={<Text>{t('widgetProfilesFooter')}</Text>}
+        >
+          <NavigationLink
+            destination={
+              <WidgetProfilesView
+                profiles={profiles}
+                apps={apps}
+                folders={folders}
+                config={config}
+                onChange={next => onSaveConfig({ widgetProfiles: next })}
+              />
+            }
+          >
+            <HStack>
+              <Text>{t('widgetProfiles')}</Text>
+              <Spacer />
+              <Text opacity={0.5}>{profiles.length}</Text>
+            </HStack>
+          </NavigationLink>
+        </Section>
+
+        <Section
           header={<Text>{t('widget')}</Text>}
-          footer={<Text>{t('widgetLayoutFooter')}</Text>}
+          footer={<Text>{t('widgetDefaultsFooter')}</Text>}
         >
-          <Picker
-            title={t('widgetLayout')}
-            value={layout}
-            onChanged={(value: string) =>
-              onSaveConfig({ widgetLayout: value as WidgetLayout })
+          <NavigationLink
+            destination={
+              <WidgetDefaultsView
+                config={config}
+                apps={apps}
+                folders={folders}
+                onSaveConfig={onSaveConfig}
+              />
             }
           >
-            <Text tag="auto">{t('widgetLayoutAuto')}</Text>
-            <Text tag="single">{t('widgetLayoutSingle')}</Text>
-            <Text tag="dual">{t('widgetLayoutDual')}</Text>
-            <Text tag="triple">{t('widgetLayoutTriple')}</Text>
-            <Text tag="quad">{t('widgetLayoutQuad')}</Text>
-            <Text tag="six">{t('widgetLayoutSix')}</Text>
-            <Text tag="nine">{t('widgetLayoutNine')}</Text>
-          </Picker>
-        </Section>
-
-        {layout !== 'auto' && (
-          <Section footer={<Text>{t('widgetCoverModeFooter')}</Text>}>
-            <Toggle
-              title={t('widgetCoverMode')}
-              systemImage="rectangle.inset.filled"
-              value={config.widgetCoverMode ?? false}
-              onChanged={(value: boolean) =>
-                onSaveConfig({ widgetCoverMode: value })
-              }
-            />
-          </Section>
-        )}
-
-        {layout !== 'auto' && (
-          <Section
-            header={<Text>{t('widgetSlots')}</Text>}
-            footer={
-              <Text>
-                {`${t('widgetSlotsFooter')}\n\n${t('widgetParameterHint')}`}
-              </Text>
-            }
-          >
-            {Array.from(
-              { length: WIDGET_LAYOUT_SLOT_COUNT[layout] },
-              (_unused, index) => (
-                <Picker
-                  key={index}
-                  title={t('widgetSlotLabel', { index: index + 1 })}
-                  value={slotValue(index)}
-                  onChanged={(value: string) => updateSlot(index, value)}
-                >
-                  <Text tag="">{t('widgetSlotDefault')}</Text>
-                  {apps.map(app => (
-                    <Text key={app.id} tag={app.id}>
-                      {app.name}
-                    </Text>
-                  ))}
-                </Picker>
-              )
-            )}
-          </Section>
-        )}
-
-        <Section
-          header={<Text>{t('widgetPanels')}</Text>}
-          footer={
-            <Text>
-              {folders.length < 2
-                ? t('widgetPanelsEmpty')
-                : t('widgetPanelsFooter')}
-            </Text>
-          }
-        >
-          {folders.length < 2 ? null : (
-            <Fragment>
-              {Array.from(
-                { length: MAX_WIDGET_PANELS },
-                (_unused, index) => {
-                  const panel = panels[index]
-                  const folder = folders.find(
-                    entry =>
-                      entry.id === panel.folder || entry.name === panel.folder
-                  )
-                  return (
-                    <NavigationLink
-                      key={index}
-                      destination={
-                        <PanelSettingsView
-                          index={index}
-                          panel={panel}
-                          folders={folders}
-                          globalConfig={config}
-                          onChange={next => updatePanel(index, next)}
-                        />
-                      }
-                    >
-                      <HStack>
-                        <Text>
-                          {t('widgetPanelLabel', { index: index + 1 })}
-                        </Text>
-                        <Spacer />
-                        <Text opacity={0.5} lineLimit={1}>
-                          {`${folder ? folder.name : t('widgetPanelDefault')} · ${layoutLabel(panel.layout)}`}
-                        </Text>
-                      </HStack>
-                    </NavigationLink>
-                  )
-                }
-              )}
-            </Fragment>
-          )}
-        </Section>
-
-        <Section
-          footer={
-            layout === 'auto' ? <Text>{t('widgetParameterHint')}</Text> : undefined
-          }
-        >
-          <Button
-            title={t('previewWidget')}
-            systemImage="rectangle.on.rectangle"
-            action={previewWidget}
-          />
+            <HStack>
+              <Text>{t('widgetDefaults')}</Text>
+              <Spacer />
+              <Text opacity={0.5}>{layoutLabel(layout)}</Text>
+            </HStack>
+          </NavigationLink>
         </Section>
       </List>
     </TexturedTabPage>

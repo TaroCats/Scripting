@@ -25,8 +25,8 @@ import { useI18n } from '../i18n'
  * that panel's own layout, icon size, spacing, shape and rendering mode.
  *
  * Every control writes straight through to the config, so the widget reloads
- * while the values are being changed. An unset value shows as "Auto" and keeps
- * following the folder style and then the global widget settings.
+ * while the values are being changed. The panel's own value wins; an unset one
+ * shows as "Auto" and follows the folder style, then the global settings.
  */
 export function PanelSettingsView({
   index,
@@ -55,8 +55,8 @@ export function PanelSettingsView({
     onChange(next)
   }
 
-  // The folder's own appearance wins over this panel's overrides, so it is
-  // resolved first and also shown as the source of whatever is in effect.
+  // The panel's settings are the most specific, so they come first; the
+  // folder's shared style fills in whatever this panel leaves unset.
   const activeFolder = folders.find(
     entry => entry.id === draft.folder || entry.name === draft.folder
   )
@@ -66,33 +66,36 @@ export function PanelSettingsView({
     folderStyle[field] !== undefined
 
   const effectiveIconSize =
-    folderStyle.iconSize ?? draft.iconSize ?? globalConfig.iconSize
+    draft.iconSize ?? folderStyle.iconSize ?? globalConfig.iconSize
   const effectiveSpacing =
-    folderStyle.spacing ?? draft.spacing ?? globalConfig.spacing
+    draft.spacing ?? folderStyle.spacing ?? globalConfig.spacing
   const effectiveShape =
-    folderStyle.shape ?? draft.shape ?? globalConfig.shape
+    draft.shape ?? folderStyle.shape ?? globalConfig.shape
   const effectiveRadius =
-    folderStyle.cornerRadius ??
     draft.cornerRadius ??
+    folderStyle.cornerRadius ??
     effectiveIconSize * 0.225
   const effectiveRenderingMode =
-    folderStyle.widgetAccentedRenderingMode ??
     draft.widgetAccentedRenderingMode ??
+    folderStyle.widgetAccentedRenderingMode ??
     globalConfig.widgetAccentedRenderingMode
-  const effectiveLayout = folderStyle.layout ?? draft.layout ?? 'auto'
+  const effectiveLayout = draft.layout ?? folderStyle.layout ?? 'auto'
   const effectiveAlign: PanelAlign =
-    folderStyle.align ?? draft.align ?? 'center'
-  const effectiveCover = folderStyle.cover ?? draft.cover ?? false
+    draft.align ?? folderStyle.align ?? 'center'
+  // Cover belongs to the region. The folder style is the only fallback; the
+  // whole-widget cover switch does not apply to a divided widget.
+  const effectiveCover = draft.cover ?? folderStyle.cover ?? false
 
-  /** Trailing value text: the inherited value, the panel's own, or "Auto". */
+  /** Trailing value text: the panel's own value, the inherited one, or "Auto". */
   function valueLabel(
     field: keyof FolderStyle,
     own?: string | number
   ): string {
+    if (own !== undefined) return String(own)
     if (fromFolder(field)) {
       return `${folderStyle[field]} · ${t('panelFromFolder')}`
     }
-    return own !== undefined ? String(own) : t('panelAuto')
+    return t('panelAuto')
   }
 
   return (

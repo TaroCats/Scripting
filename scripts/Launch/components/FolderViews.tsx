@@ -14,6 +14,7 @@ import {
   Navigation,
   NavigationLink,
   Picker,
+  Rectangle,
   RoundedRectangle,
   Section,
   Spacer,
@@ -22,6 +23,7 @@ import {
   TextField,
   Toggle,
   VStack,
+  VirtualNode,
   ZStack,
   useEffect,
   useObservable,
@@ -32,13 +34,22 @@ import {
   Config,
   DEFAULT_CONFIG,
   Folder,
+  FolderDisplay,
   FolderStyle,
+  MAX_FOLDER_MAX_APPS,
   MAX_GRID_COLUMNS,
+  MIN_FOLDER_MAX_APPS,
+  NINE_GRID_APPS,
+  NINE_GRID_OVERFLOW_PREVIEW,
   WidgetLayout,
-  gridSpecForLayout
+  clampFolderMaxApps,
+  fitFolderGrid,
+  gridSpecForLayout,
+  splitNineGrid
 } from '../constants'
 import { AppIconArtwork } from './AppIconArtwork'
 import { AppEditor } from './AppEditor'
+import { SFSymbolPicker } from './SFSymbolPicker'
 import {
   AppIconView,
   AppRow,
@@ -100,16 +111,24 @@ export function FolderNameEditor({
         header={<Text>{t('appearance')}</Text>}
         footer={<Text>{t('folderIconFooter')}</Text>}
       >
-        <HStack>
-          <Text>{t('iconSfSymbolLabel')}</Text>
-          <TextField
-            title=""
-            prompt={t('optional')}
-            value={icon}
-            onChanged={setIcon}
-          />
-          <FolderIconView icon={icon} color={color as unknown as string} />
-        </HStack>
+        <NavigationLink
+          destination={
+            <SFSymbolPicker
+              name={icon}
+              color={color}
+              onSelect={setIcon}
+            />
+          }
+        >
+          <HStack>
+            <Text>{t('iconSfSymbolLabel')}</Text>
+            <Spacer />
+            <Text font={13} foregroundStyle={'secondaryLabel' as Color} lineLimit={1}>
+              {icon || t('optional')}
+            </Text>
+            <FolderIconView icon={icon} color={color as unknown as string} />
+          </HStack>
+        </NavigationLink>
         <ColorPicker value={color} onChanged={setColor}>
           <Text>{t('folderColor')}</Text>
         </ColorPicker>
@@ -255,6 +274,48 @@ function FolderSettingsView({
           onChanged={setCustomized}
         />
       </Section>
+      {customize && (
+        <Section
+          header={<Text>{t('folderDisplay')}</Text>}
+          footer={<Text>{t('folderDisplayFooter')}</Text>}
+        >
+          <Picker
+            title={t('folderDisplayMode')}
+            value={folderStyle.display ?? 'layout'}
+            onChanged={(value: string) => {
+              if (value === 'layout') {
+                updateStyle({ display: undefined, maxApps: undefined })
+              } else {
+                updateStyle({ display: value as FolderDisplay })
+              }
+            }}
+          >
+            <Text tag="layout">{t('folderDisplayFollowLayout')}</Text>
+            <Text tag="auto">{t('folderDisplayAuto')}</Text>
+            <Text tag="nine">{t('folderDisplayNine')}</Text>
+          </Picker>
+          {folderStyle.display === 'auto' && (
+            <Stepper
+              onIncrement={() => {
+                const value = clampFolderMaxApps(folderStyle.maxApps) + 1
+                if (value <= MAX_FOLDER_MAX_APPS) updateStyle({ maxApps: value })
+              }}
+              onDecrement={() => {
+                const value = clampFolderMaxApps(folderStyle.maxApps) - 1
+                if (value >= MIN_FOLDER_MAX_APPS) updateStyle({ maxApps: value })
+              }}
+            >
+              <HStack>
+                <Text>{t('folderMaxApps')}</Text>
+                <Spacer />
+                <Text opacity={0.5}>
+                  {clampFolderMaxApps(folderStyle.maxApps).toString()}
+                </Text>
+              </HStack>
+            </Stepper>
+          )}
+        </Section>
+      )}
       {customize && (
         <Section
           header={<Text>{t('widget')}</Text>}
@@ -679,6 +740,8 @@ function FolderPreview({
                   config={config}
                   previewSize={Math.min(proxy.size.width, proxy.size.height)}
                   layout={folder.style?.layout}
+                  display={folder.style?.display}
+                  maxApps={folder.style?.maxApps}
                 />
               )}
             </GeometryReader>
@@ -689,19 +752,176 @@ function FolderPreview({
   )
 }
 
+/** The overflow cell of a nine-grid folder, at preview scale. */
+function FolderPreviewOverflow({
+  apps,
+  size,
+  config
+}: {
+  apps: AppItem[]
+  size: number
+  config: Config
+}) {
+  const minis = apps.slice(0, NINE_GRID_OVERFLOW_PREVIEW)
+  const miniSize = size * 0.36
+  const miniGap = size * 0.08
+  const rows: AppItem[][] = []
+  for (let i = 0; i < minis.length; i += 2) {
+    rows.push(minis.slice(i, i + 2))
+  }
+
+  return (
+    <ZStack
+      frame={{ width: size, height: size }}
+      background={{
+        style: 'rgba(120,120,128,0.28)' as Color,
+        shape: { type: 'rect', cornerRadius: size * 0.225 }
+      }}
+    >
+      <VStack spacing={miniGap} alignment="center">
+        {rows.map((row, rowIndex) => (
+          <HStack key={rowIndex} spacing={miniGap} alignment="center">
+            {row.map(item => (
+              <AppIconArtwork
+                key={item.id}
+                item={item}
+                config={{
+                  ...config,
+                  iconSize: miniSize,
+                  cornerRadius: undefined
+                }}
+              />
+            ))}
+          </HStack>
+        ))}
+      </VStack>
+    </ZStack>
+  )
+}
+
 function FolderPreviewGrid({
   apps,
   config,
   previewSize,
-  layout
+  layout,
+  display,
+  maxApps
 }: {
   apps: AppItem[]
   config: Config
   previewSize: number
   layout?: WidgetLayout
+  display?: FolderDisplay
+  maxApps?: number
 }) {
   const iconSize = config.iconSize || DEFAULT_CONFIG.iconSize
   const preferredSpacing = config.spacing
+
+  // The App Library arrangement, mirrored at preview scale so the folder tile
+  // looks like what the widget will draw.
+  if (display === 'nine') {
+    const { primary, overflow } = splitNineGrid(apps)
+    const gap = previewSize * 0.04
+    const inset = previewSize * 0.05
+    const cell = (previewSize - inset * 2 - gap * 2) / 3
+    const size = Math.max(6, cell * 0.88)
+    const cells: VirtualNode[] = []
+    for (let index = 0; index < 9; index++) {
+      const app = primary[index]
+      if (app) {
+        cells.push(
+          <AppIconArtwork
+            key={app.id}
+            item={app}
+            config={{ ...config, iconSize: size, cornerRadius: undefined }}
+          />
+        )
+      } else if (overflow.length > 0 && index === NINE_GRID_APPS) {
+        cells.push(
+          <FolderPreviewOverflow
+            key="overflow"
+            apps={overflow}
+            size={size}
+            config={config}
+          />
+        )
+      } else {
+        cells.push(
+          <Rectangle
+            key={`empty-${index}`}
+            fill="clear"
+            frame={{ width: size, height: size }}
+          />
+        )
+      }
+    }
+
+    const rows: VirtualNode[][] = []
+    for (let i = 0; i < cells.length; i += 3) {
+      rows.push(cells.slice(i, i + 3))
+    }
+
+    return (
+      <VStack
+        spacing={gap}
+        frame={{ width: previewSize, height: previewSize }}
+        alignment="center"
+      >
+        <Spacer />
+        {rows.map((row, rowIndex) => (
+          <HStack key={rowIndex} spacing={gap} alignment="center">
+            {row}
+          </HStack>
+        ))}
+        <Spacer />
+      </VStack>
+    )
+  }
+
+  // The auto display: everything up to the cap, scaled to fit.
+  if (display === 'auto') {
+    const shown = apps.slice(0, Math.max(1, clampFolderMaxApps(maxApps)))
+    const inset = previewSize * 0.05
+    const fit = fitFolderGrid({
+      count: shown.length,
+      width: previewSize - inset * 2,
+      height: previewSize - inset * 2,
+      maxColumns: MAX_GRID_COLUMNS,
+      maxIconSize: previewSize
+    })
+
+    const rows: AppItem[][] = []
+    for (let i = 0; i < shown.length; i += fit.columns) {
+      rows.push(shown.slice(i, i + fit.columns))
+    }
+
+    return (
+      <VStack
+        spacing={fit.gap}
+        frame={{ width: previewSize, height: previewSize }}
+        alignment="center"
+      >
+        <Spacer />
+        {rows.map((row, rowIndex) => (
+          <HStack key={rowIndex} spacing={fit.gap} alignment="center">
+            {row.map(item => (
+              <AppIconArtwork
+                key={item.id}
+                item={item}
+                config={{
+                  ...config,
+                  iconSize: fit.iconSize,
+                  cornerRadius: undefined
+                }}
+              />
+            ))}
+          </HStack>
+        ))}
+        <Spacer />
+      </VStack>
+    )
+  }
+
   const spec = layout ? gridSpecForLayout(layout) : undefined
 
   if (spec) {
