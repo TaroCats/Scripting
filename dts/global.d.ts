@@ -42,13 +42,30 @@ declare global {
 
   var VideoPlaybackQueue: { new (controller: VideoPlaybackController, items?: readonly VideoPlaybackQueueItem[]): VideoPlaybackQueue }
 
+  type VideoPlaybackSubtitleSlot = "primary" | "secondary"
+
+  interface VideoPlaybackSubtitleWord {
+    /** Include spacing and punctuation as they should appear in the subtitle. */
+    text: string
+    /** Media time in seconds. */
+    startTime: number
+    endTime: number
+  }
+  interface VideoPlaybackWordCue {
+    words: readonly VideoPlaybackSubtitleWord[]
+  }
+
   interface VideoPlaybackTrack {
     readonly id: string
     readonly kind: 'video' | 'audio' | 'subtitle' | 'other'
+    /** The player identifies this subtitle as a closed-caption track. */
+    readonly closedCaption?: boolean
     readonly codec?: string
     readonly name?: string
     readonly language?: string | null
     readonly selected?: boolean
+    /** Whether an embedded subtitle track is selected in the secondary slot. */
+    readonly secondarySelected?: boolean
     readonly width?: number
     readonly height?: number
     readonly channels?: number
@@ -122,6 +139,10 @@ declare global {
     readonly hardwareAccelerated?: boolean
     readonly container?: string
     readonly chapters?: readonly { index: number; start: number; end: number; title: string }[]
+    /** The selected DVD title number and total titles on the disc. Title numbers start at 1. */
+    readonly dvd?: { readonly title: number; readonly titleCount: number }
+    /** Selected Blu-ray playlist number and the available titles for this disc. Durations are in seconds. */
+    readonly bluRay?: { readonly playlist: number; readonly titles: readonly { readonly playlist: number; readonly duration: number; readonly chapterCount: number }[] }
     readonly metadata?: Readonly<Record<string, string>>
   }
   interface VideoPictureInPictureState {
@@ -129,7 +150,9 @@ declare global {
     readonly possible: boolean
     readonly active: boolean
   }
+  type VideoPlaybackClipRecordingState = 'idle' | 'recording' | 'readyToSave' | 'saving'
   interface VideoPlaybackEvents {
+    clipRecording: { state: VideoPlaybackClipRecordingState }
     backgroundAudio: { enabled: boolean; videoSuspended: boolean }
     backgroundAudioError: { message: string }
     pictureInPicture: VideoPictureInPictureState
@@ -142,7 +165,7 @@ declare global {
     seeked: VideoPlaybackSnapshot
     error: Partial<VideoPlaybackSnapshot> & { message: string }
     tracks: { tracks: readonly VideoPlaybackTrack[] }
-    overlayError: { message: string }
+    overlayError: { message: string; slot?: VideoPlaybackSubtitleSlot }
     interaction: { kind: 'zoom' | 'brightness' | 'error'; value?: number; message?: string }
   }
   interface VideoPlaybackCapabilities {
@@ -158,6 +181,7 @@ declare global {
     readonly nativeHDRFormats: readonly string[]
     readonly currentFrameBackends: readonly ('native' | 'system' | 'remux')[]
     readonly systemHDR: 'mediaAndOutputDependent'
+    readonly resumeRangeCache?: boolean
     readonly persistentFileCache?: boolean
     readonly persistentHLSCache?: boolean
     readonly persistentDASHCache?: boolean
@@ -166,24 +190,70 @@ declare global {
     readonly nativeBackgroundAudio?: boolean
     readonly rawFrameCallbacks: false
   }
+  interface VideoPlaybackResumeCacheOptions {
+    /** Dedicated absolute local directory for one source. Reuse this path when its signed URL changes. */
+    directory: string
+    /** Maximum bytes for all cached ranges and versions in this source directory. */
+    maxBytes: number
+  }
+  interface VideoPlaybackResumeCacheStatus {
+    readonly state: 'enabled' | 'hit' | 'bypassed'
+    readonly hitBytes: number
+    readonly networkBytes: number
+    readonly writeFailed: boolean
+  }
+  interface VideoPlaybackBufferingOptions {
+    /** Playback readiness target in media seconds. Defaults to 3. Must be positive and no greater than maxBufferDuration. System playback uses this as a preference. */
+    preferredForwardBufferDuration?: number
+    /** Read-ahead high-water mark in media seconds for native and remux. Defaults to 30. Internal resource limits and end of media still apply. */
+    maxBufferDuration?: number
+    /** Use a smaller reserve at startup and after a seek in native and remux. Recovery after a stall still requires the regular reserve. Defaults to false. */
+    fastStart?: boolean
+  }
   interface VideoPlaybackOpenOptions {
+    /** Select a 1-based title on an unencrypted local DVD ISO or VIDEO_TS folder. Defaults to title 1. */
+    dvdTitle?: number
+    /** Select a title from mediaInfo.bluRay.titles for a local unencrypted Blu-ray ISO or BDMV folder. The default is the longest title. */
+    bluRayPlaylist?: number
+    /** Replace embedded audio with a separate fixed-duration audio source on the system backend. */
+    externalAudio?: {
+      /** Audio file path, file URL or HTTP(S) URL. */
+      source: string
+      /** Request headers for this audio URL only. The server must support HTTP byte ranges. */
+      headers?: Record<string, string>
+      /** Offset in seconds. Positive delays audio; negative skips its beginning. Defaults to zero. */
+      offset?: number
+    }
+    /** Opt into cross-session range caching for eligible direct HTTPS sources. */
+    resumeCache?: VideoPlaybackResumeCacheOptions
+    /** Initial position in seconds. Zero opens from the beginning. Use a position before the end of seekable media. Playback starts when you call play(). */
+    startTime?: number
     /** Auto uses native playback for ordinary media/headers, system playback for plain HLS, and system or remux output for supported HDR media. Declared Profile7 sources use native reconstruction. Auto/system adapt single-layer Profile5 through remux. System also adapts supported Matroska video; mediaInfo.backend reports the actual path. Explicit native does not support single-layer Profile5/8. */
     backend?: 'auto' | 'native' | 'system' | 'remux'
     /** Native video decoding preference. System/remux backends require auto. Unsupported hardware requests fail explicitly. */
     decoder?: 'auto' | 'hardware' | 'software'
-    /** Native PCM output. Stereo is default; multichannel preserves supported layouts up to eight channels. Spatial requires explicit native playback and supported 48 kHz TrueHD Atmos objects in Matroska/MKV or DTS:X standard heights, rendered into 7.1.4 PCM, without bitstream passthrough. */
+    /** Native PCM output. Stereo is default; multichannel preserves supported layouts up to eight channels. Spatial renders supported 48 kHz TrueHD Atmos objects in Matroska/MKV or DTS:X standard heights into 7.1.4 PCM. Explicit native playback requires this output. Auto with an automatic decoder prefers it for file media and may fall back to compatible output. */
     audioOutput?: 'stereo' | 'multichannel' | 'spatial'
-    /** Custom headers use native/remux playback. Explicit system playback rejects headers. */
+    /** Headers for the video URL. System playback supports these with externalAudio for direct files with HTTP byte ranges. */
     headers?: Record<string, string>
-    /** Preferred lookahead in seconds (0-60); zero or omission uses backend defaults. Native applies to remote MKV/WebM compressed data, subject to cache limits. System and remux apply their respective buffering policies. */
-    forwardBufferDuration?: number
-    /** Maximum simultaneous HTTP byte-range reads for eligible native and remux files. Defaults to 1. */
-    maxReadConnections?: 1 | 2 | 3 | 4
+    buffering?: VideoPlaybackBufferingOptions
   }
+  interface VideoPlaybackSeekableRange {
+    startTime: number
+    endTime: number
+  }
+
+  interface VideoPlaybackLoopRange {
+    startTime: number
+    endTime: number
+  }
+
   /** Main App playback controller, iOS/iPadOS 17+. Dispose it when its owning page closes. */
   class VideoPlaybackController {
     constructor()
     readonly state: VideoPlaybackState
+    /** Whether playback is requested, including while buffering or seeking. */
+    readonly playbackRequested: boolean
     readonly position: number
     readonly duration: number | null
     playbackRate: number
@@ -196,29 +266,61 @@ declare global {
     play(): Promise<void>
     pause(): void
     seek(seconds: number): Promise<number>
+    /** Current system live playback ranges in media seconds, or null for other sources. */
+    readonly liveSeekableRanges: readonly VideoPlaybackSeekableRange[] | null
+    /** Seek to the system live position, preserving pause or play. Returns the position in seconds. */
+    seekToLive(): Promise<number>
+    readonly loopRange: VideoPlaybackLoopRange | null
+    /** Repeat a local video from startTime up to endTime, or pass null to resume ordinary playback. */
+    setLoopRange(range: VideoPlaybackLoopRange | null): Promise<void>
+    /** Saves a range of a supported local video to a new MP4 file and returns its absolute path. */
+    exportClip(options: { filePath: string; startTime: number; endTime: number }): Promise<string>
+    /** State of the clip being recorded or saved from supported local playback. */
+    readonly clipRecordingState: VideoPlaybackClipRecordingState
+    /** Mark the current position of a supported local video. Native and remux recording supports H.264 MP4 or MKV, or compatible SDR HEVC MP4 or MKV, with AAC or no audio. */
+    startClipRecording(): Promise<void>
+    /** Save the recorded portion to a new absolute MP4 path and return the saved path. */
+    finishClipRecording(filePath: string): Promise<string>
+    /** Discard the recording or cancel an unfinished save. */
+    cancelClipRecording(): void
     stop(): Promise<void>
     dispose(): Promise<void>
     /** Native video only. Reinhard outputs SDR; exposureEV -8..8 and whitePoint 0.25..256 default to 0/16. New sources reset to system. */
     setToneMapping(options: VideoToneMappingOptions): Promise<void>
+    /** Adjust supported local SDR video. Remux adjusts the in-app and app-managed external picture. Omitted values use defaults. */
+    setVideoAdjustments(options: { saturation?: number; brightness?: number; contrast?: number }): Promise<void>
     getTracks(): Promise<readonly VideoPlaybackTrack[]>
     selectAudioTrack(id: string): Promise<void>
-    selectSubtitleTrack(id: string | null): Promise<void>
+    /** Choose an embedded subtitle track. The secondary slot accepts embedded tracks on native and remux. */
+    selectSubtitleTrack(id: string | null, slot?: VideoPlaybackSubtitleSlot): Promise<void>
     /** Available for native output on iOS/iPadOS 17.4+. Null until an actual frame is displayed. */
     copyCurrentFrame(): VideoFrame | null
     /** Independently decode the first frame covering or following this media time. */
     extractFrame(seconds: number): Promise<VideoFrame>
     /** Video image without subtitles, danmaku or controls. */
     snapshot(): Promise<UIImage>
+    getResumeCacheStatus(): Promise<VideoPlaybackResumeCacheStatus | null>
     subtitlesEnabled: boolean
+    /** Use the device caption style for custom text captions in both slots. Defaults to false. */
+    useSystemCaptionAppearance: boolean
     /** Positive delay displays cues later. Range: -86400 to 86400 seconds. */
     subtitleDelay: number
+    secondarySubtitlesEnabled: boolean
+    /** Positive delay displays secondary cues later. Range: -86400 to 86400 seconds. */
+    secondarySubtitleDelay: number
     /** SRT and bounded WebVTT styles/regions/positioning; ASS/SSA preserve authored styles. Unsupported CSS/markup rejects. */
-    loadSubtitles(text: string, format: 'srt' | 'vtt' | 'ass' | 'ssa'): Promise<void>
+    loadSubtitles(text: string, format: 'srt' | 'vtt' | 'ass' | 'ssa', slot?: VideoPlaybackSubtitleSlot): Promise<void>
+    /** On iOS 26+, translate primary subtitles using installed languages. Supports loaded text, supported local embedded tracks, and indexed remote MP4 WebVTT/tx3g, MKV SubRip/ASS/SSA, or WebM WebVTT. Returns the translated cue count for the document or the first rolling window. */
+    translatePrimarySubtitles(options: { source: string; target: string }): Promise<number>
+    /** Generate secondary subtitles from local native playback on iOS 27+. Pass null to stop. */
+    setSpeechSubtitles(options: { language: string; downloadIfNeeded?: boolean } | null): Promise<void>
+    /** Underline the active word at its media time. Provide ordered cues and words with no overlapping time ranges. */
+    loadWordSubtitles(cues: readonly VideoPlaybackWordCue[], slot?: VideoPlaybackSubtitleSlot): Promise<void>
     /** Local SRT, VTT, ASS, SSA, SUP/PGS or VobSub .idx; .idx requires its sibling .sub file. */
-    loadSubtitleFile(path: string, trackIndex?: number): Promise<void>
-    clearSubtitles(): void
+    loadSubtitleFile(path: string, trackIndex?: number, slot?: VideoPlaybackSubtitleSlot): Promise<void>
+    clearSubtitles(slot?: VideoPlaybackSubtitleSlot): void
     /** Explicit font/color/position override text subtitles and ordinary ASS/SSA dialogue. Positioned ASS signs retain authored layout. assFontScale applies to ASS/SSA. */
-    setSubtitleStyle(options: { fontFamily?: string; fontSize?: number; color?: string; position?: 'top' | 'center' | 'bottom'; assFontScale?: number }): void
+    setSubtitleStyle(options: { fontFamily?: string; fontSize?: number; color?: string; position?: 'top' | 'center' | 'bottom'; assFontScale?: number }, slot?: VideoPlaybackSubtitleSlot): void
     danmakuEnabled: boolean
     danmakuOpacity: number
     /** UTF-8 JSON comment arrays or Bilibili-compatible / dandanplay XML, up to 8 MiB. Unsupported XML modes are reported and skipped. */
@@ -1154,7 +1256,10 @@ declare global {
       format: "tfLegacy"
       dpInfo: Data
       guid: Data
+      /** Total size of the encrypted asset in bytes. */
       expectedByteCount: number
+      /** Absolute ciphertext offset. Defaults to 0. Legacy v3 supports 32 KiB-aligned offsets below the total size. */
+      startOffset?: number
     }
     interface CloseOptions { abort?: boolean }
     interface Session {
@@ -6152,8 +6257,21 @@ declare global {
     backgroundColor: string | null
     underPageBackgroundColor: string | null
   }
+  type WebViewMediaCaptureDecision = "prompt" | "grant" | "deny"
+  type WebViewMediaCaptureKind = "microphone" | "camera"
+  interface WebViewMediaCaptureOptions {
+    microphone?: WebViewMediaCaptureDecision
+    camera?: WebViewMediaCaptureDecision
+  }
   interface WebViewControllerOptions extends WebViewConfigurationOptions {
     settings?: Partial<WebViewSettings>
+    /**
+     * WebKit permission policy for microphone and camera. "grant" requires existing system
+     * authorization and a committed, explicitly loaded HTTPS origin in the main frame.
+     * Granting the microphone also requires explicit script authorization for "audioEngine".
+     * Keyboards with Full Access can explicitly grant microphone requests only.
+     */
+    mediaCapture?: WebViewMediaCaptureOptions
   }
   interface WebViewState {
     url: string | null
@@ -6246,6 +6364,8 @@ declare global {
     downloadPolicy: false
     contentWorlds: boolean
     frameTargeting: boolean
+    /** Media devices handled by the current host policy. Actual capture depends on system and site permissions. */
+    mediaCapture: WebViewMediaCaptureKind[]
     configurationOptions: Array<keyof WebViewConfigurationOptions>
     runtimeSettings: Array<keyof WebViewSettings>
   }
@@ -18700,6 +18820,30 @@ type BluetoothBackgroundContext = {
 }
 
 
+  type BluetoothConnectOptions = {
+    startDelay?: number
+    enableTransportBridging?: boolean
+    requiresANCS?: boolean
+    enableAutoReconnect?: boolean
+    notifyOnConnection?: boolean
+    notifyOnNotification?: boolean
+    notifyOnDisconnection?: boolean
+  }
+
+  type BluetoothSessionState = "connecting" | "connected" | "disconnecting" | "terminated" | "unknown"
+
+  type BluetoothSessionCancellation = {
+    sessionToken: string
+    status: "terminated" | "alreadyTerminated" | "timedOut" | "unknown"
+  }
+
+  interface BluetoothCentralSession {
+    readonly token: string
+    /** Operations on this peripheral belong only to this session. */
+    readonly peripheral: BluetoothPeripheral
+    waitUntilConnected(): Promise<void>
+  }
+
   namespace BluetoothCentralManager {
 
     /**
@@ -18777,19 +18921,22 @@ type BluetoothBackgroundContext = {
      * @returns A promise that resolves when the connection is successfully established.
      * If the connection operation fails, the promise will be rejected with an error.
      */
-    function connect(peripheral: BluetoothPeripheral, options?: {
-      startDelay?: number
-      enableTransportBridging?: boolean
-      requiresANCS?: boolean
-      enableAutoReconnect?: boolean
-      notifyOnConnection?: boolean
-      notifyOnNotification?: boolean
-      notifyOnDisconnection?: boolean
-    }): Promise<void>
+    function connect(peripheral: BluetoothPeripheral, options?: BluetoothConnectOptions): Promise<void>
+
+    /** Start a managed local session. Returns a token without waiting for the connection. */
+    function startSession(peripheral: BluetoothPeripheral, options?: BluetoothConnectOptions): Promise<BluetoothCentralSession>
+
+    /** Query a known session from the same script and native process. */
+    function getSessionState(sessionToken: string): Promise<BluetoothSessionState>
+
+    /** Cancel a known session. A timeout only ends the wait for native confirmation. */
+    function cancelSession(sessionToken: string, options?: { timeoutMs?: number }): Promise<BluetoothSessionCancellation>
 
     /**
      * Disconnects from the specified Bluetooth peripheral.
-     * This method is nonblocking, and any BluetoothPeripheral class commands that are still pending to peripheral may not complete. Because other apps may still have a connection to the peripheral, canceling a local connection doesn’t guarantee that the underlying physical link is immediately disconnected. From the app’s perspective, however, the peripheral is effectively disconnected, and the `onDisconnect` callback of the peripheral will be called, if it is set.
+     * Resolves after the cancellation request is submitted. An onDisconnected callback, if delivered,
+     * is separate from the promise. For managed sessions, cancelSession can wait for local confirmation.
+     * The connection may still exist at the system level if another app is using the peripheral.
      * @param peripheral The BluetoothPeripheral object representing the peripheral to disconnect from.
      */
     function disconnect(peripheral: BluetoothPeripheral): Promise<void>
@@ -20214,6 +20361,14 @@ If the length of the value parameter exceeds the length of the `maximumUpdateVal
     removeEntrySync(path: string, options?: {
       bufferSize?: number
     }): void
+
+    /**
+     * Streams a regular, unencrypted ZIP entry as decompressed chunks.
+     * Supports Stored, Deflate, and recognized Apple LZFSE entries.
+     * Read to completion to verify the entry's length and CRC32.
+     * Cancel the reader or exit a for-await loop to stop early.
+     */
+    extractStream(entryPath: string): ReadableStream<Data>
 
     /**
      * Extract an entry from the archive.
@@ -22516,7 +22671,11 @@ namespace DeviceServices {
     makeDirectory(path: string): Promise<void>
     rename(source: string, destination: string): Promise<void>
     remove(path: string): Promise<void>
-    /** Streams a local file to a new remote path; use paths owned exclusively by your script. */
+    /**
+     * Streams a local file to a new remote path owned by your script.
+     * Recognized unencrypted LZFSE ZIP entries are uploaded as STORE entries.
+     * Progress and the result describe the bytes transferred over AFC.
+     */
     upload(options: TransferOptions): FileTask
     /** Streams a remote file to a new local path, without replacing an existing local file. */
     download(options: TransferOptions): FileTask

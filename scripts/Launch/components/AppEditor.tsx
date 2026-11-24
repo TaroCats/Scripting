@@ -44,10 +44,11 @@ import {
 import { extractIconColor } from '../iconColor'
 import { IconColorSheet } from './IconColorSheet'
 import { SFSymbolPicker } from './SFSymbolPicker'
+import { SmartisanIconPicker } from './SmartisanIconPicker'
 import { t, useI18n } from '../i18n'
 
 type AppLaunchMode = 'url' | 'bundleId' | 'script'
-type AppIconType = 'symbol' | 'image' | 'transparent_image'
+type AppIconType = 'symbol' | 'image' | 'transparent_image' | 'smartisan'
 
 const EDITOR_SECONDARY = 'secondaryLabel' as Color
 /** The colour a new app starts with; while it is untouched, picking an app may refine it. */
@@ -145,12 +146,14 @@ function AppEditorIconPreview({
   icon,
   iconDark,
   iconType,
-  color
+  color,
+  symbolColor
 }: {
   icon: string
   iconDark?: string
   iconType: AppIconType
   color: Color
+  symbolColor?: string
 }) {
   const size = 72
   const radius = 16
@@ -187,7 +190,7 @@ function AppEditorIconPreview({
               systemName={icon || 'app.fill'}
               font={34}
               fontWeight="medium"
-              foregroundStyle={'white' as Color}
+              foregroundStyle={(symbolColor as Color) || 'white'}
             />
           )}
         </Fragment>
@@ -220,6 +223,9 @@ export function AppEditor({
     item?.iconType ?? 'symbol'
   )
   const [color, setColor] = useState<Color>((item?.color ?? '#007AFF') as Color)
+  const [symbolColor, setSymbolColor] = useState<string | undefined>(
+    item?.symbolColor
+  )
   const [folderIds, setFolderIds] = useState<string[]>(() => {
     const legacy = (item as AppItem & { folderId?: string } | undefined)
       ?.folderId
@@ -324,6 +330,7 @@ export function AppEditor({
       iconDark:
         iconType === 'symbol' ? undefined : iconDark.trim() || undefined,
       iconType,
+      symbolColor: iconType === 'symbol' ? symbolColor || undefined : undefined,
       color: color as unknown as string,
       folderIds
     })
@@ -396,6 +403,7 @@ export function AppEditor({
             iconDark={iconDark}
             iconType={iconType}
             color={color}
+            symbolColor={symbolColor}
           />
           <VStack
             alignment="leading"
@@ -551,7 +559,7 @@ export function AppEditor({
         header={<EditorSectionHeader title={t('appearanceSection')} />}
         footer={
           <Text>
-            {`${t('darkIconFooter')}\n\n${t('colorFromIconFooter')}`}
+            {`${t('darkIconFooter')}\n\n${iconType === 'symbol' ? t('symbolColorFooter') : t('colorFromIconFooter')}`}
           </Text>
         }
       >
@@ -564,9 +572,34 @@ export function AppEditor({
           <Text tag="symbol">{t('iconTypeSymbol')}</Text>
           <Text tag="image">{t('iconTypeImage')}</Text>
           <Text tag="transparent_image">{t('iconTypeTransparent')}</Text>
+          <Text tag="smartisan">{t('iconTypeSmartisan')}</Text>
         </Picker>
 
-        {iconType === 'symbol' ? (
+        {iconType === 'smartisan' ? (
+          <NavigationLink
+            destination={
+              <SmartisanIconPicker
+                onSelect={url => {
+                  setIcon(url)
+                  setIconDark('')
+                }}
+              />
+            }
+          >
+            <HStack>
+              <Label title={t('smartisanChoose')} systemImage="square.grid.2x2" />
+              <Spacer />
+              <AppIconView
+                icon={icon}
+                iconType={iconType}
+                color={color as unknown as string}
+              />
+              <Text font={13} foregroundStyle={EDITOR_SECONDARY} lineLimit={1}>
+                {icon ? t('smartisanSelected') : t('smartisanChoose')}
+              </Text>
+            </HStack>
+          </NavigationLink>
+        ) : iconType === 'symbol' ? (
           <NavigationLink
             destination={
               <SFSymbolPicker
@@ -662,15 +695,33 @@ export function AppEditor({
         )}
 
         <ColorPicker value={color} onChanged={setColor}>
-          <Text>{t('themeColor')}</Text>
+          <Text>{iconType === 'symbol' ? t('themeColorBackground') : t('themeColor')}</Text>
         </ColorPicker>
-        <Button
-          title={t('extractColorFromIcon')}
-          systemImage="eyedropper"
-          buttonStyle="bordered"
-          disabled={iconType === 'symbol' || !icon.trim()}
-          action={() => setActiveSheet('colors')}
-        />
+        {iconType === 'symbol' ? (
+          <Fragment>
+            <ColorPicker
+              value={(symbolColor as Color) || ('white' as Color)}
+              onChanged={value => setSymbolColor(value as unknown as string)}
+            >
+              <Text>{t('symbolColor')}</Text>
+            </ColorPicker>
+            <Button
+              title={t('symbolColorReset')}
+              systemImage="arrow.counterclockwise"
+              buttonStyle="bordered"
+              disabled={!symbolColor}
+              action={() => setSymbolColor(undefined)}
+            />
+          </Fragment>
+        ) : (
+          <Button
+            title={t('extractColorFromIcon')}
+            systemImage="eyedropper"
+            buttonStyle="bordered"
+            disabled={!icon.trim()}
+            action={() => setActiveSheet('colors')}
+          />
+        )}
       </Section>
 
       {folders.length > 0 && (

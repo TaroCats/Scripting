@@ -31,7 +31,7 @@ export function AppIconArtwork({
 
   return (
     <ZStack frame={{ width: size, height: size }}>
-      {item.iconType === 'image' ? (
+      {item.iconType === 'image' || item.iconType === 'smartisan' ? (
         <ZStack
           frame={{ width: size, height: size }}
           clipShape={{
@@ -94,7 +94,7 @@ export function AppIconArtwork({
           ) : (
             <Image
               systemName={item.icon}
-              foregroundStyle="white"
+              foregroundStyle={(item.symbolColor as Color) || 'white'}
               font={size * 0.5}
               widgetAccentable
               widgetAccentedRenderingMode={accentedRenderingMode}

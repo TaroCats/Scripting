@@ -218,7 +218,7 @@ function CoverLogo({
     config.widgetAccentedRenderingMode ||
     DEFAULT_CONFIG.widgetAccentedRenderingMode
 
-  if (item.iconType === 'image') {
+  if (item.iconType === 'image' || item.iconType === 'smartisan') {
     return (
       <ZStack
         shadow={{
@@ -259,7 +259,7 @@ function CoverLogo({
   return (
     <Image
       systemName={item.icon}
-      foregroundStyle={WHITE}
+      foregroundStyle={(item.symbolColor as Color) || WHITE}
       font={size * 0.82}
       widgetAccentable
       widgetAccentedRenderingMode={mode}

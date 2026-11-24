@@ -244,7 +244,11 @@ function App() {
   }
 
   async function cacheAppIcon(item: AppItem) {
-    if (item.iconType !== 'image' && item.iconType !== 'transparent_image') {
+    if (
+      item.iconType !== 'image' &&
+      item.iconType !== 'transparent_image' &&
+      item.iconType !== 'smartisan'
+    ) {
       return
     }
 

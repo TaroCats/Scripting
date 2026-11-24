@@ -191,7 +191,13 @@ export interface AppItem {
    * the image-based `iconType`s.
    */
   iconDark?: string
-  iconType?: 'symbol' | 'image' | 'transparent_image'
+  iconType?: 'symbol' | 'image' | 'transparent_image' | 'smartisan'
+  /**
+   * Foreground colour of an SF Symbol glyph. `color` remains the tile/cover
+   * background (the theme colour); this is only the symbol drawn on top of it.
+   * Unset keeps the historic white glyph, so existing apps look unchanged.
+   */
+  symbolColor?: string
   mode?: 'url' | 'bundleId' | 'script'
   url: string
   bundleId?: string

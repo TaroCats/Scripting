@@ -96,17 +96,19 @@ export function AppIconView({
   iconDark,
   iconType,
   color,
+  symbolColor,
   size = 24
 }: {
   icon: string
   iconDark?: string
   iconType: AppItem['iconType']
   color: string
+  symbolColor?: string
   size?: number
 }) {
   const cornerRadius = size * 0.225
 
-  if (iconType === 'image') {
+  if (iconType === 'image' || iconType === 'smartisan') {
     return (
       <ZStack
         frame={{ width: size, height: size }}
@@ -131,7 +133,7 @@ export function AppIconView({
         <Image
           systemName={icon}
           font={size * 0.5}
-          foregroundStyle="white"
+          foregroundStyle={(symbolColor as Color) || 'white'}
         />
       )}
     </ZStack>
@@ -177,6 +179,7 @@ export function AppRow({
         iconDark={item.iconDark}
         iconType={item.iconType}
         color={item.color}
+        symbolColor={item.symbolColor}
         size={34}
       />
       <VStack alignment="leading" spacing={2}>

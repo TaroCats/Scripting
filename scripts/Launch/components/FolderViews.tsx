@@ -215,6 +215,7 @@ function AddExistingAppView({
                   iconDark={item.iconDark}
                   iconType={item.iconType}
                   color={item.color}
+                  symbolColor={item.symbolColor}
                 />
                 <Text font={16}>{item.name}</Text>
                 <Spacer />
