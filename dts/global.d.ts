@@ -211,6 +211,10 @@ declare global {
     fastStart?: boolean
   }
   interface VideoPlaybackOpenOptions {
+    /** Optional MetalFX spatial upscaling for compatible local SDR video on the native backend. */
+    upscaling?: "metalFX"
+    /** Credentials for a signed SMB share. Pass them separately from the SMB file URL. */
+    smbCredentials?: { username: string, password: string, domain?: string }
     /** Select a 1-based title on an unencrypted local DVD ISO or VIDEO_TS folder. Defaults to title 1. */
     dvdTitle?: number
     /** Select a title from mediaInfo.bluRay.titles for a local unencrypted Blu-ray ISO or BDMV folder. The default is the longest title. */
@@ -226,10 +230,14 @@ declare global {
     }
     /** Opt into cross-session range caching for eligible direct HTTPS sources. */
     resumeCache?: VideoPlaybackResumeCacheOptions
+    /** Maximum temporary disk bytes for local rewind of native HTTP(S) sliding H.264/AAC fMP4 HLS. Pass a positive integer up to 512 MiB and use the default startTime. */
+    liveHistoryBytes?: number
     /** Initial position in seconds. Zero opens from the beginning. Use a position before the end of seekable media. Playback starts when you call play(). */
     startTime?: number
     /** Auto uses native playback for ordinary media/headers, system playback for plain HLS, and system or remux output for supported HDR media. Declared Profile7 sources use native reconstruction. Auto/system adapt single-layer Profile5 through remux. System also adapts supported Matroska video; mediaInfo.backend reports the actual path. Explicit native does not support single-layer Profile5/8. */
     backend?: 'auto' | 'native' | 'system' | 'remux'
+    /** With auto, try remux first for an eligible direct HTTP(S) MKV and remember successful native fallback for this media version while the App runs. Use a stable key without credentials. */
+    remuxFallbackKey?: string
     /** Native video decoding preference. System/remux backends require auto. Unsupported hardware requests fail explicitly. */
     decoder?: 'auto' | 'hardware' | 'software'
     /** Native PCM output. Stereo is default; multichannel preserves supported layouts up to eight channels. Spatial renders supported 48 kHz TrueHD Atmos objects in Matroska/MKV or DTS:X standard heights into 7.1.4 PCM. Explicit native playback requires this output. Auto with an automatic decoder prefers it for file media and may fall back to compatible output. */
@@ -262,13 +270,14 @@ declare global {
     /** Default false. Configure SharedAudioSession for playback. Native suspends video in the background and restores it on return; system playback is best effort. */
     backgroundAudioEnabled: boolean
     readonly mediaInfo: VideoPlaybackInfo
+    /** Open a file, an HTTP(S) address, or an NFSv3 or SMB MKV/MP4 file with the native backend. */
     open(source: string | VideoPlaybackCachedSource, options?: VideoPlaybackOpenOptions): Promise<VideoPlaybackInfo>
     play(): Promise<void>
     pause(): void
     seek(seconds: number): Promise<number>
-    /** Current system live playback ranges in media seconds, or null for other sources. */
+    /** Live playback ranges in media seconds for system HLS, native HLS EVENT, or native HLS with local rewind. Null for other sources. */
     readonly liveSeekableRanges: readonly VideoPlaybackSeekableRange[] | null
-    /** Seek to the system live position, preserving pause or play. Returns the position in seconds. */
+    /** Return to the current live position, or rejoin a failed supported HLS stream. Preserves play or pause intent and returns the position in seconds. */
     seekToLive(): Promise<number>
     readonly loopRange: VideoPlaybackLoopRange | null
     /** Repeat a local video from startTime up to endTime, or pass null to resume ordinary playback. */
@@ -313,7 +322,7 @@ declare global {
     /** On iOS 26+, translate primary subtitles using installed languages. Supports loaded text, supported local embedded tracks, and indexed remote MP4 WebVTT/tx3g, MKV SubRip/ASS/SSA, or WebM WebVTT. Returns the translated cue count for the document or the first rolling window. */
     translatePrimarySubtitles(options: { source: string; target: string }): Promise<number>
     /** Generate secondary subtitles from local native playback on iOS 27+. Pass null to stop. */
-    setSpeechSubtitles(options: { language: string; downloadIfNeeded?: boolean } | null): Promise<void>
+    setSpeechSubtitles(options: { language: string; targetLanguage?: string; downloadIfNeeded?: boolean } | null): Promise<void>
     /** Underline the active word at its media time. Provide ordered cues and words with no overlapping time ranges. */
     loadWordSubtitles(cues: readonly VideoPlaybackWordCue[], slot?: VideoPlaybackSubtitleSlot): Promise<void>
     /** Local SRT, VTT, ASS, SSA, SUP/PGS or VobSub .idx; .idx requires its sibling .sub file. */

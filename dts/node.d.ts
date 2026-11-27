@@ -798,15 +798,17 @@ declare module "string_decoder" {
 }
 
 // ---------------------------------------------------------------------------
-// http / https  (client only — createServer throws at runtime)
+// http / https
 // ---------------------------------------------------------------------------
 
 declare module "http" {
-  import { Readable, Writable } from "stream"
+  import { Duplex, Readable, Writable } from "stream"
+  import { Socket } from "net"
 
   interface IncomingHttpHeaders {
     [header: string]: string | string[] | undefined
   }
+  type CreateConnection = (options: RequestOptions, callback: (error: Error | null, socket?: Duplex) => void) => Duplex | void
   interface RequestOptions {
     protocol?: string
     host?: string
@@ -815,6 +817,9 @@ declare module "http" {
     method?: string
     path?: string
     headers?: Record<string, string | number | string[]>
+    agent?: Agent | false
+    createConnection?: CreateConnection
+    /** Idle notification in milliseconds. Use destroy() to cancel. */
     timeout?: number
     auth?: string
   }
@@ -823,17 +828,26 @@ declare module "http" {
     statusMessage?: string
     headers: IncomingHttpHeaders
     rawHeaders: string[]
+    rawTrailers?: string[]
+    trailers: IncomingHttpHeaders
+    complete: boolean
+    socket?: Socket
     httpVersion: string
     url?: string
     method?: string
+    setTimeout(timeout: number, callback?: () => void): this
   }
   class ClientRequest extends Writable {
+    agent?: Agent | false
+    readonly socket: Duplex | null
+    readonly reusedSocket: boolean
     setHeader(name: string, value: string | number | string[]): this
     getHeader(name: string): string | number | string[] | undefined
     removeHeader(name: string): void
     setTimeout(timeout: number, callback?: () => void): this
     abort(): void
     on(event: "response", listener: (response: IncomingMessage) => void): this
+    on(event: "socket", listener: (socket: Duplex) => void): this
     on(event: "error", listener: (err: Error) => void): this
     on(event: string, listener: (...args: any[]) => void): this
   }
@@ -843,16 +857,46 @@ declare module "http" {
   function get(url: string, options: RequestOptions, callback?: (res: IncomingMessage) => void): ClientRequest
   const METHODS: string[]
   const STATUS_CODES: Record<number, string>
-  class Agent { constructor(options?: any) }
+  interface AgentOptions {
+    keepAlive?: boolean
+    maxSockets?: number
+    maxFreeSockets?: number
+    maxTotalSockets?: number
+    scheduling?: "fifo" | "lifo"
+    rejectUnauthorized?: boolean
+  }
+  class Agent {
+    constructor(options?: AgentOptions)
+    createConnection?: CreateConnection
+    keepAlive: boolean
+    maxSockets: number
+    maxFreeSockets: number
+    maxTotalSockets: number
+    scheduling: "fifo" | "lifo"
+    destroy(): void
+  }
   const globalAgent: Agent
 
-  // Server side. Responses are buffered (not streamed) and require the full runtime.
+  interface ServerOptions {
+    keepAliveTimeout?: number
+    joinDuplicateHeaders?: boolean
+  }
   class ServerResponse extends Writable {
     statusCode: number
     statusMessage: string
-    headersSent: boolean
+    readonly headersSent: boolean
+    readonly writableEnded: boolean
+    readonly writableFinished: boolean
+    finished: boolean
+    socket: Socket | null
     setHeader(name: string, value: string | number | string[]): this
     getHeader(name: string): string | number | string[] | undefined
+    hasHeader(name: string): boolean
+    getHeaders(): Record<string, string | number | string[]>
+    getHeaderNames(): string[]
+    flushHeaders(): void
+    assignSocket(socket: Socket): void
+    detachSocket(socket: Socket): void
     removeHeader(name: string): void
     writeHead(statusCode: number, statusMessage?: string, headers?: Record<string, string | number | string[]>): this
     writeHead(statusCode: number, headers?: Record<string, string | number | string[]>): this
@@ -861,7 +905,13 @@ declare module "http" {
   class Server {
     listen(port?: number, hostname?: string, callback?: () => void): this
     listen(port?: number, callback?: () => void): this
-    close(callback?: () => void): this
+    listen(options: { port?: number, host?: string }, callback?: () => void): this
+    close(callback?: (error?: Error) => void): this
+    closeIdleConnections(): void
+    closeAllConnections(): void
+    readonly listening: boolean
+    keepAliveTimeout: number
+    maxRequestsPerSocket: number
     address(): { port: number, address: string, family: string } | null
     on(event: "request", listener: (req: IncomingMessage, res: ServerResponse) => void): this
     on(event: "listening" | "close", listener: () => void): this
@@ -869,20 +919,36 @@ declare module "http" {
     on(event: string, listener: (...args: any[]) => void): this
   }
   function createServer(requestListener?: (req: IncomingMessage, res: ServerResponse) => void): Server
+  function createServer(options: ServerOptions, requestListener?: (req: IncomingMessage, res: ServerResponse) => void): Server
 }
 
 declare module "https" {
   import * as http from "http"
+  interface TLSOptions {
+    ca?: string | Uint8Array | readonly (string | Uint8Array)[] | null
+    cert?: string | Uint8Array | readonly (string | Uint8Array)[]
+    key?: string | Uint8Array
+    pfx?: Uint8Array | ArrayBuffer
+    passphrase?: string
+    checkServerIdentity?: (hostname: string, certificate: { raw: Buffer; fingerprint256: string; subject: { CN?: string } }) => Error | void
+    minVersion?: "TLSv1.2" | "TLSv1.3"
+    maxVersion?: "TLSv1.2" | "TLSv1.3"
+    rejectUnauthorized?: boolean
+    servername?: string
+    ALPNProtocols?: readonly string[]
+  }
+  interface RequestOptions extends http.RequestOptions, TLSOptions {}
+  interface AgentOptions extends http.AgentOptions, TLSOptions {}
+  class Agent extends http.Agent { constructor(options?: AgentOptions) }
+  const globalAgent: Agent
   export import IncomingMessage = http.IncomingMessage
   export import ClientRequest = http.ClientRequest
-  export import RequestOptions = http.RequestOptions
-  export import Agent = http.Agent
   export import Server = http.Server
   export import ServerResponse = http.ServerResponse
-  function request(options: http.RequestOptions | string, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
-  function request(url: string, options: http.RequestOptions, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
-  function get(options: http.RequestOptions | string, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
-  function get(url: string, options: http.RequestOptions, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
+  function request(options: RequestOptions | string, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
+  function request(url: string, options: RequestOptions, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
+  function get(options: RequestOptions | string, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
+  function get(url: string, options: RequestOptions, callback?: (res: http.IncomingMessage) => void): http.ClientRequest
   function createServer(requestListener?: (req: http.IncomingMessage, res: http.ServerResponse) => void): http.Server
 }
 
@@ -1170,11 +1236,76 @@ declare module "net" {
 }
 declare module "node:net" { export * from "net" }
 
+declare module "dgram" {
+  import { EventEmitter } from "events"
+  import { Buffer } from "buffer"
+  interface AddressInfo { address: string; family: "IPv4"; port: number }
+  interface RemoteInfo extends AddressInfo { size: number }
+  type Message = string | ArrayBufferView
+  type SendCallback = (error: Error | null, bytes?: number) => void
+  class Socket extends EventEmitter {
+    readonly type: "udp4"
+    constructor(options: "udp4" | { type: "udp4" }, listener?: (message: Buffer, info: RemoteInfo) => void)
+    bind(port?: number, address?: string, callback?: () => void): this
+    bind(port: number, callback: () => void): this
+    bind(options: { address?: string; port?: number }, callback?: () => void): this
+    bind(callback: () => void): this
+    address(): AddressInfo
+    send(message: Message | readonly Message[], port: number, address?: string, callback?: SendCallback): void
+    send(message: Message | readonly Message[], port: number, callback: SendCallback): void
+    send(message: Message, offset: number, length: number, port: number, address?: string, callback?: SendCallback): void
+    send(message: Message, offset: number, length: number, port: number, callback: SendCallback): void
+    close(callback?: () => void): this
+    ref(): this
+    unref(): this
+  }
+  function createSocket(options: "udp4" | { type: "udp4" }, listener?: (message: Buffer, info: RemoteInfo) => void): Socket
+}
+declare module "node:dgram" { export * from "dgram" }
+
+declare module "worker_threads" {
+  import { EventEmitter } from "events"
+  const isMainThread: boolean
+  const threadId: number
+  const parentPort: MessagePort | null
+  const workerData: any
+  type TransferListItem = ArrayBuffer | MessagePort
+  class MessagePort extends EventEmitter {
+    private constructor()
+    postMessage(value: unknown, transferList?: Iterable<TransferListItem>): void
+    start(): void
+    close(): void
+    ref(): void
+    unref(): void
+    hasRef(): boolean
+  }
+  class MessageChannel {
+    readonly port1: MessagePort
+    readonly port2: MessagePort
+  }
+  interface WorkerOptions { eval?: boolean; workerData?: unknown; transferList?: Iterable<TransferListItem> }
+  class Worker extends EventEmitter {
+    constructor(filename: string | URL, options?: WorkerOptions)
+    readonly threadId: number
+    postMessage(value: unknown, transferList?: Iterable<TransferListItem>): void
+    terminate(): Promise<number | undefined>
+    ref(): void
+    unref(): void
+  }
+  function setEnvironmentData(key: unknown, value: unknown): void
+  function getEnvironmentData(key: unknown): unknown
+}
+declare module "node:worker_threads" { export * from "worker_threads" }
+
 declare module "tls" {
   import {Socket,TCPConnectOptions} from "net"
   interface ConnectionOptions extends TCPConnectOptions {
     servername?: string
     ca?: string | Uint8Array | (string | Uint8Array)[]
+    cert?: string | Uint8Array | readonly (string | Uint8Array)[]
+    key?: string | Uint8Array
+    pfx?: Uint8Array | ArrayBuffer
+    passphrase?: string
     ALPNProtocols?: string[]
     minVersion?: "TLSv1.2" | "TLSv1.3"
     maxVersion?: "TLSv1.2" | "TLSv1.3"
@@ -1202,6 +1333,7 @@ declare module "tls" {
   function connect(port: number, host: string, listener?: () => void): TLSSocket
   function connect(port: number, options: Omit<ConnectionOptions,"port"|"host">, listener?: () => void): TLSSocket
   function connect(port: number, listener?: () => void): TLSSocket
+  function checkServerIdentity(hostname: string, certificate: PeerCertificate): Error | undefined
   const DEFAULT_MIN_VERSION: "TLSv1.2"
   const DEFAULT_MAX_VERSION: "TLSv1.3"
 }
