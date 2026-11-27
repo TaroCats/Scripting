@@ -1,46 +1,45 @@
 {
-  "localizedNames" : {
-    "en" : "",
-    "es" : "",
-    "zh" : "",
-    "pt" : "",
-    "fr" : "",
-    "it" : "",
-    "ru" : "",
-    "de" : "",
-    "ja" : ""
+  "localizedNames": {
+    "en": "",
+    "es": "",
+    "zh": "",
+    "pt": "",
+    "fr": "",
+    "it": "",
+    "ru": "",
+    "de": "",
+    "ja": ""
   },
-  "author" : {
-    "email" : "i@taro.cat",
-    "name" : "TARO",
-    "homepage" : null
+  "author": {
+    "email": "i@taro.cat",
+    "name": "TARO",
+    "homepage": null
   },
-  "description" : null,
-  "icon" : "externaldrive.fill",
-  "color" : "rgba(143, 168, 149,1)",
-  "intentInputTypes" : [
-
-  ],
-  "runInApp" : false,
-  "remoteDefinitionId" : null,
-  "contributors" : [
-
-  ],
-  "version" : "1.0.0",
-  "entry" : "index.tsx",
-  "iconImage" : null,
-  "remoteResource" : null,
-  "localizedDescriptions" : {
-    "en" : "",
-    "es" : "",
-    "zh" : "",
-    "pt" : "",
-    "fr" : "",
-    "it" : "",
-    "ru" : "",
-    "de" : "",
-    "ja" : ""
+  "description": null,
+  "icon": "externaldrive.fill",
+  "color": "rgba(143, 168, 149,1)",
+  "intentInputTypes": [],
+  "runInApp": false,
+  "remoteDefinitionId": null,
+  "contributors": [],
+  "version": "1.0.1",
+  "entry": "index.tsx",
+  "iconImage": null,
+  "remoteResource": {
+    "url": "https://github.com/TaroCats/Scripting/tree/main/scripts/MergeDL",
+    "autoUpdateInterval": 3600
   },
-  "permissions" : null,
-  "name" : "MergeDL"
+  "localizedDescriptions": {
+    "en": "",
+    "es": "",
+    "zh": "",
+    "pt": "",
+    "fr": "",
+    "it": "",
+    "ru": "",
+    "de": "",
+    "ja": ""
+  },
+  "permissions": null,
+  "name": "MergeDL"
 }
